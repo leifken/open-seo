@@ -1,0 +1,1 @@
+const t="openseo:lastProjectId";function n(){if(typeof window>"u")return null;try{return window.localStorage.getItem(t)}catch{return null}}function o(e){if(!(typeof window>"u"))try{window.localStorage.setItem(t,e)}catch{}}function r(){if(!(typeof window>"u"))try{window.localStorage.removeItem(t)}catch{}}export{r as c,n as g,o as s};

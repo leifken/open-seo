@@ -1,0 +1,1 @@
+import{S as c}from"./index-yDeyLwSs.js";function t(s){const r=new URL(c,window.location.origin);return r.searchParams.set("checkout","success"),r.searchParams.set("redirect",s),r.toString()}export{t as b};
