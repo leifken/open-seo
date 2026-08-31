@@ -15,11 +15,12 @@
   var dict = null;
 
   function translateText(value) {
-    var trimmed = value.trim();
-    if (!trimmed) return null;
-    var hit = dict[trimmed];
+    // JSX collapses runs of whitespace, so match on a normalized key.
+    var normalized = value.replace(/\s+/g, " ").trim();
+    if (!normalized) return null;
+    var hit = dict[normalized];
     if (hit === undefined) return null;
-    return value.replace(trimmed, hit);
+    return hit;
   }
 
   function translateNode(node) {

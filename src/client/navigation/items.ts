@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Link2,
   MessageSquare,
+  RefreshCw,
   Search,
   Sparkles,
   TrendingUp,
@@ -75,10 +76,17 @@ const aiNavItem = linkOptions({
   icon: Bot,
 });
 
+// LEIFKEN self-host addition: system status + guided updates.
+const systemNavItem = linkOptions({
+  to: "/system" as const,
+  label: "System",
+  icon: RefreshCw,
+});
+
 // Always-visible sidebar group (not project-scoped, unlike the groups below).
 export const connectNavGroup = {
   label: "Connect",
-  items: [aiNavItem],
+  items: [aiNavItem, systemNavItem],
 };
 
 function getProjectNavItems(projectId: string) {

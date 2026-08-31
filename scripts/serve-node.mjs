@@ -71,6 +71,123 @@ function injectI18n(response) {
 
 const germanUi = process.env.APP_LOCALE === "de";
 
+// --- LEIFKEN system/update endpoints (self-host addition) ------------------
+// Session-gated via an internal sub-request to the app's own auth. Update
+// status compares the RUNNING commit (SOURCE_COMMIT, injected by Coolify)
+// against the deploy branch and the upstream repo; install triggers a
+// Coolify deploy with a deploy-scoped token.
+const UPDATE_REPO = process.env.UPDATE_REPO ?? "leifken/open-seo";
+const UPDATE_BRANCH = process.env.UPDATE_BRANCH ?? "node-port";
+const UPSTREAM_REPO = process.env.UPSTREAM_REPO ?? "every-app/open-seo";
+
+async function hasSession(request) {
+  try {
+    const res = await appFetch(
+      new Request(new URL("/api/auth/get-session", request.url), {
+        headers: { cookie: request.headers.get("cookie") ?? "" },
+      }),
+    );
+    const body = await res.json().catch(() => null);
+    return Boolean(body && body.session);
+  } catch {
+    return false;
+  }
+}
+
+async function githubJson(url) {
+  const res = await fetch(url, {
+    headers: { accept: "application/vnd.github+json", "user-agent": "leifken-seo-updater" },
+  });
+  if (!res.ok) throw new Error(`GitHub ${res.status} for ${url}`);
+  return res.json();
+}
+
+function mapCommits(list) {
+  return (list ?? []).slice(-8).reverse().map((c) => ({
+    sha: c.sha,
+    message: c.commit?.message ?? "",
+    date: c.commit?.committer?.date ?? "",
+  }));
+}
+
+async function handleUpdateStatus() {
+  const running = process.env.SOURCE_COMMIT ?? "";
+  let branchAheadBy = 0;
+  let branchLatest = [];
+  let upstreamBehindBy = 0;
+  let upstreamLatest = [];
+  if (running) {
+    const cmp = await githubJson(
+      `https://api.github.com/repos/${UPDATE_REPO}/compare/${running}...${UPDATE_BRANCH}`,
+    );
+    branchAheadBy = cmp.ahead_by ?? 0;
+    branchLatest = mapCommits(cmp.commits);
+  }
+  const upstreamOwner = UPDATE_REPO.split("/")[0];
+  const upstreamCmp = await githubJson(
+    `https://api.github.com/repos/${UPSTREAM_REPO}/compare/main...${upstreamOwner}:${UPDATE_REPO.split("/")[1]}:${UPDATE_BRANCH}`,
+  );
+  upstreamBehindBy = upstreamCmp.behind_by ?? 0;
+  if (upstreamBehindBy > 0) {
+    const upstreamCommits = await githubJson(
+      `https://api.github.com/repos/${UPSTREAM_REPO}/commits?sha=main&per_page=${Math.min(upstreamBehindBy, 8)}`,
+    );
+    upstreamLatest = (upstreamCommits ?? []).map((c) => ({
+      sha: c.sha,
+      message: c.commit?.message ?? "",
+      date: c.commit?.committer?.date ?? "",
+    }));
+  }
+  return {
+    runningCommit: running,
+    branchAheadBy,
+    branchLatest,
+    upstreamBehindBy,
+    upstreamLatest,
+    deployConfigured: Boolean(
+      process.env.COOLIFY_DEPLOY_TOKEN && process.env.COOLIFY_APP_UUID,
+    ),
+  };
+}
+
+async function handleUpdateDeploy() {
+  const token = process.env.COOLIFY_DEPLOY_TOKEN;
+  const uuid = process.env.COOLIFY_APP_UUID;
+  const apiUrl = process.env.COOLIFY_API_URL ?? "http://coolify:8000/api/v1";
+  if (!token || !uuid) {
+    return { ok: false, status: 400, error: "Installations-Schlüssel ist nicht konfiguriert." };
+  }
+  const res = await fetch(`${apiUrl}/deploy?uuid=${uuid}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    return { ok: false, status: 502, error: `Coolify antwortete mit ${res.status}.` };
+  }
+  return { ok: true, status: 200 };
+}
+
+async function handleLeifkenApi(request, pathname) {
+  if (!(await hasSession(request))) {
+    return Response.json({ error: "Nicht angemeldet." }, { status: 401 });
+  }
+  try {
+    if (pathname === "/api/leifken/update-status") {
+      return Response.json(await handleUpdateStatus());
+    }
+    if (pathname === "/api/leifken/update-deploy" && request.method === "POST") {
+      const result = await handleUpdateDeploy();
+      return Response.json(
+        result.ok ? { started: true } : { error: result.error },
+        { status: result.status },
+      );
+    }
+  } catch (err) {
+    console.error("[leifken-api] failed:", err);
+    return Response.json({ error: "Interner Fehler." }, { status: 500 });
+  }
+  return Response.json({ error: "Unbekannter Endpunkt." }, { status: 404 });
+}
+
 // partyserver copies agent requests via `new Request(req)`, and undici's
 // brand check rejects srvx's own Request class there — normalize /agents/*
 // requests into genuine undici Requests before they reach the handler.
@@ -89,7 +206,11 @@ const server = serve({
   port: Number(process.env.PORT ?? 3001),
   middleware: [staticMiddleware({ dir: clientDir })],
   fetch: async (request) => {
-    const isAgentPath = new URL(request.url).pathname.startsWith("/agents/");
+    const pathname = new URL(request.url).pathname;
+    if (pathname.startsWith("/api/leifken/")) {
+      return handleLeifkenApi(request, pathname);
+    }
+    const isAgentPath = pathname.startsWith("/agents/");
     const response = await appFetch(
       isAgentPath ? toNativeRequest(request) : request,
     );
