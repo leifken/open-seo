@@ -10,6 +10,7 @@ import {
 import { getFieldError, getFormError } from "@/client/lib/forms";
 import { captureClientEvent } from "@/client/lib/posthog";
 import { authClient } from "@/lib/auth-client";
+import { isGoogleAuthDisabled, isSignupDisabled } from "@/lib/auth-mode";
 import { getSignInSearch, getVerifyEmailSearch } from "@/lib/auth-redirect";
 import { z } from "zod";
 
@@ -30,7 +31,8 @@ function SignInPage() {
     search.redirect,
   );
   const authCallbackURL = redirectTo;
-  const [showEmailForm, setShowEmailForm] = useState(false);
+  // Without Google the method chooser is pointless — open the email form.
+  const [showEmailForm, setShowEmailForm] = useState(isGoogleAuthDisabled());
   const [isStartingGoogle, setIsStartingGoogle] = useState(false);
   const [socialError, setSocialError] = useState<string | null>(null);
 
@@ -140,13 +142,15 @@ function SignInPage() {
                 Forgot password?
               </Link>
             ) : null}
-            <Link
-              to="/sign-up"
-              search={getSignInSearch(redirectTo)}
-              className="text-base-content underline underline-offset-2 hover:text-base-content/80 transition-colors"
-            >
-              Create account
-            </Link>
+            {isSignupDisabled() ? null : (
+              <Link
+                to="/sign-up"
+                search={getSignInSearch(redirectTo)}
+                className="text-base-content underline underline-offset-2 hover:text-base-content/80 transition-colors"
+              >
+                Create account
+              </Link>
+            )}
           </div>
         ) : null
       }

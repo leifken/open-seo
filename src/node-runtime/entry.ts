@@ -83,6 +83,14 @@ if (!globalState[CRON_FLAG] && process.env.DISABLE_CRON !== "1") {
 // untouched upstream entry's named exports; the registry keys must match the
 // names used by makeWorkflowBinding in env.ts.
 registerWorkflows({ SiteAuditWorkflow, RankCheckWorkflow });
+
+// Provision the single admin account (no-op unless ADMIN_EMAIL/ADMIN_PASSWORD
+// are set and the user doesn't exist yet).
+import("./bootstrap-admin")
+  .then(({ bootstrapAdminAccount }) => bootstrapAdminAccount())
+  .catch((err) =>
+    console.error("[node-runtime] admin bootstrap failed:", err),
+  );
 const WORKER_FLAG = Symbol.for("openseo.node-runtime.workflow-worker");
 if (!globalState[WORKER_FLAG] && process.env.DISABLE_WORKFLOW_WORKER !== "1") {
   globalState[WORKER_FLAG] = true;

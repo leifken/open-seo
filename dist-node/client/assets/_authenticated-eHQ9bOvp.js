@@ -1,0 +1,1 @@
+import{j as e,A as n,O as o}from"./index-CXpUrAO9.js";import{u}from"./useHostedAuthRouteGuard-p-7iY7j6.js";function r(){const t=u();return!t.isHostedMode||!t.canRenderAuthenticatedContent?null:e.jsx(n,{children:e.jsx(o,{})})}export{r as component};

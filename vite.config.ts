@@ -26,6 +26,8 @@ export default defineConfig(({ mode }) => {
       "VITE_",
       "AUTH_MODE",
       "BYPASS_EMAIL_VERIFICATION",
+      "SIGNUP_DISABLED",
+      "GOOGLE_AUTH_DISABLED",
       "POSTHOG_PUBLIC_KEY",
       "POSTHOG_HOST",
       "TURNSTILE_SITE_KEY",

@@ -70,6 +70,9 @@ function createAuth() {
     ...baseAuthConfig,
     emailAndPassword: {
       ...baseAuthConfig.emailAndPassword,
+      // Single-admin self-hosts close public registration entirely; the admin
+      // account is provisioned out of band (Node runtime bootstrap).
+      disableSignUp: Reflect.get(env, "SIGNUP_DISABLED") === "true",
       requireEmailVerification: !bypassEmail,
       resetPasswordTokenExpiresIn: 60 * 60,
       revokeSessionsOnPasswordReset: true,
@@ -230,21 +233,27 @@ function getSocialProviders() {
     return {};
   }
 
-  return {
-    google: getGoogleSocialProviderConfig(),
-  };
+  const google = getGoogleSocialProviderConfig();
+  return google ? { google } : {};
 }
 
 function getGoogleSocialProviderConfig() {
   const googleClientId = env.GOOGLE_CLIENT_ID?.trim();
   const googleClientSecret = env.GOOGLE_CLIENT_SECRET?.trim();
 
+  // Google social login is optional in hosted mode: single-admin self-hosts
+  // run email/password only (hide the button via GOOGLE_AUTH_DISABLED in the
+  // client build). Half a configuration is still a misconfiguration.
+  if (!googleClientId && !googleClientSecret) {
+    return null;
+  }
+
   if (!googleClientId) {
-    throw new Error("GOOGLE_CLIENT_ID is required in hosted mode");
+    throw new Error("GOOGLE_CLIENT_ID is required when GOOGLE_CLIENT_SECRET is set");
   }
 
   if (!googleClientSecret) {
-    throw new Error("GOOGLE_CLIENT_SECRET is required in hosted mode");
+    throw new Error("GOOGLE_CLIENT_SECRET is required when GOOGLE_CLIENT_ID is set");
   }
 
   return {

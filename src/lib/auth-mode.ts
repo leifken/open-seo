@@ -42,6 +42,21 @@ export function isHostedClientAuthMode() {
   return isHostedAuthMode(import.meta.env.AUTH_MODE);
 }
 
+export function isSignupDisabled() {
+  // Single-admin self-hosts close public registration (SIGNUP_DISABLED=true).
+  // Same deploy-time contract as AUTH_MODE: set it in the client build env
+  // AND the server runtime. The server enforces (better-auth disableSignUp);
+  // this only steers which auth UI renders.
+  return import.meta.env.SIGNUP_DISABLED === "true";
+}
+
+export function isGoogleAuthDisabled() {
+  // Self-hosts without a Google OAuth client hide the Google sign-in UI
+  // (GOOGLE_AUTH_DISABLED=true). The server omits the provider when
+  // GOOGLE_CLIENT_ID/SECRET are unset, so this is cosmetic-only.
+  return import.meta.env.GOOGLE_AUTH_DISABLED === "true";
+}
+
 export function isEmailVerificationBypassed() {
   // Local-dev escape hatch (BYPASS_EMAIL_VERIFICATION=true). The server skips
   // verification and never marks users emailVerified, so the client must treat

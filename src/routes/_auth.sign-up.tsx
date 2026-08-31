@@ -1,5 +1,5 @@
 import { useForm } from "@tanstack/react-form";
-import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Link, createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   AuthPageCard,
@@ -15,6 +15,7 @@ import {
 import { getFieldError, getFormError } from "@/client/lib/forms";
 import { captureClientEvent } from "@/client/lib/posthog";
 import { authClient } from "@/lib/auth-client";
+import { isGoogleAuthDisabled, isSignupDisabled } from "@/lib/auth-mode";
 import { getSignInSearch, getVerifyEmailSearch } from "@/lib/auth-redirect";
 import {
   HOSTED_PASSWORD_MAX_LENGTH,
@@ -45,6 +46,13 @@ const signUpSchema = z
 
 export const Route = createFileRoute("/_auth/sign-up")({
   validateSearch: authRedirectSearchSchema,
+  // Single-admin self-hosts: registration is closed (server-enforced via
+  // better-auth disableSignUp); don't render a form that can only fail.
+  beforeLoad: () => {
+    if (isSignupDisabled()) {
+      throw redirect({ to: "/sign-in" });
+    }
+  },
   component: SignUpPage,
 });
 
@@ -53,7 +61,8 @@ function SignUpPage() {
   const navigate = useNavigate();
   const { redirectTo, isHostedMode } = useAuthPageState(search.redirect);
   const postSignupRedirect = redirectTo === "/" ? "/onboarding" : redirectTo;
-  const [showEmailForm, setShowEmailForm] = useState(false);
+  // Without Google the method chooser is pointless — open the email form.
+  const [showEmailForm, setShowEmailForm] = useState(isGoogleAuthDisabled());
   const google = useGoogleSignUp({ redirectTo, postSignupRedirect });
 
   // Turnstile is active only in hosted mode with a configured site key.

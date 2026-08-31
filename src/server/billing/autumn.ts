@@ -1,7 +1,43 @@
 import type { Autumn } from "autumn-js";
-import { getRequiredEnvValue } from "@/server/lib/runtime-env";
+import {
+  AUTUMN_SEO_DATA_BALANCE_FEATURE_ID,
+  AUTUMN_SEO_DATA_TOPUP_BALANCE_FEATURE_ID,
+} from "@/shared/billing";
+import {
+  getOptionalEnvValue,
+  getRequiredEnvValue,
+} from "@/server/lib/runtime-env";
 
 let autumnPromise: Promise<Autumn> | undefined;
+
+// Self-hosts run AUTH_MODE=hosted for its better-auth login but have no
+// Autumn account: BILLING_DISABLED=true turns this facade into a no-op
+// client that reports every entitlement as granted and every balance as
+// effectively unlimited (the operator pays DataForSEO directly). Neutralized
+// here — the single point every billing read/write passes through — so the
+// ~50 gate call sites upstream stay untouched.
+const UNLIMITED_CREDITS = 1_000_000_000;
+
+async function isBillingDisabled(): Promise<boolean> {
+  return (await getOptionalEnvValue("BILLING_DISABLED")) === "true";
+}
+
+function disabledCheckResult() {
+  return {
+    allowed: true,
+    balance: { remaining: UNLIMITED_CREDITS },
+  } as unknown as Awaited<ReturnType<Autumn["check"]>>;
+}
+
+function disabledCustomer(customerId: string) {
+  return {
+    id: customerId,
+    balances: {
+      [AUTUMN_SEO_DATA_BALANCE_FEATURE_ID]: { remaining: UNLIMITED_CREDITS },
+      [AUTUMN_SEO_DATA_TOPUP_BALANCE_FEATURE_ID]: { remaining: 0 },
+    },
+  } as unknown as Awaited<ReturnType<Autumn["customers"]["getOrCreate"]>>;
+}
 
 // Lazy: keeps the ~450 kB autumn-js SDK out of the eager isolate startup
 // graph (self-hosted deployments never load it at all); resolves instantly
@@ -39,13 +75,21 @@ function loadAutumn(): Promise<Autumn> {
  *  plain `autumn.check(...)` form. Covers only the methods we use — add a
  *  line here when adopting a new one. */
 export const autumn = {
-  check: (...args: Parameters<Autumn["check"]>) =>
-    loadAutumn().then((client) => client.check(...args)),
-  track: (...args: Parameters<Autumn["track"]>) =>
-    loadAutumn().then((client) => client.track(...args)),
+  check: async (...args: Parameters<Autumn["check"]>) =>
+    (await isBillingDisabled())
+      ? disabledCheckResult()
+      : loadAutumn().then((client) => client.check(...args)),
+  track: async (...args: Parameters<Autumn["track"]>) =>
+    (await isBillingDisabled())
+      ? ({} as Awaited<ReturnType<Autumn["track"]>>)
+      : loadAutumn().then((client) => client.track(...args)),
   customers: {
-    getOrCreate: (...args: Parameters<Autumn["customers"]["getOrCreate"]>) =>
-      loadAutumn().then((client) => client.customers.getOrCreate(...args)),
+    getOrCreate: async (
+      ...args: Parameters<Autumn["customers"]["getOrCreate"]>
+    ) =>
+      (await isBillingDisabled())
+        ? disabledCustomer(args[0]?.customerId ?? "self-hosted")
+        : loadAutumn().then((client) => client.customers.getOrCreate(...args)),
   },
 };
 

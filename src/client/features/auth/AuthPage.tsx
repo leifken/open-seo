@@ -3,7 +3,7 @@ import {
   getCurrentAuthRedirect,
   getOAuthSignedQuery,
 } from "@/lib/auth-redirect";
-import { isHostedClientAuthMode } from "@/lib/auth-mode";
+import { isGoogleAuthDisabled, isHostedClientAuthMode } from "@/lib/auth-mode";
 
 export const authRedirectSearchSchema = z.object({
   redirect: z.string().optional(),
@@ -41,15 +41,17 @@ export function AuthMethodChooser({
 }) {
   return (
     <div className="space-y-3">
-      <button
-        type="button"
-        className="btn w-full border border-black/10 bg-white text-neutral-900 hover:border-black/20 hover:bg-neutral-50 disabled:bg-white disabled:text-neutral-500 disabled:opacity-70"
-        onClick={onContinueWithGoogle}
-        disabled={disabled || isBusy}
-      >
-        <GoogleLogo />
-        {isBusy ? "Opening Google..." : googleLabel}
-      </button>
+      {isGoogleAuthDisabled() ? null : (
+        <button
+          type="button"
+          className="btn w-full border border-black/10 bg-white text-neutral-900 hover:border-black/20 hover:bg-neutral-50 disabled:bg-white disabled:text-neutral-500 disabled:opacity-70"
+          onClick={onContinueWithGoogle}
+          disabled={disabled || isBusy}
+        >
+          <GoogleLogo />
+          {isBusy ? "Opening Google..." : googleLabel}
+        </button>
+      )}
 
       <button
         type="button"

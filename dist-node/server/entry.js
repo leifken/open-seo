@@ -3134,7 +3134,7 @@ const defaultSerovalPlugins = [
   p
 ];
 async function getStartManifest(matchedRoutes) {
-  const { tsrStartManifest } = await import("./assets/_tanstack-start-manifest_v-Cy-yoexb.js");
+  const { tsrStartManifest } = await import("./assets/_tanstack-start-manifest_v-qE1DtCun.js");
   const startManifest = tsrStartManifest();
   let routes = startManifest.routes;
   routes[rootRouteId];
@@ -3156,363 +3156,363 @@ async function getStartManifest(matchedRoutes) {
 const manifest = {
   "0146a46bbe4471991fcb6663852023dad568931c1314b55cc81892ca37f08e45": {
     functionName: "exportSavedKeywords_createServerFn_handler",
-    importer: () => import("./assets/keywords-CITYKRa0.js")
+    importer: () => import("./assets/keywords-CmeE_3hp.js")
   },
   "02829e30c3478ce6fa128dba7467f3adc8a4086892ed668b6f9ca56a3b1c0c8b": {
     functionName: "getDomainPagesPage_createServerFn_handler",
-    importer: () => import("./assets/domain-D7m9Kb7x.js")
+    importer: () => import("./assets/domain-9ObfAiuc.js")
   },
   "02a3f23c7994a670645e4ace9876310700d9e054aab37095332d1846e11ec462": {
     functionName: "disconnectGsc_createServerFn_handler",
-    importer: () => import("./assets/gsc-B56MWHfc.js")
+    importer: () => import("./assets/gsc-D2xygDB4.js")
   },
   "03f6b933adea1749a90a3091b941383771384ee499865ac928e32750bb3b6da1": {
     functionName: "exportSearchPerformanceTable_createServerFn_handler",
-    importer: () => import("./assets/searchPerformance-BKfXpUd9.js")
+    importer: () => import("./assets/searchPerformance-CBJ3UPDe.js")
   },
   "0400cd589829703979c0d6b38188a846f541034cb534b51326766d1a7f007970": {
     functionName: "exportAuditLighthouseIssues_createServerFn_handler",
-    importer: () => import("./assets/lighthouse-D1Dm_EtW.js")
+    importer: () => import("./assets/lighthouse-D9xNaht6.js")
   },
   "046776517b68d488e3ee09004a9f31a90f45c35a2b32b60dc538eaaf00a36b9c": {
     functionName: "getDomainOverview_createServerFn_handler",
-    importer: () => import("./assets/domain-D7m9Kb7x.js")
+    importer: () => import("./assets/domain-9ObfAiuc.js")
   },
   "048f26ede391a38ee6e00487163fdc66dd0897e3a1cc488354a840bbf9b0b9cf": {
     functionName: "getDomainKeywordsPage_createServerFn_handler",
-    importer: () => import("./assets/domain-D7m9Kb7x.js")
+    importer: () => import("./assets/domain-9ObfAiuc.js")
   },
   "06c91e3888f8bcec4a820827c04796cd80041afad39d1b5549be4e2cf810951b": {
     functionName: "lookupBrand_createServerFn_handler",
-    importer: () => import("./assets/ai-search-BW3Bzh5f.js")
+    importer: () => import("./assets/ai-search-jCMirqX1.js")
   },
   "0a0791b200d03eb44d9630e461ef914d1da85bde9c95b201dcbeb94624848971": {
     functionName: "refreshSavedKeywordMetrics_createServerFn_handler",
-    importer: () => import("./assets/keywords-CITYKRa0.js")
+    importer: () => import("./assets/keywords-CmeE_3hp.js")
   },
   "0a4a16ebe522d754ddd99b702cf7418577545e6ce062ede31ea16bc201d64943": {
     functionName: "getGscConnection_createServerFn_handler",
-    importer: () => import("./assets/gsc-B56MWHfc.js")
+    importer: () => import("./assets/gsc-D2xygDB4.js")
   },
   "0c268077775b1f812d23756142e5d64fff541f1240b6328a92da446160513af2": {
     functionName: "getBacklinksReferringDomains_createServerFn_handler",
-    importer: () => import("./assets/backlinks-DVv0YQmN.js")
+    importer: () => import("./assets/backlinks-acJ3YjnO.js")
   },
   "0c8bc9b67b0ea0a9717a6cab4355542e7c451887732f6d9ee99a8f0ed33cf5de": {
     functionName: "getDomainKeywordSuggestions_createServerFn_handler",
-    importer: () => import("./assets/domain-D7m9Kb7x.js")
+    importer: () => import("./assets/domain-9ObfAiuc.js")
   },
   "0ca7e7fd914e198e72f6ce0f3a36134fc1ec7b6dedf4da1c013ccd9c2da36595": {
     functionName: "archiveProject_createServerFn_handler",
-    importer: () => import("./assets/projects-CNPi5adY.js")
+    importer: () => import("./assets/projects-D9ETGupJ.js")
   },
   "0e2299d91fe830180a5418ad53dd35b4fca59a0bcbd2727c9f3eff6680a88592": {
     functionName: "triggerRankCheck_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B9FKD60t.js")
+    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
   },
   "0f196e5eafbe1adb2d3f31aa7558728e7648574a837571aa8f8f35b94a56d562": {
     functionName: "updateSavedKeywordTags_createServerFn_handler",
-    importer: () => import("./assets/keywords-CITYKRa0.js")
+    importer: () => import("./assets/keywords-CmeE_3hp.js")
   },
   "131f47ab2c8b293725f7a4013737cb0d5e77f8ac22c985f4952b7140820a6430": {
     functionName: "setGa4Property_createServerFn_handler",
-    importer: () => import("./assets/ga4-B0ZgHO4T.js")
+    importer: () => import("./assets/ga4-Cu52Vnpo.js")
   },
   "16b8b61d3cfc645bc36be38a136d9d7ad7096edf8550536a9b522e2833bd5c45": {
     functionName: "updateRankTrackingConfig_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B9FKD60t.js")
+    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
   },
   "16b95567643a21275b38fde625b8e1428bd2aeaff2440637c2a21009637d64d9": {
     functionName: "searchSerpLocations_createServerFn_handler",
-    importer: () => import("./assets/serp-locations-CpHgCZhB.js")
+    importer: () => import("./assets/serp-locations-CaFlm97J.js")
   },
   "17c1167140bde128372935a660b28fd6e0e183774ca3f90271799ba787ecb243": {
     functionName: "refreshTrackingKeywordMetrics_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B9FKD60t.js")
+    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
   },
   "1c37d6d588141eb6ff4ed0b1776196f3493d263cd15565fc317afeae0f41540c": {
     functionName: "restoreProject_createServerFn_handler",
-    importer: () => import("./assets/projects-CNPi5adY.js")
+    importer: () => import("./assets/projects-D9ETGupJ.js")
   },
   "1d147786bb4efc50107e0030500c0d345b524d45211d5b5a8496b06fa13b2b18": {
     functionName: "listSamSessions_createServerFn_handler",
-    importer: () => import("./assets/sam-DZkwi5oF.js")
+    importer: () => import("./assets/sam-BHnfwrJ3.js")
   },
   "1d75d4deb3fcbaf04305fae69c64722313c46f5620de0ece3b950cff9346e099": {
     functionName: "saveKeywords_createServerFn_handler",
-    importer: () => import("./assets/keywords-CITYKRa0.js")
+    importer: () => import("./assets/keywords-CmeE_3hp.js")
   },
   "1e3e63b95fa90f1fafbcda79f9999a31747ab722474f0eae185243ffdd1b06ab": {
     functionName: "estimateRankCheckCost_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B9FKD60t.js")
+    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
   },
   "1e8f375975f9b25f935c01e1ed6d63147b5a7fe8693c2737dcc1869d8ef97f3b": {
     functionName: "removeSavedKeywords_createServerFn_handler",
-    importer: () => import("./assets/keywords-CITYKRa0.js")
+    importer: () => import("./assets/keywords-CmeE_3hp.js")
   },
   "2498dc9ae1c9692a93484405a16016aa8af2296e6a6ac6c892aeff22c4154f17": {
     functionName: "getRankTrackingConfigs_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B9FKD60t.js")
+    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
   },
   "258d28f360a42fb9dc6a60c60b05f23782f2fe2bf58c46d6e683b5d80693aadf": {
     functionName: "createRankTrackingConfig_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B9FKD60t.js")
+    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
   },
   "273ab5dcd2c400c13c6eaf49ea723e422c6435074e7b455c4fa0d0bd03df362a": {
     functionName: "archiveSamSession_createServerFn_handler",
-    importer: () => import("./assets/sam-DZkwi5oF.js")
+    importer: () => import("./assets/sam-BHnfwrJ3.js")
   },
   "278ebde0d517c2ebe20e607d3d88ad2fb75a216d2567a5dfcf5808ab244908f7": {
     functionName: "getProjects_createServerFn_handler",
-    importer: () => import("./assets/projects-CNPi5adY.js")
+    importer: () => import("./assets/projects-D9ETGupJ.js")
   },
   "319d82ec75b2b49399d07e97a0efffd36bd56066017d95b692e7074cae6b1272": {
     functionName: "getAhrefsDomainRatings_createServerFn_handler",
-    importer: () => import("./assets/ahrefs-BKYL1zgL.js")
+    importer: () => import("./assets/ahrefs-BOXsWscR.js")
   },
   "364efb68f010cdd93e01da48b22253ac6e745a792ce18710f489a70100cde203": {
     functionName: "prewarmSerpLocations_createServerFn_handler",
-    importer: () => import("./assets/serp-locations-CpHgCZhB.js")
+    importer: () => import("./assets/serp-locations-CaFlm97J.js")
   },
   "39b646e1b210269ed692e316a1456d18b70794e8f2dd13b038ab141fc56de0c7": {
     functionName: "dismissDashboardGa4Card_createServerFn_handler",
-    importer: () => import("./assets/dashboard-CWMXsPuB.js")
+    importer: () => import("./assets/dashboard-CcujqZW7.js")
   },
   "3b7a7d39821bb858a8e568dde7f4b7c984fdcbb1b94e2a1b26d91fdf25ff537f": {
     functionName: "updateSavedKeywordTag_createServerFn_handler",
-    importer: () => import("./assets/keywords-CITYKRa0.js")
+    importer: () => import("./assets/keywords-CmeE_3hp.js")
   },
   "3dbeccce043161813d8711ff4113fda42d161033a0efa91044658e370c98be80": {
     functionName: "getOnboardingChatState_createServerFn_handler",
-    importer: () => import("./assets/onboardingChat-f7qAfiKY.js")
+    importer: () => import("./assets/onboardingChat-Bb6b4c45.js")
   },
   "40b504d5f882e6201483a0134c8f88c5b566a334664337c847b00819ab66c6cd": {
     functionName: "startSelfHostedGscLink_createServerFn_handler",
-    importer: () => import("./assets/gsc-B56MWHfc.js")
+    importer: () => import("./assets/gsc-D2xygDB4.js")
   },
   "47f4e168632e9bfd56794677badebb717fc5ce10103810690f0c3bdc5d098227": {
     functionName: "getBacklinksTopPages_createServerFn_handler",
-    importer: () => import("./assets/backlinks-DVv0YQmN.js")
+    importer: () => import("./assets/backlinks-acJ3YjnO.js")
   },
   "4f6a59af64bb95847828f645f342cfbb203858ef0caca7ddb96adebcce44b7a0": {
     functionName: "getBillingUsageEvents_createServerFn_handler",
-    importer: () => import("./assets/billing-C9uu4jtM.js")
+    importer: () => import("./assets/billing-BT5Dfgya.js")
   },
   "5036bfbbb0648430f1305a7b8a9540118bd537d96bd6f393c94d703319ee3282": {
     functionName: "dismissGscNudge_createServerFn_handler",
-    importer: () => import("./assets/onboarding-frgJzWiE.js")
+    importer: () => import("./assets/onboarding-Ck-9qRd8.js")
   },
   "516782e359aa3cdba9ed9ea54db3d5b889263ae7b7a025542320a44198af7371": {
     functionName: "deleteAudit_createServerFn_handler",
-    importer: () => import("./assets/audit-qt8E4cRL.js")
+    importer: () => import("./assets/audit-1ERYwzgk.js")
   },
   "5508a7b8c2ede1eee34a3696a25fb1813f0d30238ed1d48ca28dfbbbe7f5ac14": {
     functionName: "createSamSession_createServerFn_handler",
-    importer: () => import("./assets/sam-DZkwi5oF.js")
+    importer: () => import("./assets/sam-BHnfwrJ3.js")
   },
   "57eebe4b148ecd8baeab46c7dc1c92b78de5e9a45d9f805e437b74cda250d02e": {
     functionName: "getSamAccessSetupStatus_createServerFn_handler",
-    importer: () => import("./assets/samAccess-BQYp11eM.js")
+    importer: () => import("./assets/samAccess-DSbOzZ45.js")
   },
   "75f7965168786313e194a1941f91dd242a6b8c06b1cf69463eae0e9ce5dd6773": {
     functionName: "getAuditStatus_createServerFn_handler",
-    importer: () => import("./assets/audit-qt8E4cRL.js")
+    importer: () => import("./assets/audit-1ERYwzgk.js")
   },
   "7a3ccd49a583d669523ebc977678f95cac97fe4eaa09a3151a6af5732a78eb03": {
     functionName: "getProjectContext_createServerFn_handler",
-    importer: () => import("./assets/projectContext-B76OZ8xI.js")
+    importer: () => import("./assets/projectContext-aWSDUZfN.js")
   },
   "7c953889116b01175d89dce1f11398e791a804844e06a729e8a40679c8e32137": {
     functionName: "markDashboardCompetitorClicked_createServerFn_handler",
-    importer: () => import("./assets/dashboard-CWMXsPuB.js")
+    importer: () => import("./assets/dashboard-CcujqZW7.js")
   },
   "8acb99c0e5b1aed5cfb75318e78747749f8c2c54884ba18ff1c945a9b06a9375": {
     functionName: "getSavedKeywords_createServerFn_handler",
-    importer: () => import("./assets/keywords-CITYKRa0.js")
+    importer: () => import("./assets/keywords-CmeE_3hp.js")
   },
   "8e1e5f26a194415159d9074271d62e81c5b365b4c35612f4e23581af549700cf": {
     functionName: "getAuditHistory_createServerFn_handler",
-    importer: () => import("./assets/audit-qt8E4cRL.js")
+    importer: () => import("./assets/audit-1ERYwzgk.js")
   },
   "8ea81290b22122bff668b72a4292383130de89933a300adb2f16caed61f53731": {
     functionName: "dismissDashboardMcpCard_createServerFn_handler",
-    importer: () => import("./assets/dashboard-CWMXsPuB.js")
+    importer: () => import("./assets/dashboard-CcujqZW7.js")
   },
   "9059a6b8babf4dd972195adcbd6d5b0a44a9abda3a66071b8b90e201141c10d5": {
     functionName: "saveOnboardingAnswers_createServerFn_handler",
-    importer: () => import("./assets/onboarding-frgJzWiE.js")
+    importer: () => import("./assets/onboarding-Ck-9qRd8.js")
   },
   "955fb22c05a803998669e9e3cb307dc405e545b788cf580fa37af4236d97b07a": {
     functionName: "getAuditLighthouseIssues_createServerFn_handler",
-    importer: () => import("./assets/lighthouse-D1Dm_EtW.js")
+    importer: () => import("./assets/lighthouse-D9xNaht6.js")
   },
   "956a5e2004016739fc80341f1095d7bd8a96655c6c9fe7ba4126d97f40498e2a": {
     functionName: "listGscSites_createServerFn_handler",
-    importer: () => import("./assets/gsc-B56MWHfc.js")
+    importer: () => import("./assets/gsc-D2xygDB4.js")
   },
   "9632bd92f3de61b172319c2b693ceaafbbc52f214ba2a4fb93531fefa5b96d74": {
     functionName: "addTrackingKeywords_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B9FKD60t.js")
+    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
   },
   "9ce7a2858b82783ef908f4396d61f4645b09ab4cbc435936a1495f8c23bcdb8d": {
     functionName: "deleteSavedKeywordTag_createServerFn_handler",
-    importer: () => import("./assets/keywords-CITYKRa0.js")
+    importer: () => import("./assets/keywords-CmeE_3hp.js")
   },
   "9d62c976afd0592ac01d146421e81b4b46e99090b01e75b15797fba6d6af5e1d": {
     functionName: "disconnectGa4_createServerFn_handler",
-    importer: () => import("./assets/ga4-B0ZgHO4T.js")
+    importer: () => import("./assets/ga4-Cu52Vnpo.js")
   },
   "9da63329d53b960da32b79472469175d63f38b5e71bcef0cacabb66cba684931": {
     functionName: "getRankConfigTrend_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B9FKD60t.js")
+    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
   },
   "9f89caac05689c3f844d5e9fdb4453cd3dbe85e64cddf60d717dad8ccc0ef965": {
     functionName: "getArchivedProjects_createServerFn_handler",
-    importer: () => import("./assets/projects-CNPi5adY.js")
+    importer: () => import("./assets/projects-D9ETGupJ.js")
   },
   "a19f7c4228fdbf301aeba791a8732ae65a0018a25d353bdeed6343876396dd0d": {
     functionName: "getSerpAnalysis_createServerFn_handler",
-    importer: () => import("./assets/keywords-CITYKRa0.js")
+    importer: () => import("./assets/keywords-CmeE_3hp.js")
   },
   "a251675043aa688af223c180c37e19f98f6652a33f993dc7d1b14c4ce4ed3589": {
     functionName: "getSearchPerformanceReport_createServerFn_handler",
-    importer: () => import("./assets/searchPerformance-BKfXpUd9.js")
+    importer: () => import("./assets/searchPerformance-CBJ3UPDe.js")
   },
   "a28e240f440a737b1ba00fa06c35615836e9658df9c6a9b04b18bd57f4533a93": {
     functionName: "getCrawlProgress_createServerFn_handler",
-    importer: () => import("./assets/audit-qt8E4cRL.js")
+    importer: () => import("./assets/audit-1ERYwzgk.js")
   },
   "a2d6a29497c1bebbf28ef40173a2712df71d7f163b0d27ba172aa05b8d2bd882": {
     functionName: "updateProjectContext_createServerFn_handler",
-    importer: () => import("./assets/projectContext-B76OZ8xI.js")
+    importer: () => import("./assets/projectContext-aWSDUZfN.js")
   },
   "a49c4261f3f65e415401c7162c49edf3e6134bc3554b0b96f1230779dcdebd9b": {
     functionName: "getBacklinksOverview_createServerFn_handler",
-    importer: () => import("./assets/backlinks-DVv0YQmN.js")
+    importer: () => import("./assets/backlinks-acJ3YjnO.js")
   },
   "a4a9247a2916093ffa4adf9b4628e1d7f55af8b119ae1f0147a8b5ef5fd08691": {
     functionName: "getBacklinksRows_createServerFn_handler",
-    importer: () => import("./assets/backlinks-DVv0YQmN.js")
+    importer: () => import("./assets/backlinks-acJ3YjnO.js")
   },
   "a4aee3230867065a09c55145cf58c1f5bc0fb9ed2f053bda4ac2d635a4d2bcb4": {
     functionName: "getSearchPerformanceTable_createServerFn_handler",
-    importer: () => import("./assets/searchPerformance-BKfXpUd9.js")
+    importer: () => import("./assets/searchPerformance-CBJ3UPDe.js")
   },
   "a4c5ccb6a409cc77e5e7b9193c9dc297024a48793fcd4437e01eb3aa2e1e71ea": {
     functionName: "getGa4Connection_createServerFn_handler",
-    importer: () => import("./assets/ga4-B0ZgHO4T.js")
+    importer: () => import("./assets/ga4-Cu52Vnpo.js")
   },
   "a652f6f5ac08420a126c8459db2cdb1b3b0da797b0151824db9674012541f2d3": {
     functionName: "updateProject_createServerFn_handler",
-    importer: () => import("./assets/projects-CNPi5adY.js")
+    importer: () => import("./assets/projects-D9ETGupJ.js")
   },
   "a6e76ddc449222a502da7b7425f361fcfb4df793782aee76909707bf70ee90d4": {
     functionName: "saveOnboardingSite_createServerFn_handler",
-    importer: () => import("./assets/onboardingChat-f7qAfiKY.js")
+    importer: () => import("./assets/onboardingChat-Bb6b4c45.js")
   },
   "a966ba8dbd2e5e2548b12a6c770c26da924f90ee327285fecd7df1d7afeafe95": {
     functionName: "getDashboardActivation_createServerFn_handler",
-    importer: () => import("./assets/dashboard-CWMXsPuB.js")
+    importer: () => import("./assets/dashboard-CcujqZW7.js")
   },
   "aef09a57d39104b1d10659a92003c6f2a2a124fab74bdfc9358f984506751295": {
     functionName: "getGa4DashboardReport_createServerFn_handler",
-    importer: () => import("./assets/ga4-B0ZgHO4T.js")
+    importer: () => import("./assets/ga4-Cu52Vnpo.js")
   },
   "afea34b6bf4da665d300c562fed995ffb979fe6ebb3bdb7d08c7ce493506a148": {
     functionName: "listGa4Properties_createServerFn_handler",
-    importer: () => import("./assets/ga4-B0ZgHO4T.js")
+    importer: () => import("./assets/ga4-Cu52Vnpo.js")
   },
   "b55a517c6ff4161ff3bcf8bfa47562d71dd21f63950855318e723829d164b395": {
     functionName: "getGscGrantStatus_createServerFn_handler",
-    importer: () => import("./assets/gsc-B56MWHfc.js")
+    importer: () => import("./assets/gsc-D2xygDB4.js")
   },
   "b5858986f4b26fbc7f2cea62479e3b4d97d5c4af0a61b218af88501443a3939c": {
     functionName: "getSeoApiKeyStatus_createServerFn_handler",
-    importer: () => import("./assets/config-DWK1Bh7s.js")
+    importer: () => import("./assets/config-CnBVV0sy.js")
   },
   "b85790a9585d03d2f8132b707c468c39db0e8f6c3f9921647d221ec8a3aa7a60": {
     functionName: "getAuditResults_createServerFn_handler",
-    importer: () => import("./assets/audit-qt8E4cRL.js")
+    importer: () => import("./assets/audit-1ERYwzgk.js")
   },
   "bae0716c278ff567d6fca6035b6fc999ec74301979582cb6eb930ca66771f85f": {
     functionName: "getWorkspaceMergeStatus_createServerFn_handler",
-    importer: () => import("./assets/workspace-DeSWSrtF.js")
+    importer: () => import("./assets/workspace-BuNoZTPV.js")
   },
   "bb79e98e928653ebc50e8c4bfd905ed74cfd81dc4ad11c40a96e517c7a538648": {
     functionName: "getRankTrackingConfigSummaries_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B9FKD60t.js")
+    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
   },
   "bf7707a336fe5f1a810d29eb9ddb4ccee4b8a2f0ce88e94d04a295456d7e71d1": {
     functionName: "getDashboardOverview_createServerFn_handler",
-    importer: () => import("./assets/dashboard-CWMXsPuB.js")
+    importer: () => import("./assets/dashboard-CcujqZW7.js")
   },
   "c36a03514a4a30b2f2aad7b77bba4606e70547fefc757782bb3f12ae4c226619": {
     functionName: "startSelfHostedGa4Link_createServerFn_handler",
-    importer: () => import("./assets/ga4-B0ZgHO4T.js")
+    importer: () => import("./assets/ga4-Cu52Vnpo.js")
   },
   "c6715a7072113d7f7ea076796cf28e47be1bab5e1dfd14502e72467efab53306": {
     functionName: "getRankPositionMatrix_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B9FKD60t.js")
+    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
   },
   "d034f8888a5e1014831023cf2a868291cfd466101140d59d1f4251fd53203037": {
     functionName: "removeTrackingKeywords_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B9FKD60t.js")
+    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
   },
   "d1f2d6df775a95682f80a98e2ced1e2c0553c94a8452a94f9241ab709a5fce60": {
     functionName: "createProject_createServerFn_handler",
-    importer: () => import("./assets/projects-CNPi5adY.js")
+    importer: () => import("./assets/projects-D9ETGupJ.js")
   },
   "d8e8c6a9e4e7768403aa7d208c2346921cf9660a816886bf406dc62cd437a155": {
     functionName: "refreshDashboardBacklinkSnapshot_createServerFn_handler",
-    importer: () => import("./assets/dashboard-CWMXsPuB.js")
+    importer: () => import("./assets/dashboard-CcujqZW7.js")
   },
   "dd3518eb8d7349f47f651bb345e6a70e7b48073f2557d873f09c577b0deab0bb": {
     functionName: "mergeLegacyWorkspaces_createServerFn_handler",
-    importer: () => import("./assets/workspace-DeSWSrtF.js")
+    importer: () => import("./assets/workspace-BuNoZTPV.js")
   },
   "ddd165935e6b49d3557cb04d17f77f9775c81fbb0c0f735387a032421a266542": {
     functionName: "getLatestRankResults_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B9FKD60t.js")
+    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
   },
   "de61ac92db2a9949b67232b0b1132b6cbdd66b7f381be8a22e9c245c8126d1f6": {
     functionName: "getProjectAccess_createServerFn_handler",
-    importer: () => import("./assets/projects-CNPi5adY.js")
+    importer: () => import("./assets/projects-D9ETGupJ.js")
   },
   "e07b0dfacb31a403133cc5bf5e671e8b7735dd63c2c993749b4ecd399e779acb": {
     functionName: "getLatestRankRun_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B9FKD60t.js")
+    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
   },
   "e239daa45c0dc82d2216f3ac9a60781ba3bad43f9837cb6779399d0c3d87885c": {
     functionName: "startAudit_createServerFn_handler",
-    importer: () => import("./assets/audit-qt8E4cRL.js")
+    importer: () => import("./assets/audit-1ERYwzgk.js")
   },
   "e2b5146b78833600dfd30aa3bda214dfa8c480278644dcff1698db1e51e5759a": {
     functionName: "explorePrompt_createServerFn_handler",
-    importer: () => import("./assets/ai-search-BW3Bzh5f.js")
+    importer: () => import("./assets/ai-search-jCMirqX1.js")
   },
   "e808431fe24faa5cddaa82ff3cee05037bdd2ddd1ba1ceef693aac01ca8e68bc": {
     functionName: "getRankKeywordHistory_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B9FKD60t.js")
+    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
   },
   "ee56593aa127e081b934d6fec3a8bc310d3d98cbb59dd0947c77be7c85514de4": {
     functionName: "setGscSite_createServerFn_handler",
-    importer: () => import("./assets/gsc-B56MWHfc.js")
+    importer: () => import("./assets/gsc-D2xygDB4.js")
   },
   "f3b1afadd779b6abc3a38a06587159bb14c03c93475bc4c022b77539dc7dc811": {
     functionName: "setProjectDomain_createServerFn_handler",
-    importer: () => import("./assets/projects-CNPi5adY.js")
+    importer: () => import("./assets/projects-D9ETGupJ.js")
   },
   "f3ccdf1c5f7849adbe55a38000c0c568b1f72b75fea6deea496f965b8c7ab155": {
     functionName: "getOnboardingAnswers_createServerFn_handler",
-    importer: () => import("./assets/onboarding-frgJzWiE.js")
+    importer: () => import("./assets/onboarding-Ck-9qRd8.js")
   },
   "f68c75b95b8026da27b760951b2ab7e797bf30f0be879b42fbf17d336034843c": {
     functionName: "setProjectMarket_createServerFn_handler",
-    importer: () => import("./assets/projects-CNPi5adY.js")
+    importer: () => import("./assets/projects-D9ETGupJ.js")
   },
   "fa088bd63c78c66cb4de7e8be1d7567e0ec901107ad1afe33e0ffbeecc57bfbc": {
     functionName: "researchKeywords_createServerFn_handler",
-    importer: () => import("./assets/keywords-CITYKRa0.js")
+    importer: () => import("./assets/keywords-CmeE_3hp.js")
   }
 };
 async function getServerFnById(id, access) {
@@ -5307,8 +5307,8 @@ var getBaseManifest = getProdBaseManifest;
 var createEarlyHintsForRequest = createEarlyHintsCollector;
 async function loadEntries() {
   const [routerEntry, startEntry, pluginAdapters] = await Promise.all([
-    import("./assets/router-BZ-5uDXB.js").then((n2) => n2.aB),
-    import("./assets/start-BuWBnYH2.js"),
+    import("./assets/router-CFUJAOTG.js").then((n2) => n2.aB),
+    import("./assets/start-D-I9Usew.js"),
     import("./assets/empty-plugin-adapters-BFgPZ6_d.js")
   ]);
   return {
@@ -17528,10 +17528,13 @@ function isHostedAuthMode(value) {
   return getAuthMode(value) === "hosted";
 }
 function isHostedClientAuthMode() {
-  return isHostedAuthMode(void 0);
+  return isHostedAuthMode("hosted");
+}
+function isGoogleAuthDisabled() {
+  return true;
 }
 function isEmailVerificationBypassed() {
-  return false;
+  return true;
 }
 const ERROR_CODES = [
   "UNAUTHENTICATED",
@@ -33991,7 +33994,7 @@ async function getBaseAdapter(options, handleDirectDatabase) {
       acc[key2] = [];
       return acc;
     }, {});
-    const { memoryAdapter } = await import("./assets/index-DBBNPERp.js");
+    const { memoryAdapter } = await import("./assets/index-BbHaOb4k.js");
     adapter = memoryAdapter(memoryDB)(options);
   } else if (typeof options.database === "function") adapter = options.database(options);
   else adapter = await handleDirectDatabase(options);
@@ -51545,7 +51548,7 @@ const createKyselyAdapter = async (config2) => {
   if ("getConnection" in db2) dialect = new MysqlDialect(db2);
   if ("connect" in db2) dialect = new PostgresDialect({ pool: db2 });
   if ("fileControl" in db2) {
-    const { BunSqliteDialect } = await import("./assets/bun-sqlite-dialect-BW9W1_Ps-CvhAVS8O.js");
+    const { BunSqliteDialect } = await import("./assets/bun-sqlite-dialect-BW9W1_Ps-CjUFYC6h.js");
     dialect = new BunSqliteDialect({ database: db2 });
   }
   if ("createSession" in db2) {
@@ -51561,12 +51564,12 @@ const createKyselyAdapter = async (config2) => {
       if (error2 !== null && typeof error2 === "object" && "code" in error2 && error2.code !== "ERR_UNKNOWN_BUILTIN_MODULE") throw error2;
     }
     if (DatabaseSync && db2 instanceof DatabaseSync) {
-      const { NodeSqliteDialect } = await import("./assets/node-sqlite-dialect-BW-f0FBv.js");
+      const { NodeSqliteDialect } = await import("./assets/node-sqlite-dialect-JXU1pnRu.js");
       dialect = new NodeSqliteDialect({ database: db2 });
     }
   }
   if ("batch" in db2 && "exec" in db2 && "prepare" in db2) {
-    const { D1SqliteDialect } = await import("./assets/d1-sqlite-dialect-BLC8LXE6-B41i0i4d.js");
+    const { D1SqliteDialect } = await import("./assets/d1-sqlite-dialect-BLC8LXE6-DELgbOw5.js");
     dialect = new D1SqliteDialect({ database: db2 });
   }
   return {
@@ -59167,6 +59170,9 @@ function createAuth() {
     ...baseAuthConfig,
     emailAndPassword: {
       ...baseAuthConfig.emailAndPassword,
+      // Single-admin self-hosts close public registration entirely; the admin
+      // account is provisioned out of band (Node runtime bootstrap).
+      disableSignUp: Reflect.get(env$1, "SIGNUP_DISABLED") === "true",
       requireEmailVerification: !bypassEmail,
       resetPasswordTokenExpiresIn: 60 * 60,
       revokeSessionsOnPasswordReset: true,
@@ -59282,18 +59288,20 @@ function getSocialProviders() {
   if (!isHostedAuthMode(env$1.AUTH_MODE)) {
     return {};
   }
-  return {
-    google: getGoogleSocialProviderConfig()
-  };
+  const google2 = getGoogleSocialProviderConfig();
+  return google2 ? { google: google2 } : {};
 }
 function getGoogleSocialProviderConfig() {
   const googleClientId = env$1.GOOGLE_CLIENT_ID?.trim();
   const googleClientSecret = env$1.GOOGLE_CLIENT_SECRET?.trim();
+  if (!googleClientId && !googleClientSecret) {
+    return null;
+  }
   if (!googleClientId) {
-    throw new Error("GOOGLE_CLIENT_ID is required in hosted mode");
+    throw new Error("GOOGLE_CLIENT_ID is required when GOOGLE_CLIENT_SECRET is set");
   }
   if (!googleClientSecret) {
-    throw new Error("GOOGLE_CLIENT_SECRET is required in hosted mode");
+    throw new Error("GOOGLE_CLIENT_SECRET is required when GOOGLE_CLIENT_ID is set");
   }
   return {
     clientId: googleClientId,
@@ -60197,6 +60205,25 @@ function isRecord$3(value) {
   return typeof value === "object" && value !== null;
 }
 let autumnPromise;
+const UNLIMITED_CREDITS = 1e9;
+async function isBillingDisabled() {
+  return await getOptionalEnvValue("BILLING_DISABLED") === "true";
+}
+function disabledCheckResult() {
+  return {
+    allowed: true,
+    balance: { remaining: UNLIMITED_CREDITS }
+  };
+}
+function disabledCustomer(customerId) {
+  return {
+    id: customerId,
+    balances: {
+      [AUTUMN_SEO_DATA_BALANCE_FEATURE_ID]: { remaining: UNLIMITED_CREDITS },
+      [AUTUMN_SEO_DATA_TOPUP_BALANCE_FEATURE_ID]: { remaining: 0 }
+    }
+  };
+}
 function loadAutumn() {
   return autumnPromise ??= import("autumn-js").then(
     ({ Autumn }) => new Autumn({
@@ -60225,10 +60252,10 @@ function loadAutumn() {
   );
 }
 const autumn = {
-  check: (...args) => loadAutumn().then((client2) => client2.check(...args)),
-  track: (...args) => loadAutumn().then((client2) => client2.track(...args)),
+  check: async (...args) => await isBillingDisabled() ? disabledCheckResult() : loadAutumn().then((client2) => client2.check(...args)),
+  track: async (...args) => await isBillingDisabled() ? {} : loadAutumn().then((client2) => client2.track(...args)),
   customers: {
-    getOrCreate: (...args) => loadAutumn().then((client2) => client2.customers.getOrCreate(...args))
+    getOrCreate: async (...args) => await isBillingDisabled() ? disabledCustomer(args[0]?.customerId ?? "self-hosted") : loadAutumn().then((client2) => client2.customers.getOrCreate(...args))
   }
 };
 const AUTUMN_TRACK_RETRY_OPTIONS = {
@@ -66063,7 +66090,7 @@ function parseTaskItems(endpoint, task, itemSchema) {
 }
 let sectionsPromise;
 function loadDataforseoSections() {
-  return sectionsPromise ??= import("./assets/sections-BYRsIHMM.js");
+  return sectionsPromise ??= import("./assets/sections-CQhbZ21g.js");
 }
 function meter(customer, pick, defaultFeature) {
   return (input) => meterDataforseoCall(
@@ -80051,7 +80078,7 @@ async function crawlPage(url, crawlDepth, inSitemap) {
         htmlBytes: body.length
       });
     }
-    const { analyzeHtml } = await import("./assets/page-analyzer-Crw9kj3T.js");
+    const { analyzeHtml } = await import("./assets/page-analyzer-Lb_loXdO.js");
     const analysis = analyzeHtml(body, url, statusCode, responseTimeMs);
     const robotsDirectives = [analysis.robotsMeta, xRobotsTag].filter(Boolean).join(",").toLowerCase();
     const isIndexable = !robotsDirectives.includes("noindex");
@@ -81388,6 +81415,9 @@ if (!globalState[CRON_FLAG] && process.env.DISABLE_CRON !== "1") {
   startCron();
 }
 registerWorkflows({ SiteAuditWorkflow, RankCheckWorkflow });
+import("./assets/bootstrap-admin-B2pqlFlH.js").then(({ bootstrapAdminAccount }) => bootstrapAdminAccount()).catch(
+  (err2) => console.error("[node-runtime] admin bootstrap failed:", err2)
+);
 const WORKER_FLAG = /* @__PURE__ */ Symbol.for("openseo.node-runtime.workflow-worker");
 if (!globalState[WORKER_FLAG] && process.env.DISABLE_WORKFLOW_WORKER !== "1") {
   globalState[WORKER_FLAG] = true;
@@ -81401,250 +81431,252 @@ const entry = {
   }
 };
 export {
-  asAppError as $,
-  domainPagesPageRequestSchema as A,
-  isHostedServerAuthMode as B,
-  hasSelfHostedGoogleOAuthConfig as C,
+  getLatestResults as $,
+  domainKeywordsPageRequestSchema as A,
+  domainPagesPageRequestSchema as B,
+  isHostedServerAuthMode as C,
   DomainService as D,
-  waitUntil as E,
-  captureServerEvent as F,
+  hasSelfHostedGoogleOAuthConfig as E,
+  waitUntil as F,
   GscService as G,
   HEADERS as H,
-  getPublicOrigin as I,
-  researchScopeSchema as J,
+  captureServerEvent as I,
+  getPublicOrigin as J,
   KeywordResearchService as K,
-  backlinksOverviewInputSchema as L,
-  BacklinksService as M,
-  backlinksRowsPageRequestSchema as N,
-  referringDomainsPageRequestSchema as O,
-  topPagesPageRequestSchema as P,
-  ProjectService as Q,
-  createProjectSchema as R,
+  researchScopeSchema as L,
+  backlinksOverviewInputSchema as M,
+  BacklinksService as N,
+  backlinksRowsPageRequestSchema as O,
+  referringDomainsPageRequestSchema as P,
+  topPagesPageRequestSchema as Q,
+  ProjectService as R,
   StartServer as S,
-  updateProjectSchema as T,
-  setProjectDomainSchema as U,
-  setProjectMarketSchema as V,
-  archiveProjectSchema as W,
-  restoreProjectSchema as X,
-  RankTrackingRepository as Y,
-  RankTrackingService as Z,
-  getLatestResults as _,
+  createProjectSchema as T,
+  updateProjectSchema as U,
+  setProjectDomainSchema as V,
+  setProjectMarketSchema as W,
+  archiveProjectSchema as X,
+  restoreProjectSchema as Y,
+  RankTrackingRepository as Z,
+  RankTrackingService as _,
   attachRouterServerSsrUtils as a,
-  GA4_OAUTH_PROVIDER_ID as a$,
-  AppError as a0,
-  getRequiredEnvValue as a1,
-  SamSessionRepository as a2,
-  ProjectRepository as a3,
-  normalizeDomainInput as a4,
-  env$1 as a5,
-  isSupportedLocationCode as a6,
-  db as a7,
-  projects as a8,
-  getLanguageCode as a9,
-  logger as aA,
-  isHostedClientAuthMode as aB,
-  isEmailVerificationBypassed as aC,
-  HOSTED_PASSWORD_MAX_LENGTH as aD,
-  HOSTED_PASSWORD_MIN_LENGTH as aE,
-  DEFAULT_LOCATION_CODE$1 as aF,
-  getLanguageOptions as aG,
-  LOCATION_OPTIONS as aH,
-  SUBSCRIBE_ROUTE as aI,
-  AUTUMN_MANAGED_ACCESS_FEATURE_ID as aJ,
-  AUTUMN_PAID_PLAN_ID as aK,
-  RESEARCH_SCOPE_LABELS as aL,
-  RESEARCH_SCOPES as aM,
-  RESEARCH_SCOPE_DESCRIPTIONS as aN,
-  RESEARCH_SCOPE_EXAMPLES as aO,
-  createMiddleware$1 as aP,
-  createCsrfMiddleware as aQ,
-  resolveDateRange as aR,
-  GscNotConnectedError as aS,
-  isExpectedGrantFailure as aT,
-  jsonCodec as aU,
-  AuditRepository as aV,
-  getJsonFromR2 as aW,
-  Ga4ConnectionRepository as aX,
-  createGa4AdminClient as aY,
-  Ga4AdminApiError as aZ,
-  account as a_,
-  AUTUMN_SEO_DATA_BALANCE_FEATURE_ID as aa,
-  AUTUMN_SEO_DATA_TOPUP_BALANCE_FEATURE_ID as ab,
-  userOnboardingAnswers as ac,
-  user as ad,
-  AuditService as ae,
-  MIN_AUDIT_PAGES as af,
-  PAID_MAX_AUDIT_PAGES as ag,
-  DEFAULT_AUDIT_PAGES as ah,
-  getOptionalEnvValue as ai,
-  getProjectContextSchema as aj,
-  ProjectContextService as ak,
-  updateProjectContextSchema as al,
-  TSS_SERVER_FUNCTION as am,
-  normalizeDomain$1 as an,
-  domainField as ao,
-  rankTrackingConfigs as ap,
-  isSupportedLanguageCode as aq,
-  MAX_TRACKED_KEYWORD_LENGTH as ar,
-  normalizeUrl as as,
-  isSameOrigin as at,
-  CompiledQuery as au,
-  DefaultQueryCompiler as av,
-  sql as aw,
-  SqliteQueryCompiler as ax,
-  SqliteAdapter as ay,
-  createAdapterFactory as az,
+  Ga4AdminApiError as a$,
+  asAppError as a0,
+  AppError as a1,
+  getRequiredEnvValue as a2,
+  SamSessionRepository as a3,
+  ProjectRepository as a4,
+  normalizeDomainInput as a5,
+  env$1 as a6,
+  isSupportedLocationCode as a7,
+  db as a8,
+  projects as a9,
+  createAdapterFactory as aA,
+  logger as aB,
+  isHostedClientAuthMode as aC,
+  isEmailVerificationBypassed as aD,
+  HOSTED_PASSWORD_MAX_LENGTH as aE,
+  HOSTED_PASSWORD_MIN_LENGTH as aF,
+  DEFAULT_LOCATION_CODE$1 as aG,
+  getLanguageOptions as aH,
+  LOCATION_OPTIONS as aI,
+  SUBSCRIBE_ROUTE as aJ,
+  AUTUMN_MANAGED_ACCESS_FEATURE_ID as aK,
+  AUTUMN_PAID_PLAN_ID as aL,
+  isGoogleAuthDisabled as aM,
+  RESEARCH_SCOPE_LABELS as aN,
+  RESEARCH_SCOPES as aO,
+  RESEARCH_SCOPE_DESCRIPTIONS as aP,
+  RESEARCH_SCOPE_EXAMPLES as aQ,
+  createMiddleware$1 as aR,
+  createCsrfMiddleware as aS,
+  resolveDateRange as aT,
+  GscNotConnectedError as aU,
+  isExpectedGrantFailure as aV,
+  jsonCodec as aW,
+  AuditRepository as aX,
+  getJsonFromR2 as aY,
+  Ga4ConnectionRepository as aZ,
+  createGa4AdminClient as a_,
+  getLanguageCode as aa,
+  AUTUMN_SEO_DATA_BALANCE_FEATURE_ID as ab,
+  AUTUMN_SEO_DATA_TOPUP_BALANCE_FEATURE_ID as ac,
+  userOnboardingAnswers as ad,
+  user as ae,
+  AuditService as af,
+  MIN_AUDIT_PAGES as ag,
+  PAID_MAX_AUDIT_PAGES as ah,
+  DEFAULT_AUDIT_PAGES as ai,
+  getOptionalEnvValue as aj,
+  getProjectContextSchema as ak,
+  ProjectContextService as al,
+  updateProjectContextSchema as am,
+  TSS_SERVER_FUNCTION as an,
+  normalizeDomain$1 as ao,
+  domainField as ap,
+  rankTrackingConfigs as aq,
+  isSupportedLanguageCode as ar,
+  MAX_TRACKED_KEYWORD_LENGTH as as,
+  normalizeUrl as at,
+  isSameOrigin as au,
+  CompiledQuery as av,
+  DefaultQueryCompiler as aw,
+  sql as ax,
+  SqliteQueryCompiler as ay,
+  SqliteAdapter as az,
   getResponse$1 as b,
-  parseTaskTotalCount as b$,
-  Ga4TokenError as b0,
-  Ga4OrganicOverviewService as b1,
-  Ga4ReportError as b2,
-  shiftGa4Date as b3,
-  getAuthMode as b4,
-  isHostedAuthMode as b5,
-  resolveLocalNoAuthContext as b6,
-  resolveCloudflareAccessContext as b7,
-  getGoogleOAuthClientConfig as b8,
-  getAuth as b9,
-  auditIssues as bA,
-  backlinkSnapshots as bB,
-  GscConnectionRepository as bC,
-  ActivationRepository as bD,
-  normalizeBacklinksTarget as bE,
-  createDataforseoClient as bF,
-  mapDataforseoPathToCreditFeature as bG,
-  creditFeatureLabel as bH,
-  AUTUMN_SEO_DATA_CREDITS_PER_USD as bI,
-  AUTUMN_SEO_DATA_TOP_UP_PLAN_ID as bJ,
-  KEY_PAGE_ROLES as bK,
-  PROJECT_CONTEXT_SECTION_KEYS as bL,
-  PROJECT_CONTEXT_SECTION_LABELS as bM,
-  PROSE_MAX_CHARS as bN,
-  urlMatchesResearchTarget as bO,
-  buildCacheKey as bP,
-  getCached as bQ,
-  setCached as bR,
-  parseResearchTarget as bS,
-  AI_SEARCH_PROMPT_CACHE_NAMESPACE as bT,
-  customerHasPaidPlan as bU,
-  isTaskInProgress as bV,
-  isNoResultsTask as bW,
-  isRecord$1 as bX,
-  buildTaskBilling as bY,
-  parseTaskItems as bZ,
-  normalizeBacklinksSpamFilterOptions as b_,
-  symmetricEncrypt as ba,
-  GSC_OAUTH_SCOPES as bb,
-  GSC_OAUTH_PROVIDER_ID as bc,
-  GA4_OAUTH_SCOPES as bd,
-  assertOk as be,
-  formatLocationLabel as bf,
-  organization$1 as bg,
-  organizationActivationState as bh,
-  SHARED_WORKSPACE_ORGANIZATION_ID as bi,
-  runBatch as bj,
-  gscConnections as bk,
-  ga4Connections as bl,
-  version as bm,
-  autumnSeoDataCreditsToUsd as bn,
-  BILLING_ROUTE as bo,
-  LOW_CREDITS_THRESHOLD_USD as bp,
-  GA4_SELF_HOSTED_SETUP_DOCS_URL as bq,
-  LOCATIONS as br,
-  devicesLabel as bs,
-  scheduleLabel as bt,
-  shouldCaptureAppErrorCode as bu,
-  captureServerError as bv,
-  toClientError as bw,
-  resolveUserContextFromHeaders as bx,
-  GSC_SELF_HOSTED_SETUP_DOCS_URL as by,
-  MAX_DATAFORSEO_FILTER_CONDITIONS as bz,
+  parseTaskItems as b$,
+  account as b0,
+  GA4_OAUTH_PROVIDER_ID as b1,
+  Ga4TokenError as b2,
+  Ga4OrganicOverviewService as b3,
+  Ga4ReportError as b4,
+  shiftGa4Date as b5,
+  getAuthMode as b6,
+  isHostedAuthMode as b7,
+  resolveLocalNoAuthContext as b8,
+  resolveCloudflareAccessContext as b9,
+  GSC_SELF_HOSTED_SETUP_DOCS_URL as bA,
+  MAX_DATAFORSEO_FILTER_CONDITIONS as bB,
+  auditIssues as bC,
+  backlinkSnapshots as bD,
+  GscConnectionRepository as bE,
+  ActivationRepository as bF,
+  normalizeBacklinksTarget as bG,
+  createDataforseoClient as bH,
+  mapDataforseoPathToCreditFeature as bI,
+  creditFeatureLabel as bJ,
+  AUTUMN_SEO_DATA_CREDITS_PER_USD as bK,
+  AUTUMN_SEO_DATA_TOP_UP_PLAN_ID as bL,
+  KEY_PAGE_ROLES as bM,
+  PROJECT_CONTEXT_SECTION_KEYS as bN,
+  PROJECT_CONTEXT_SECTION_LABELS as bO,
+  PROSE_MAX_CHARS as bP,
+  urlMatchesResearchTarget as bQ,
+  buildCacheKey as bR,
+  getCached as bS,
+  setCached as bT,
+  parseResearchTarget as bU,
+  AI_SEARCH_PROMPT_CACHE_NAMESPACE as bV,
+  customerHasPaidPlan as bW,
+  isTaskInProgress as bX,
+  isNoResultsTask as bY,
+  isRecord$1 as bZ,
+  buildTaskBilling as b_,
+  getGoogleOAuthClientConfig as ba,
+  getAuth as bb,
+  symmetricEncrypt as bc,
+  GSC_OAUTH_SCOPES as bd,
+  GSC_OAUTH_PROVIDER_ID as be,
+  GA4_OAUTH_SCOPES as bf,
+  assertOk as bg,
+  formatLocationLabel as bh,
+  organization$1 as bi,
+  organizationActivationState as bj,
+  SHARED_WORKSPACE_ORGANIZATION_ID as bk,
+  runBatch as bl,
+  gscConnections as bm,
+  ga4Connections as bn,
+  version as bo,
+  autumnSeoDataCreditsToUsd as bp,
+  BILLING_ROUTE as bq,
+  LOW_CREDITS_THRESHOLD_USD as br,
+  GA4_SELF_HOSTED_SETUP_DOCS_URL as bs,
+  LOCATIONS as bt,
+  devicesLabel as bu,
+  scheduleLabel as bv,
+  shouldCaptureAppErrorCode as bw,
+  captureServerError as bx,
+  toClientError as by,
+  resolveUserContextFromHeaders as bz,
   createStartHandler as c,
-  MAX_TASKS_PER_POST as c0,
-  DataforseoChargedTaskError as c1,
-  AUDIT_ISSUE_TYPES as c2,
-  isLabsLocationCode as c3,
-  getIsoCountryCode as c4,
-  SERP_LANGUAGE_OPTIONS as c5,
-  pagesToDepth as c6,
-  depthToPages as c7,
-  estimateRankCheckCredits as c8,
-  isInternalJsStubProp as c9,
-  isErrorCode as cA,
-  FREE_MAX_AUDIT_PAGES as cB,
-  getServerFnById as cC,
-  resolveHostedContext as cD,
-  hasHostedAuthConfig as cE,
-  keywordsSearchSchema as cF,
-  domainSearchSchema as cG,
-  backlinksSearchSchema as cH,
-  AUTUMN_PAID_PLAN_FEATURE_ID as cI,
-  isSafeUrlScheme as cJ,
-  getBaseURL as cK,
-  createFetch as cL,
-  defu as cM,
-  parseJSON as cN,
-  toKebabCase as cO,
-  capitalizeFirstLetter as cP,
-  PACKAGE_VERSION as cQ,
-  GENERIC_OAUTH_ERROR_CODES as cR,
-  ORGANIZATION_ERROR_CODES as cS,
-  hasPermissionFn as cT,
-  defaultRoles$1 as cU,
-  ownerAc as cV,
-  memberAc as cW,
-  adminAc as cX,
-  getIssueDescriptor as cY,
-  ISSUE_SEVERITY_ORDER as cZ,
-  setupStatus as c_,
-  camelCaseToKebabCase$1 as ca,
-  nanoid as cb,
-  applyBillingMarkupUsd as cc,
-  toScopeSearchParam as cd,
-  devicesCount as ce,
-  KEYWORDS_PER_BATCH as cf,
-  SECONDS_PER_BATCH as cg,
-  resolveTagColor as ch,
-  tagDotClass as ci,
-  tagChipClass as cj,
-  TAG_COLOR_KEYS as ck,
-  tagSwatchClass as cl,
-  LABS_LOCATION_OPTIONS as cm,
-  DOMAIN_KEYWORDS_PAGE_SIZES as cn,
-  RESEARCH_SCOPE_FILTER_SLOTS as co,
-  DEFAULT_DOMAIN_KEYWORDS_PAGE_SIZE as cp,
-  defaultScopeForPath as cq,
-  isScopeAllowedForInput as cr,
-  defaultScopeForInput as cs,
-  BACKLINKS_SUBFOLDER_FILTER_CONDITIONS as ct,
-  BACKLINKS_PAGE_SIZES as cu,
-  backlinksRowsSortFieldSchema as cv,
-  referringDomainsSortFieldSchema as cw,
-  topPagesSortFieldSchema as cx,
-  BACKLINKS_DEFAULT_SORT as cy,
-  DEFAULT_BACKLINKS_PAGE_SIZE as cz,
+  ISSUE_SEVERITY_ORDER as c$,
+  normalizeBacklinksSpamFilterOptions as c0,
+  parseTaskTotalCount as c1,
+  MAX_TASKS_PER_POST as c2,
+  DataforseoChargedTaskError as c3,
+  AUDIT_ISSUE_TYPES as c4,
+  isLabsLocationCode as c5,
+  getIsoCountryCode as c6,
+  SERP_LANGUAGE_OPTIONS as c7,
+  pagesToDepth as c8,
+  depthToPages as c9,
+  BACKLINKS_DEFAULT_SORT as cA,
+  DEFAULT_BACKLINKS_PAGE_SIZE as cB,
+  isErrorCode as cC,
+  FREE_MAX_AUDIT_PAGES as cD,
+  getServerFnById as cE,
+  resolveHostedContext as cF,
+  hasHostedAuthConfig as cG,
+  keywordsSearchSchema as cH,
+  domainSearchSchema as cI,
+  backlinksSearchSchema as cJ,
+  AUTUMN_PAID_PLAN_FEATURE_ID as cK,
+  isSafeUrlScheme as cL,
+  getBaseURL as cM,
+  createFetch as cN,
+  defu as cO,
+  parseJSON as cP,
+  toKebabCase as cQ,
+  capitalizeFirstLetter as cR,
+  PACKAGE_VERSION as cS,
+  GENERIC_OAUTH_ERROR_CODES as cT,
+  ORGANIZATION_ERROR_CODES as cU,
+  hasPermissionFn as cV,
+  defaultRoles$1 as cW,
+  ownerAc as cX,
+  memberAc as cY,
+  adminAc as cZ,
+  getIssueDescriptor as c_,
+  estimateRankCheckCredits as ca,
+  isInternalJsStubProp as cb,
+  camelCaseToKebabCase$1 as cc,
+  nanoid as cd,
+  applyBillingMarkupUsd as ce,
+  toScopeSearchParam as cf,
+  devicesCount as cg,
+  KEYWORDS_PER_BATCH as ch,
+  SECONDS_PER_BATCH as ci,
+  resolveTagColor as cj,
+  tagDotClass as ck,
+  tagChipClass as cl,
+  TAG_COLOR_KEYS as cm,
+  tagSwatchClass as cn,
+  LABS_LOCATION_OPTIONS as co,
+  DOMAIN_KEYWORDS_PAGE_SIZES as cp,
+  RESEARCH_SCOPE_FILTER_SLOTS as cq,
+  DEFAULT_DOMAIN_KEYWORDS_PAGE_SIZE as cr,
+  defaultScopeForPath as cs,
+  isScopeAllowedForInput as ct,
+  defaultScopeForInput as cu,
+  BACKLINKS_SUBFOLDER_FILTER_CONDITIONS as cv,
+  BACKLINKS_PAGE_SIZES as cw,
+  backlinksRowsSortFieldSchema as cx,
+  referringDomainsSortFieldSchema as cy,
+  topPagesSortFieldSchema as cz,
   defaultStreamHandler as d,
+  setupStatus as d0,
   entry as default,
   createKyselyAdapter as e,
   getKyselyDatabaseType as f,
   getRequest as g,
-  createServerFn as h,
-  researchKeywordsSchema as i,
-  resolveMarket as j,
+  hashPassword$1 as h,
+  createServerFn as i,
+  researchKeywordsSchema as j,
   kyselyAdapter as k,
-  saveKeywordsSchema as l,
-  getSavedKeywordsSchema as m,
-  exportSavedKeywordsSchema as n,
-  updateSavedKeywordTagSchema as o,
-  deleteSavedKeywordTagSchema as p,
-  removeSavedKeywordsSchema as q,
+  resolveMarket as l,
+  saveKeywordsSchema as m,
+  getSavedKeywordsSchema as n,
+  exportSavedKeywordsSchema as o,
+  updateSavedKeywordTagSchema as p,
+  deleteSavedKeywordTagSchema as q,
   requestHandler as r,
   setCookie as s,
-  refreshSavedKeywordMetricsSchema as t,
+  removeSavedKeywordsSchema as t,
   updateSavedKeywordTagsSchema as u,
-  serpAnalysisSchema as v,
-  domainOverviewSchema as w,
-  resolveLabsMarket as x,
-  domainKeywordSuggestionsSchema as y,
-  domainKeywordsPageRequestSchema as z
+  refreshSavedKeywordMetricsSchema as v,
+  serpAnalysisSchema as w,
+  domainOverviewSchema as x,
+  resolveLabsMarket as y,
+  domainKeywordSuggestionsSchema as z
 };
