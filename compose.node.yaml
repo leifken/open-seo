@@ -16,6 +16,8 @@ services:
     environment:
       - PORT=${PORT:-3001}
       - AUTH_MODE=${AUTH_MODE:-hosted}
+      # de = German UI via the runtime translation layer; unset = English
+      - APP_LOCALE=${APP_LOCALE:-de}
       - SIGNUP_DISABLED=${SIGNUP_DISABLED:-true}
       - GOOGLE_AUTH_DISABLED=${GOOGLE_AUTH_DISABLED:-true}
       - BYPASS_EMAIL_VERIFICATION=${BYPASS_EMAIL_VERIFICATION:-true}
