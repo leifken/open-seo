@@ -3,7 +3,6 @@ import * as React from "react";
 export type ThemePreference = "system" | "light" | "dark";
 
 const LIGHT_THEME_NAME = "openseo";
-const DARK_THEME_NAME = "openseo-dark";
 
 const THEME_STORAGE_KEY = "theme-preference";
 const THEME_CHANGE_EVENT = "theme-preference-change";
@@ -36,12 +35,9 @@ function writeThemePreference(themePreference: ThemePreference) {
   }
 }
 
-function resolveThemeName(themePreference: ThemePreference): string {
-  if (themePreference === "dark") return DARK_THEME_NAME;
-
-  // LEIFKEN landscape rule: light leads — every app renders light by
-  // default, regardless of the OS scheme. Dark stays available as an
-  // explicit per-user choice in the settings.
+function resolveThemeName(_themePreference: ThemePreference): string {
+  // LEIFKEN landscape rule (Oliver, 31.08.2026): light only — no dark mode,
+  // no OS-scheme resolution, no user toggle.
   return LIGHT_THEME_NAME;
 }
 
@@ -116,11 +112,8 @@ export function useThemePreference() {
 
 export const themePreferenceInitScript = `(() => {
   try {
-    var p = window.localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});
-    // Light leads (LEIFKEN landscape): dark only as an explicit user choice,
-    // never from the OS scheme.
-    var t = p === "dark" ? ${JSON.stringify(DARK_THEME_NAME)} : ${JSON.stringify(LIGHT_THEME_NAME)};
-    document.documentElement.setAttribute("data-theme", t);
+    // Light only (LEIFKEN landscape rule) — no stored preference, no OS scheme.
+    document.documentElement.setAttribute("data-theme", ${JSON.stringify(LIGHT_THEME_NAME)});
   } catch {
     document.documentElement.setAttribute("data-theme", ${JSON.stringify(LIGHT_THEME_NAME)});
   }
