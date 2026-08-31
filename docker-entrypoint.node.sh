@@ -34,7 +34,11 @@ pnpm run db:migrate:pg
 # envPrefix list in vite.config.node.ts).
 OUT_DIR=dist-node
 FP_FILE="$OUT_DIR/.openseo-node-build-env"
-FINGERPRINT="$(env | grep -E '^(VITE_|AUTH_MODE|BYPASS_EMAIL_VERIFICATION|SIGNUP_DISABLED|GOOGLE_AUTH_DISABLED|AUTHENTIK_AUTH_ENABLED|POSTHOG_PUBLIC_KEY|POSTHOG_HOST|TURNSTILE_SITE_KEY)' | sort | sha256sum | cut -d' ' -f1)"
+# The build output lives in a volume that SURVIVES image updates (unlike the
+# upstream selfhost, where a new image starts with no output) — so the
+# fingerprint must include the code revision, not just the build env.
+# Coolify injects SOURCE_COMMIT on every deploy.
+FINGERPRINT="$({ env | grep -E '^(VITE_|AUTH_MODE|BYPASS_EMAIL_VERIFICATION|SIGNUP_DISABLED|GOOGLE_AUTH_DISABLED|AUTHENTIK_AUTH_ENABLED|POSTHOG_PUBLIC_KEY|POSTHOG_HOST|TURNSTILE_SITE_KEY)'; echo "commit=${SOURCE_COMMIT:-unknown}"; } | sort | sha256sum | cut -d' ' -f1)"
 test -n "$FINGERPRINT"
 
 if [ -f "$FP_FILE" ] && [ "$(cat "$FP_FILE")" = "$FINGERPRINT" ]; then
