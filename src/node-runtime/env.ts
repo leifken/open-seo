@@ -4,6 +4,7 @@
 // self-host, which the app's config reading already relies on).
 import { RedisKvNamespace } from "./kv-redis";
 import { FsBucket } from "./r2-fs";
+import { makeChatAgentNamespace } from "./do-chat-agents";
 import { makeScratchpadNamespace } from "./do-scratchpad";
 import { makeWorkflowBinding } from "./workflow-engine";
 
@@ -45,8 +46,23 @@ const bindings: Record<string, unknown> = {
         .AuditScratchpad,
     () => nodeEnv,
   ),
-  // Chat agents (SAM, onboarding) are the last porting milestone. Leaving the
-  // bindings out entirely makes `routeAgentRequest` fall through to 404.
+  // Chat agents. partyserver discovers these by iterating env for objects
+  // with idFromName and kebab-cases the KEY — so these names must stay
+  // exactly ONBOARDING_CHAT / SAM_CHAT to match the client's
+  // /agents/onboarding-chat/... and /agents/sam-chat/... paths.
+  ONBOARDING_CHAT: makeChatAgentNamespace(
+    "ONBOARDING_CHAT",
+    async () =>
+      (await import("../server/features/onboarding/OnboardingChatAgent"))
+        .OnboardingChatAgent,
+    () => nodeEnv,
+  ),
+  SAM_CHAT: makeChatAgentNamespace(
+    "SAM_CHAT",
+    async () =>
+      (await import("../server/features/sam/SamChatAgent")).SamChatAgent,
+    () => nodeEnv,
+  ),
 };
 
 export const nodeEnv = new Proxy(bindings, {

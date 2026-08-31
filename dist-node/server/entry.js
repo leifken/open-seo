@@ -12,13 +12,13 @@ import { z as z$2, ZodObject, ZodOptional } from "zod";
 import { SdkHttpError, StreamableHTTPClientTransport, SSEClientTransport, Client } from "@modelcontextprotocol/client";
 import { CfWorkerJsonSchemaValidator } from "@modelcontextprotocol/client/validators/cf-worker";
 import "@modelcontextprotocol/sdk/types.js";
-import { channel } from "node:diagnostics_channel";
+import { channel, subscribe as subscribe$1, unsubscribe } from "node:diagnostics_channel";
 import { errors, jwtVerify, createRemoteJWKSet, decodeProtectedHeader, jwtDecrypt, calculateJwkThumbprint, base64url, EncryptJWT, SignJWT, decodeJwt, importJWK } from "jose";
 import { drizzle } from "drizzle-orm/d1";
-import { sqliteTable, integer, text, index, uniqueIndex, real, primaryKey } from "drizzle-orm/sqlite-core";
+import { sqliteTable, integer, text, index as index$1, uniqueIndex, real, primaryKey } from "drizzle-orm/sqlite-core";
 import { sql as sql$2, relations, eq, asc, inArray, count, desc, notInArray, like, lt as lt$1, lte, isNotNull, ne as ne$1, gt as gt$1, gte, isNull as isNull$1, and, or as or$1, ilike, min, max } from "drizzle-orm";
 import { drizzle as drizzle$1 } from "drizzle-orm/postgres-js";
-import { pgTable, text as text$1, index as index$1, integer as integer$1, boolean, uniqueIndex as uniqueIndex$1, timestamp, bigint, serial, real as real$1, primaryKey as primaryKey$1 } from "drizzle-orm/pg-core";
+import { pgTable, text as text$1, index as index$2, integer as integer$1, boolean, uniqueIndex as uniqueIndex$1, timestamp, bigint, serial, real as real$1, primaryKey as primaryKey$1 } from "drizzle-orm/pg-core";
 import { JWTExpired } from "jose/errors";
 import os from "node:os";
 import { apiKey } from "@better-auth/api-key";
@@ -33,6 +33,118 @@ import { jsx } from "react/jsx-runtime";
 import { defineHandlerCallback, renderRouterToStream } from "@tanstack/react-router/ssr/server";
 import robotsParser from "robots-parser";
 import { XMLParser } from "fast-xml-parser";
+const attachments$1 = /* @__PURE__ */ new WeakMap();
+function installCfWebSocketGlobals() {
+  const g = globalThis;
+  if (g.__cfWsGlobalsInstalled) return;
+  g.__cfWsGlobalsInstalled = true;
+  const WS = g.WebSocket;
+  if (WS) {
+    WS.READY_STATE_CONNECTING = 0;
+    WS.READY_STATE_OPEN = 1;
+    WS.READY_STATE_CLOSING = 2;
+    WS.READY_STATE_CLOSED = 3;
+    const proto = WS.prototype;
+    if (!proto.serializeAttachment) {
+      proto.serializeAttachment = function(value) {
+        attachments$1.set(this, structuredClone(value));
+      };
+      proto.deserializeAttachment = function() {
+        return attachments$1.get(this) ?? null;
+      };
+    }
+  }
+  let pendingSocket = null;
+  g.__cfSetPendingNodeSocket = (socket) => {
+    pendingSocket = socket;
+  };
+  class ServerHalfAdapter {
+    real;
+    constructor(real2) {
+      this.real = real2;
+    }
+    get readyState() {
+      return this.real.readyState;
+    }
+    accept() {
+    }
+    send(data) {
+      this.real.send(data);
+    }
+    close(code, reason) {
+      try {
+        this.real.close(code, reason);
+      } catch {
+      }
+    }
+    serializeAttachment(value) {
+      attachments$1.set(this, structuredClone(value));
+    }
+    deserializeAttachment() {
+      return attachments$1.get(this) ?? null;
+    }
+    // Direct listener path for the non-hibernating manager (defensive; the
+    // agents run hibernated and are driven via ctx.acceptWebSocket instead).
+    addEventListener(event, cb) {
+      if (event === "message") {
+        this.real.on(
+          "message",
+          (data, isBinary) => cb({ data: isBinary ? data : String(data) })
+        );
+      } else if (event === "close") {
+        this.real.on(
+          "close",
+          (code, reason) => cb({ code, reason: String(reason ?? "") })
+        );
+      } else if (event === "error") {
+        this.real.on("error", (error2) => cb({ error: error2 }));
+      }
+    }
+    /** Bridge hook: the real ws socket (used by do-chat-agents to wire events). */
+    get __realSocket() {
+      return this.real;
+    }
+  }
+  class ClientHalfStub {
+    readyState = 1;
+    accept() {
+    }
+    send() {
+    }
+    close() {
+    }
+  }
+  g.WebSocketPair = class WebSocketPair {
+    0;
+    1;
+    constructor() {
+      if (!pendingSocket) {
+        throw new Error(
+          "WebSocketPair constructed outside an /agents upgrade (no pending socket)"
+        );
+      }
+      this[0] = new ClientHalfStub();
+      this[1] = new ServerHalfAdapter(pendingSocket);
+      pendingSocket = null;
+    }
+  };
+  const OrigResponse = g.Response;
+  function PatchedResponse(body, init2) {
+    if (init2 && init2.status === 101) {
+      const fake = Object.create(OrigResponse.prototype);
+      Object.defineProperty(fake, "status", { value: 101 });
+      Object.defineProperty(fake, "ok", { value: false });
+      Object.defineProperty(fake, "headers", { value: new Headers() });
+      Object.defineProperty(fake, "webSocket", { value: init2.webSocket ?? null });
+      Object.defineProperty(fake, "body", { value: null });
+      return fake;
+    }
+    return new OrigResponse(body, init2);
+  }
+  PatchedResponse.prototype = OrigResponse.prototype;
+  Object.setPrototypeOf(PatchedResponse, OrigResponse);
+  g.Response = PatchedResponse;
+}
 function StartServer(props) {
   return /* @__PURE__ */ jsx(RouterProvider, { router: props.router });
 }
@@ -3156,363 +3268,363 @@ async function getStartManifest(matchedRoutes) {
 const manifest = {
   "0146a46bbe4471991fcb6663852023dad568931c1314b55cc81892ca37f08e45": {
     functionName: "exportSavedKeywords_createServerFn_handler",
-    importer: () => import("./assets/keywords-C1wS76Ga.js")
+    importer: () => import("./assets/keywords-DjCQI582.js")
   },
   "02829e30c3478ce6fa128dba7467f3adc8a4086892ed668b6f9ca56a3b1c0c8b": {
     functionName: "getDomainPagesPage_createServerFn_handler",
-    importer: () => import("./assets/domain-iFVlFuHr.js")
+    importer: () => import("./assets/domain-DhIl2BZw.js")
   },
   "02a3f23c7994a670645e4ace9876310700d9e054aab37095332d1846e11ec462": {
     functionName: "disconnectGsc_createServerFn_handler",
-    importer: () => import("./assets/gsc-COmfauX7.js")
+    importer: () => import("./assets/gsc-BW4VtCb2.js")
   },
   "03f6b933adea1749a90a3091b941383771384ee499865ac928e32750bb3b6da1": {
     functionName: "exportSearchPerformanceTable_createServerFn_handler",
-    importer: () => import("./assets/searchPerformance-Cl-CdH7L.js")
+    importer: () => import("./assets/searchPerformance-BIYWVLta.js")
   },
   "0400cd589829703979c0d6b38188a846f541034cb534b51326766d1a7f007970": {
     functionName: "exportAuditLighthouseIssues_createServerFn_handler",
-    importer: () => import("./assets/lighthouse-BzL_s6BB.js")
+    importer: () => import("./assets/lighthouse-DFgsB2n0.js")
   },
   "046776517b68d488e3ee09004a9f31a90f45c35a2b32b60dc538eaaf00a36b9c": {
     functionName: "getDomainOverview_createServerFn_handler",
-    importer: () => import("./assets/domain-iFVlFuHr.js")
+    importer: () => import("./assets/domain-DhIl2BZw.js")
   },
   "048f26ede391a38ee6e00487163fdc66dd0897e3a1cc488354a840bbf9b0b9cf": {
     functionName: "getDomainKeywordsPage_createServerFn_handler",
-    importer: () => import("./assets/domain-iFVlFuHr.js")
+    importer: () => import("./assets/domain-DhIl2BZw.js")
   },
   "06c91e3888f8bcec4a820827c04796cd80041afad39d1b5549be4e2cf810951b": {
     functionName: "lookupBrand_createServerFn_handler",
-    importer: () => import("./assets/ai-search-BEQFBBxy.js")
+    importer: () => import("./assets/ai-search-ivWYWapH.js")
   },
   "0a0791b200d03eb44d9630e461ef914d1da85bde9c95b201dcbeb94624848971": {
     functionName: "refreshSavedKeywordMetrics_createServerFn_handler",
-    importer: () => import("./assets/keywords-C1wS76Ga.js")
+    importer: () => import("./assets/keywords-DjCQI582.js")
   },
   "0a4a16ebe522d754ddd99b702cf7418577545e6ce062ede31ea16bc201d64943": {
     functionName: "getGscConnection_createServerFn_handler",
-    importer: () => import("./assets/gsc-COmfauX7.js")
+    importer: () => import("./assets/gsc-BW4VtCb2.js")
   },
   "0c268077775b1f812d23756142e5d64fff541f1240b6328a92da446160513af2": {
     functionName: "getBacklinksReferringDomains_createServerFn_handler",
-    importer: () => import("./assets/backlinks-B50YE_Y-.js")
+    importer: () => import("./assets/backlinks-C4HN7a6c.js")
   },
   "0c8bc9b67b0ea0a9717a6cab4355542e7c451887732f6d9ee99a8f0ed33cf5de": {
     functionName: "getDomainKeywordSuggestions_createServerFn_handler",
-    importer: () => import("./assets/domain-iFVlFuHr.js")
+    importer: () => import("./assets/domain-DhIl2BZw.js")
   },
   "0ca7e7fd914e198e72f6ce0f3a36134fc1ec7b6dedf4da1c013ccd9c2da36595": {
     functionName: "archiveProject_createServerFn_handler",
-    importer: () => import("./assets/projects-DSk1oaVL.js")
+    importer: () => import("./assets/projects-BX0ZYQEd.js")
   },
   "0e2299d91fe830180a5418ad53dd35b4fca59a0bcbd2727c9f3eff6680a88592": {
     functionName: "triggerRankCheck_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
+    importer: () => import("./assets/rank-tracking-CDW92n3j.js")
   },
   "0f196e5eafbe1adb2d3f31aa7558728e7648574a837571aa8f8f35b94a56d562": {
     functionName: "updateSavedKeywordTags_createServerFn_handler",
-    importer: () => import("./assets/keywords-C1wS76Ga.js")
+    importer: () => import("./assets/keywords-DjCQI582.js")
   },
   "131f47ab2c8b293725f7a4013737cb0d5e77f8ac22c985f4952b7140820a6430": {
     functionName: "setGa4Property_createServerFn_handler",
-    importer: () => import("./assets/ga4-CpJEqmRD.js")
+    importer: () => import("./assets/ga4-BEN2Q5cQ.js")
   },
   "16b8b61d3cfc645bc36be38a136d9d7ad7096edf8550536a9b522e2833bd5c45": {
     functionName: "updateRankTrackingConfig_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
+    importer: () => import("./assets/rank-tracking-CDW92n3j.js")
   },
   "16b95567643a21275b38fde625b8e1428bd2aeaff2440637c2a21009637d64d9": {
     functionName: "searchSerpLocations_createServerFn_handler",
-    importer: () => import("./assets/serp-locations-CAkFQFtL.js")
+    importer: () => import("./assets/serp-locations-BU_R92dF.js")
   },
   "17c1167140bde128372935a660b28fd6e0e183774ca3f90271799ba787ecb243": {
     functionName: "refreshTrackingKeywordMetrics_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
+    importer: () => import("./assets/rank-tracking-CDW92n3j.js")
   },
   "1c37d6d588141eb6ff4ed0b1776196f3493d263cd15565fc317afeae0f41540c": {
     functionName: "restoreProject_createServerFn_handler",
-    importer: () => import("./assets/projects-DSk1oaVL.js")
+    importer: () => import("./assets/projects-BX0ZYQEd.js")
   },
   "1d147786bb4efc50107e0030500c0d345b524d45211d5b5a8496b06fa13b2b18": {
     functionName: "listSamSessions_createServerFn_handler",
-    importer: () => import("./assets/sam-BaEU7Nhm.js")
+    importer: () => import("./assets/sam-1A9Zkt5F.js")
   },
   "1d75d4deb3fcbaf04305fae69c64722313c46f5620de0ece3b950cff9346e099": {
     functionName: "saveKeywords_createServerFn_handler",
-    importer: () => import("./assets/keywords-C1wS76Ga.js")
+    importer: () => import("./assets/keywords-DjCQI582.js")
   },
   "1e3e63b95fa90f1fafbcda79f9999a31747ab722474f0eae185243ffdd1b06ab": {
     functionName: "estimateRankCheckCost_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
+    importer: () => import("./assets/rank-tracking-CDW92n3j.js")
   },
   "1e8f375975f9b25f935c01e1ed6d63147b5a7fe8693c2737dcc1869d8ef97f3b": {
     functionName: "removeSavedKeywords_createServerFn_handler",
-    importer: () => import("./assets/keywords-C1wS76Ga.js")
+    importer: () => import("./assets/keywords-DjCQI582.js")
   },
   "2498dc9ae1c9692a93484405a16016aa8af2296e6a6ac6c892aeff22c4154f17": {
     functionName: "getRankTrackingConfigs_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
+    importer: () => import("./assets/rank-tracking-CDW92n3j.js")
   },
   "258d28f360a42fb9dc6a60c60b05f23782f2fe2bf58c46d6e683b5d80693aadf": {
     functionName: "createRankTrackingConfig_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
+    importer: () => import("./assets/rank-tracking-CDW92n3j.js")
   },
   "273ab5dcd2c400c13c6eaf49ea723e422c6435074e7b455c4fa0d0bd03df362a": {
     functionName: "archiveSamSession_createServerFn_handler",
-    importer: () => import("./assets/sam-BaEU7Nhm.js")
+    importer: () => import("./assets/sam-1A9Zkt5F.js")
   },
   "278ebde0d517c2ebe20e607d3d88ad2fb75a216d2567a5dfcf5808ab244908f7": {
     functionName: "getProjects_createServerFn_handler",
-    importer: () => import("./assets/projects-DSk1oaVL.js")
+    importer: () => import("./assets/projects-BX0ZYQEd.js")
   },
   "319d82ec75b2b49399d07e97a0efffd36bd56066017d95b692e7074cae6b1272": {
     functionName: "getAhrefsDomainRatings_createServerFn_handler",
-    importer: () => import("./assets/ahrefs-CPsEz5rT.js")
+    importer: () => import("./assets/ahrefs-NWLofgeR.js")
   },
   "364efb68f010cdd93e01da48b22253ac6e745a792ce18710f489a70100cde203": {
     functionName: "prewarmSerpLocations_createServerFn_handler",
-    importer: () => import("./assets/serp-locations-CAkFQFtL.js")
+    importer: () => import("./assets/serp-locations-BU_R92dF.js")
   },
   "39b646e1b210269ed692e316a1456d18b70794e8f2dd13b038ab141fc56de0c7": {
     functionName: "dismissDashboardGa4Card_createServerFn_handler",
-    importer: () => import("./assets/dashboard-D1TPl9KL.js")
+    importer: () => import("./assets/dashboard-B8frIZ8a.js")
   },
   "3b7a7d39821bb858a8e568dde7f4b7c984fdcbb1b94e2a1b26d91fdf25ff537f": {
     functionName: "updateSavedKeywordTag_createServerFn_handler",
-    importer: () => import("./assets/keywords-C1wS76Ga.js")
+    importer: () => import("./assets/keywords-DjCQI582.js")
   },
   "3dbeccce043161813d8711ff4113fda42d161033a0efa91044658e370c98be80": {
     functionName: "getOnboardingChatState_createServerFn_handler",
-    importer: () => import("./assets/onboardingChat-C31tgBYx.js")
+    importer: () => import("./assets/onboardingChat-C-AWqzb3.js")
   },
   "40b504d5f882e6201483a0134c8f88c5b566a334664337c847b00819ab66c6cd": {
     functionName: "startSelfHostedGscLink_createServerFn_handler",
-    importer: () => import("./assets/gsc-COmfauX7.js")
+    importer: () => import("./assets/gsc-BW4VtCb2.js")
   },
   "47f4e168632e9bfd56794677badebb717fc5ce10103810690f0c3bdc5d098227": {
     functionName: "getBacklinksTopPages_createServerFn_handler",
-    importer: () => import("./assets/backlinks-B50YE_Y-.js")
+    importer: () => import("./assets/backlinks-C4HN7a6c.js")
   },
   "4f6a59af64bb95847828f645f342cfbb203858ef0caca7ddb96adebcce44b7a0": {
     functionName: "getBillingUsageEvents_createServerFn_handler",
-    importer: () => import("./assets/billing-B2j-Oha1.js")
+    importer: () => import("./assets/billing-DBbwvtpD.js")
   },
   "5036bfbbb0648430f1305a7b8a9540118bd537d96bd6f393c94d703319ee3282": {
     functionName: "dismissGscNudge_createServerFn_handler",
-    importer: () => import("./assets/onboarding-DbqNAr7Y.js")
+    importer: () => import("./assets/onboarding-Cpu9jOHx.js")
   },
   "516782e359aa3cdba9ed9ea54db3d5b889263ae7b7a025542320a44198af7371": {
     functionName: "deleteAudit_createServerFn_handler",
-    importer: () => import("./assets/audit-CQLYc956.js")
+    importer: () => import("./assets/audit-DrVA9yha.js")
   },
   "5508a7b8c2ede1eee34a3696a25fb1813f0d30238ed1d48ca28dfbbbe7f5ac14": {
     functionName: "createSamSession_createServerFn_handler",
-    importer: () => import("./assets/sam-BaEU7Nhm.js")
+    importer: () => import("./assets/sam-1A9Zkt5F.js")
   },
   "57eebe4b148ecd8baeab46c7dc1c92b78de5e9a45d9f805e437b74cda250d02e": {
     functionName: "getSamAccessSetupStatus_createServerFn_handler",
-    importer: () => import("./assets/samAccess-ErHWj9iu.js")
+    importer: () => import("./assets/samAccess-D2hzI88C.js")
   },
   "75f7965168786313e194a1941f91dd242a6b8c06b1cf69463eae0e9ce5dd6773": {
     functionName: "getAuditStatus_createServerFn_handler",
-    importer: () => import("./assets/audit-CQLYc956.js")
+    importer: () => import("./assets/audit-DrVA9yha.js")
   },
   "7a3ccd49a583d669523ebc977678f95cac97fe4eaa09a3151a6af5732a78eb03": {
     functionName: "getProjectContext_createServerFn_handler",
-    importer: () => import("./assets/projectContext-CgLdz2zY.js")
+    importer: () => import("./assets/projectContext-XKV2E8mX.js")
   },
   "7c953889116b01175d89dce1f11398e791a804844e06a729e8a40679c8e32137": {
     functionName: "markDashboardCompetitorClicked_createServerFn_handler",
-    importer: () => import("./assets/dashboard-D1TPl9KL.js")
+    importer: () => import("./assets/dashboard-B8frIZ8a.js")
   },
   "8acb99c0e5b1aed5cfb75318e78747749f8c2c54884ba18ff1c945a9b06a9375": {
     functionName: "getSavedKeywords_createServerFn_handler",
-    importer: () => import("./assets/keywords-C1wS76Ga.js")
+    importer: () => import("./assets/keywords-DjCQI582.js")
   },
   "8e1e5f26a194415159d9074271d62e81c5b365b4c35612f4e23581af549700cf": {
     functionName: "getAuditHistory_createServerFn_handler",
-    importer: () => import("./assets/audit-CQLYc956.js")
+    importer: () => import("./assets/audit-DrVA9yha.js")
   },
   "8ea81290b22122bff668b72a4292383130de89933a300adb2f16caed61f53731": {
     functionName: "dismissDashboardMcpCard_createServerFn_handler",
-    importer: () => import("./assets/dashboard-D1TPl9KL.js")
+    importer: () => import("./assets/dashboard-B8frIZ8a.js")
   },
   "9059a6b8babf4dd972195adcbd6d5b0a44a9abda3a66071b8b90e201141c10d5": {
     functionName: "saveOnboardingAnswers_createServerFn_handler",
-    importer: () => import("./assets/onboarding-DbqNAr7Y.js")
+    importer: () => import("./assets/onboarding-Cpu9jOHx.js")
   },
   "955fb22c05a803998669e9e3cb307dc405e545b788cf580fa37af4236d97b07a": {
     functionName: "getAuditLighthouseIssues_createServerFn_handler",
-    importer: () => import("./assets/lighthouse-BzL_s6BB.js")
+    importer: () => import("./assets/lighthouse-DFgsB2n0.js")
   },
   "956a5e2004016739fc80341f1095d7bd8a96655c6c9fe7ba4126d97f40498e2a": {
     functionName: "listGscSites_createServerFn_handler",
-    importer: () => import("./assets/gsc-COmfauX7.js")
+    importer: () => import("./assets/gsc-BW4VtCb2.js")
   },
   "9632bd92f3de61b172319c2b693ceaafbbc52f214ba2a4fb93531fefa5b96d74": {
     functionName: "addTrackingKeywords_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
+    importer: () => import("./assets/rank-tracking-CDW92n3j.js")
   },
   "9ce7a2858b82783ef908f4396d61f4645b09ab4cbc435936a1495f8c23bcdb8d": {
     functionName: "deleteSavedKeywordTag_createServerFn_handler",
-    importer: () => import("./assets/keywords-C1wS76Ga.js")
+    importer: () => import("./assets/keywords-DjCQI582.js")
   },
   "9d62c976afd0592ac01d146421e81b4b46e99090b01e75b15797fba6d6af5e1d": {
     functionName: "disconnectGa4_createServerFn_handler",
-    importer: () => import("./assets/ga4-CpJEqmRD.js")
+    importer: () => import("./assets/ga4-BEN2Q5cQ.js")
   },
   "9da63329d53b960da32b79472469175d63f38b5e71bcef0cacabb66cba684931": {
     functionName: "getRankConfigTrend_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
+    importer: () => import("./assets/rank-tracking-CDW92n3j.js")
   },
   "9f89caac05689c3f844d5e9fdb4453cd3dbe85e64cddf60d717dad8ccc0ef965": {
     functionName: "getArchivedProjects_createServerFn_handler",
-    importer: () => import("./assets/projects-DSk1oaVL.js")
+    importer: () => import("./assets/projects-BX0ZYQEd.js")
   },
   "a19f7c4228fdbf301aeba791a8732ae65a0018a25d353bdeed6343876396dd0d": {
     functionName: "getSerpAnalysis_createServerFn_handler",
-    importer: () => import("./assets/keywords-C1wS76Ga.js")
+    importer: () => import("./assets/keywords-DjCQI582.js")
   },
   "a251675043aa688af223c180c37e19f98f6652a33f993dc7d1b14c4ce4ed3589": {
     functionName: "getSearchPerformanceReport_createServerFn_handler",
-    importer: () => import("./assets/searchPerformance-Cl-CdH7L.js")
+    importer: () => import("./assets/searchPerformance-BIYWVLta.js")
   },
   "a28e240f440a737b1ba00fa06c35615836e9658df9c6a9b04b18bd57f4533a93": {
     functionName: "getCrawlProgress_createServerFn_handler",
-    importer: () => import("./assets/audit-CQLYc956.js")
+    importer: () => import("./assets/audit-DrVA9yha.js")
   },
   "a2d6a29497c1bebbf28ef40173a2712df71d7f163b0d27ba172aa05b8d2bd882": {
     functionName: "updateProjectContext_createServerFn_handler",
-    importer: () => import("./assets/projectContext-CgLdz2zY.js")
+    importer: () => import("./assets/projectContext-XKV2E8mX.js")
   },
   "a49c4261f3f65e415401c7162c49edf3e6134bc3554b0b96f1230779dcdebd9b": {
     functionName: "getBacklinksOverview_createServerFn_handler",
-    importer: () => import("./assets/backlinks-B50YE_Y-.js")
+    importer: () => import("./assets/backlinks-C4HN7a6c.js")
   },
   "a4a9247a2916093ffa4adf9b4628e1d7f55af8b119ae1f0147a8b5ef5fd08691": {
     functionName: "getBacklinksRows_createServerFn_handler",
-    importer: () => import("./assets/backlinks-B50YE_Y-.js")
+    importer: () => import("./assets/backlinks-C4HN7a6c.js")
   },
   "a4aee3230867065a09c55145cf58c1f5bc0fb9ed2f053bda4ac2d635a4d2bcb4": {
     functionName: "getSearchPerformanceTable_createServerFn_handler",
-    importer: () => import("./assets/searchPerformance-Cl-CdH7L.js")
+    importer: () => import("./assets/searchPerformance-BIYWVLta.js")
   },
   "a4c5ccb6a409cc77e5e7b9193c9dc297024a48793fcd4437e01eb3aa2e1e71ea": {
     functionName: "getGa4Connection_createServerFn_handler",
-    importer: () => import("./assets/ga4-CpJEqmRD.js")
+    importer: () => import("./assets/ga4-BEN2Q5cQ.js")
   },
   "a652f6f5ac08420a126c8459db2cdb1b3b0da797b0151824db9674012541f2d3": {
     functionName: "updateProject_createServerFn_handler",
-    importer: () => import("./assets/projects-DSk1oaVL.js")
+    importer: () => import("./assets/projects-BX0ZYQEd.js")
   },
   "a6e76ddc449222a502da7b7425f361fcfb4df793782aee76909707bf70ee90d4": {
     functionName: "saveOnboardingSite_createServerFn_handler",
-    importer: () => import("./assets/onboardingChat-C31tgBYx.js")
+    importer: () => import("./assets/onboardingChat-C-AWqzb3.js")
   },
   "a966ba8dbd2e5e2548b12a6c770c26da924f90ee327285fecd7df1d7afeafe95": {
     functionName: "getDashboardActivation_createServerFn_handler",
-    importer: () => import("./assets/dashboard-D1TPl9KL.js")
+    importer: () => import("./assets/dashboard-B8frIZ8a.js")
   },
   "aef09a57d39104b1d10659a92003c6f2a2a124fab74bdfc9358f984506751295": {
     functionName: "getGa4DashboardReport_createServerFn_handler",
-    importer: () => import("./assets/ga4-CpJEqmRD.js")
+    importer: () => import("./assets/ga4-BEN2Q5cQ.js")
   },
   "afea34b6bf4da665d300c562fed995ffb979fe6ebb3bdb7d08c7ce493506a148": {
     functionName: "listGa4Properties_createServerFn_handler",
-    importer: () => import("./assets/ga4-CpJEqmRD.js")
+    importer: () => import("./assets/ga4-BEN2Q5cQ.js")
   },
   "b55a517c6ff4161ff3bcf8bfa47562d71dd21f63950855318e723829d164b395": {
     functionName: "getGscGrantStatus_createServerFn_handler",
-    importer: () => import("./assets/gsc-COmfauX7.js")
+    importer: () => import("./assets/gsc-BW4VtCb2.js")
   },
   "b5858986f4b26fbc7f2cea62479e3b4d97d5c4af0a61b218af88501443a3939c": {
     functionName: "getSeoApiKeyStatus_createServerFn_handler",
-    importer: () => import("./assets/config-XjIexExe.js")
+    importer: () => import("./assets/config-RWLW_Yv5.js")
   },
   "b85790a9585d03d2f8132b707c468c39db0e8f6c3f9921647d221ec8a3aa7a60": {
     functionName: "getAuditResults_createServerFn_handler",
-    importer: () => import("./assets/audit-CQLYc956.js")
+    importer: () => import("./assets/audit-DrVA9yha.js")
   },
   "bae0716c278ff567d6fca6035b6fc999ec74301979582cb6eb930ca66771f85f": {
     functionName: "getWorkspaceMergeStatus_createServerFn_handler",
-    importer: () => import("./assets/workspace-CW-kUeQv.js")
+    importer: () => import("./assets/workspace-LJNsFjJa.js")
   },
   "bb79e98e928653ebc50e8c4bfd905ed74cfd81dc4ad11c40a96e517c7a538648": {
     functionName: "getRankTrackingConfigSummaries_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
+    importer: () => import("./assets/rank-tracking-CDW92n3j.js")
   },
   "bf7707a336fe5f1a810d29eb9ddb4ccee4b8a2f0ce88e94d04a295456d7e71d1": {
     functionName: "getDashboardOverview_createServerFn_handler",
-    importer: () => import("./assets/dashboard-D1TPl9KL.js")
+    importer: () => import("./assets/dashboard-B8frIZ8a.js")
   },
   "c36a03514a4a30b2f2aad7b77bba4606e70547fefc757782bb3f12ae4c226619": {
     functionName: "startSelfHostedGa4Link_createServerFn_handler",
-    importer: () => import("./assets/ga4-CpJEqmRD.js")
+    importer: () => import("./assets/ga4-BEN2Q5cQ.js")
   },
   "c6715a7072113d7f7ea076796cf28e47be1bab5e1dfd14502e72467efab53306": {
     functionName: "getRankPositionMatrix_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
+    importer: () => import("./assets/rank-tracking-CDW92n3j.js")
   },
   "d034f8888a5e1014831023cf2a868291cfd466101140d59d1f4251fd53203037": {
     functionName: "removeTrackingKeywords_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
+    importer: () => import("./assets/rank-tracking-CDW92n3j.js")
   },
   "d1f2d6df775a95682f80a98e2ced1e2c0553c94a8452a94f9241ab709a5fce60": {
     functionName: "createProject_createServerFn_handler",
-    importer: () => import("./assets/projects-DSk1oaVL.js")
+    importer: () => import("./assets/projects-BX0ZYQEd.js")
   },
   "d8e8c6a9e4e7768403aa7d208c2346921cf9660a816886bf406dc62cd437a155": {
     functionName: "refreshDashboardBacklinkSnapshot_createServerFn_handler",
-    importer: () => import("./assets/dashboard-D1TPl9KL.js")
+    importer: () => import("./assets/dashboard-B8frIZ8a.js")
   },
   "dd3518eb8d7349f47f651bb345e6a70e7b48073f2557d873f09c577b0deab0bb": {
     functionName: "mergeLegacyWorkspaces_createServerFn_handler",
-    importer: () => import("./assets/workspace-CW-kUeQv.js")
+    importer: () => import("./assets/workspace-LJNsFjJa.js")
   },
   "ddd165935e6b49d3557cb04d17f77f9775c81fbb0c0f735387a032421a266542": {
     functionName: "getLatestRankResults_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
+    importer: () => import("./assets/rank-tracking-CDW92n3j.js")
   },
   "de61ac92db2a9949b67232b0b1132b6cbdd66b7f381be8a22e9c245c8126d1f6": {
     functionName: "getProjectAccess_createServerFn_handler",
-    importer: () => import("./assets/projects-DSk1oaVL.js")
+    importer: () => import("./assets/projects-BX0ZYQEd.js")
   },
   "e07b0dfacb31a403133cc5bf5e671e8b7735dd63c2c993749b4ecd399e779acb": {
     functionName: "getLatestRankRun_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
+    importer: () => import("./assets/rank-tracking-CDW92n3j.js")
   },
   "e239daa45c0dc82d2216f3ac9a60781ba3bad43f9837cb6779399d0c3d87885c": {
     functionName: "startAudit_createServerFn_handler",
-    importer: () => import("./assets/audit-CQLYc956.js")
+    importer: () => import("./assets/audit-DrVA9yha.js")
   },
   "e2b5146b78833600dfd30aa3bda214dfa8c480278644dcff1698db1e51e5759a": {
     functionName: "explorePrompt_createServerFn_handler",
-    importer: () => import("./assets/ai-search-BEQFBBxy.js")
+    importer: () => import("./assets/ai-search-ivWYWapH.js")
   },
   "e808431fe24faa5cddaa82ff3cee05037bdd2ddd1ba1ceef693aac01ca8e68bc": {
     functionName: "getRankKeywordHistory_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
+    importer: () => import("./assets/rank-tracking-CDW92n3j.js")
   },
   "ee56593aa127e081b934d6fec3a8bc310d3d98cbb59dd0947c77be7c85514de4": {
     functionName: "setGscSite_createServerFn_handler",
-    importer: () => import("./assets/gsc-COmfauX7.js")
+    importer: () => import("./assets/gsc-BW4VtCb2.js")
   },
   "f3b1afadd779b6abc3a38a06587159bb14c03c93475bc4c022b77539dc7dc811": {
     functionName: "setProjectDomain_createServerFn_handler",
-    importer: () => import("./assets/projects-DSk1oaVL.js")
+    importer: () => import("./assets/projects-BX0ZYQEd.js")
   },
   "f3ccdf1c5f7849adbe55a38000c0c568b1f72b75fea6deea496f965b8c7ab155": {
     functionName: "getOnboardingAnswers_createServerFn_handler",
-    importer: () => import("./assets/onboarding-DbqNAr7Y.js")
+    importer: () => import("./assets/onboarding-Cpu9jOHx.js")
   },
   "f68c75b95b8026da27b760951b2ab7e797bf30f0be879b42fbf17d336034843c": {
     functionName: "setProjectMarket_createServerFn_handler",
-    importer: () => import("./assets/projects-DSk1oaVL.js")
+    importer: () => import("./assets/projects-BX0ZYQEd.js")
   },
   "fa088bd63c78c66cb4de7e8be1d7567e0ec901107ad1afe33e0ffbeecc57bfbc": {
     functionName: "researchKeywords_createServerFn_handler",
-    importer: () => import("./assets/keywords-C1wS76Ga.js")
+    importer: () => import("./assets/keywords-DjCQI582.js")
   }
 };
 async function getServerFnById(id, access) {
@@ -5307,7 +5419,7 @@ var getBaseManifest = getProdBaseManifest;
 var createEarlyHintsForRequest = createEarlyHintsCollector;
 async function loadEntries() {
   const [routerEntry, startEntry, pluginAdapters] = await Promise.all([
-    import("./assets/router-DtCFKIJH.js").then((n2) => n2.aB),
+    import("./assets/router-J1arD-rz.js").then((n2) => n2.aB),
     import("./assets/start-Zng7cv0Q.js"),
     import("./assets/empty-plugin-adapters-BFgPZ6_d.js")
   ]);
@@ -5666,6 +5778,7 @@ async function handleServerRoutes({ getRouter, request, url, executeRouter, cont
   }
   return normalizeSsrResponse(response);
 }
+const AGENT_TOOL_PROGRESS_PART = "data-agent-progress";
 const AGENT_TOOL_MILESTONE_PART = "data-agent-milestone";
 const __DO_NOT_USE_WILL_BREAK__agentContext = new AsyncLocalStorage();
 const INTERNAL_JS_STUB_PROPS = /* @__PURE__ */ new Set([
@@ -5896,6 +6009,305 @@ class FsBucket {
     };
   }
 }
+const pending = /* @__PURE__ */ new Set();
+function waitUntil(promise) {
+  pending.add(promise);
+  promise.catch((err2) => console.error("[node-runtime] waitUntil task failed:", err2)).finally(() => pending.delete(promise));
+}
+function drainWaitUntil() {
+  return Promise.allSettled(pending);
+}
+const ALARM_TABLE = "_node_runtime_alarm";
+const KV_TABLE = "_node_runtime_kv";
+let withPgClientFn;
+async function inPgScope(fn2) {
+  if (!withPgClientFn) {
+    withPgClientFn = (await Promise.resolve().then(() => index)).withPgClient;
+  }
+  return withPgClientFn(fn2);
+}
+let SqlCursor$1 = class SqlCursor {
+  constructor(rows, rowsWritten) {
+    this.rows = rows;
+    this.rowsWritten = rowsWritten;
+  }
+  rows;
+  rowsWritten;
+  toArray() {
+    return this.rows;
+  }
+  one() {
+    if (this.rows.length !== 1) {
+      throw new Error(`Expected exactly one row, got ${this.rows.length}`);
+    }
+    return this.rows[0];
+  }
+  get rowsRead() {
+    return this.rows.length;
+  }
+  [Symbol.iterator]() {
+    return this.rows[Symbol.iterator]();
+  }
+};
+function normalizeParams(params) {
+  return params.map(
+    (p2) => typeof p2 === "boolean" ? p2 ? 1 : 0 : p2 ?? null
+  );
+}
+class NodeChatStorage {
+  constructor(filePath, onDeleteAll) {
+    this.filePath = filePath;
+    this.onDeleteAll = onDeleteAll;
+    I$1.mkdirSync(U$1.dirname(filePath), { recursive: true });
+    this.db = new Database(filePath);
+    this.db.pragma("journal_mode = WAL");
+    this.db.exec(
+      `CREATE TABLE IF NOT EXISTS ${ALARM_TABLE} (id INTEGER PRIMARY KEY CHECK (id = 1), wake_at INTEGER);
+       CREATE TABLE IF NOT EXISTS ${KV_TABLE} (key TEXT PRIMARY KEY, value TEXT NOT NULL);`
+    );
+    const self2 = this;
+    this.sql = {
+      exec(query, ...params) {
+        if (params.length === 0 && /;\s*\S/.test(query)) {
+          self2.db.exec(query);
+          return new SqlCursor$1([], 0);
+        }
+        const stmt = self2.db.prepare(query);
+        if (stmt.reader) {
+          return new SqlCursor$1(stmt.all(...normalizeParams(params)), 0);
+        }
+        const info2 = stmt.run(...normalizeParams(params));
+        return new SqlCursor$1([], info2.changes);
+      },
+      get databaseSize() {
+        const pages = self2.db.pragma("page_count", { simple: true });
+        const size = self2.db.pragma("page_size", { simple: true });
+        return pages * size;
+      }
+    };
+  }
+  filePath;
+  onDeleteAll;
+  db;
+  alarmTimer;
+  onAlarm;
+  sql;
+  bindAlarmHandler(handler) {
+    this.onAlarm = handler;
+    const row = this.db.prepare(`SELECT wake_at FROM ${ALARM_TABLE} WHERE id = 1`).get();
+    if (row) this.armTimer(row.wake_at);
+  }
+  armTimer(wakeAt) {
+    if (this.alarmTimer) clearTimeout(this.alarmTimer);
+    const delay = Math.max(0, wakeAt - Date.now());
+    this.alarmTimer = setTimeout(() => {
+      this.db.prepare(`DELETE FROM ${ALARM_TABLE} WHERE id = 1`).run();
+      this.onAlarm?.();
+    }, delay);
+    this.alarmTimer.unref?.();
+  }
+  async get(key2) {
+    if (Array.isArray(key2)) {
+      const result = /* @__PURE__ */ new Map();
+      for (const k2 of key2) {
+        const v2 = await this.get(k2);
+        if (v2 !== void 0) result.set(k2, v2);
+      }
+      return result;
+    }
+    const row = this.db.prepare(`SELECT value FROM ${KV_TABLE} WHERE key = ?`).get(key2);
+    return row === void 0 ? void 0 : JSON.parse(row.value);
+  }
+  async put(key2, value) {
+    const entries = typeof key2 === "string" ? [[key2, value]] : Object.entries(key2);
+    const stmt = this.db.prepare(
+      `INSERT INTO ${KV_TABLE} (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+    );
+    for (const [k2, v2] of entries) stmt.run(k2, JSON.stringify(v2));
+  }
+  async delete(key2) {
+    const keys = Array.isArray(key2) ? key2 : [key2];
+    const stmt = this.db.prepare(`DELETE FROM ${KV_TABLE} WHERE key = ?`);
+    let deleted = 0;
+    for (const k2 of keys) deleted += stmt.run(k2).changes;
+    return Array.isArray(key2) ? deleted : deleted > 0;
+  }
+  async list(options) {
+    const prefix = options?.prefix ?? "";
+    const rows = this.db.prepare(
+      `SELECT key, value FROM ${KV_TABLE} WHERE key >= ? AND key < ? ORDER BY key${options?.limit ? " LIMIT " + Math.floor(options.limit) : ""}`
+    ).all(prefix, prefix + "￿");
+    return new Map(rows.map((r) => [r.key, JSON.parse(r.value)]));
+  }
+  transactionSync(fn2) {
+    return this.db.transaction(fn2)();
+  }
+  async getAlarm() {
+    const row = this.db.prepare(`SELECT wake_at FROM ${ALARM_TABLE} WHERE id = 1`).get();
+    return row?.wake_at ?? null;
+  }
+  async setAlarm(timestamp2) {
+    const wakeAt = typeof timestamp2 === "number" ? timestamp2 : timestamp2.getTime();
+    this.db.prepare(
+      `INSERT INTO ${ALARM_TABLE} (id, wake_at) VALUES (1, ?)
+         ON CONFLICT(id) DO UPDATE SET wake_at = excluded.wake_at`
+    ).run(wakeAt);
+    this.armTimer(wakeAt);
+  }
+  async deleteAlarm() {
+    if (this.alarmTimer) clearTimeout(this.alarmTimer);
+    this.db.prepare(`DELETE FROM ${ALARM_TABLE} WHERE id = 1`).run();
+  }
+  async deleteAll() {
+    if (this.alarmTimer) clearTimeout(this.alarmTimer);
+    this.db.close();
+    for (const suffix of ["", "-wal", "-shm"]) {
+      I$1.rmSync(this.filePath + suffix, { force: true });
+    }
+    this.onDeleteAll();
+  }
+  async sync() {
+  }
+}
+class NodeChatState {
+  storage;
+  id;
+  sockets = /* @__PURE__ */ new Map();
+  lock = Promise.resolve();
+  /* oxlint-disable typescript/no-explicit-any */
+  instance;
+  /* oxlint-enable typescript/no-explicit-any */
+  constructor(binding, name, onDeleteAll) {
+    const file = U$1.join(
+      dataDir(),
+      "agents",
+      encodeURIComponent(binding),
+      `${encodeURIComponent(name)}.sqlite`
+    );
+    this.storage = new NodeChatStorage(file, onDeleteAll);
+    const idString = `${binding}:${name}`;
+    this.id = {
+      name,
+      toString: () => idString,
+      equals: (other) => String(other) === idString
+    };
+  }
+  blockConcurrencyWhile(fn2) {
+    const next = this.lock.then(fn2);
+    this.lock = next.catch(() => {
+    });
+    return next;
+  }
+  waitUntil(promise) {
+    waitUntil(promise);
+  }
+  acceptWebSocket(ws, tags = []) {
+    this.sockets.set(ws, tags);
+    const real2 = ws.__realSocket;
+    if (process.env.NODE_RUNTIME_DEBUG === "1") {
+      console.log(
+        `[chat-agent ${this.id.name}] acceptWebSocket: ctor=${ws?.constructor?.name} realSocket=${typeof real2} tags=${JSON.stringify(tags)}`
+      );
+    }
+    if (!real2 || typeof real2.on !== "function") {
+      console.error(
+        `[chat-agent ${this.id.name}] acceptWebSocket got a socket without __realSocket — messages will not be delivered`
+      );
+      return;
+    }
+    real2.on("message", (data, isBinary) => {
+      const payload = isBinary ? data : String(data);
+      if (process.env.NODE_RUNTIME_DEBUG === "1") {
+        console.log(
+          `[chat-agent ${this.id.name}] message in:`,
+          String(payload).slice(0, 120),
+          "| handler:",
+          typeof this.instance?.webSocketMessage
+        );
+      }
+      inPgScope(
+        () => Promise.resolve(this.instance?.webSocketMessage?.(ws, payload))
+      ).catch(
+        (err2) => console.error("[chat-agent] webSocketMessage failed:", err2)
+      );
+    });
+    real2.on("close", (code, reason) => {
+      this.sockets.delete(ws);
+      inPgScope(
+        () => Promise.resolve(
+          this.instance?.webSocketClose?.(ws, Number(code) || 1006, String(reason ?? ""), true)
+        )
+      ).catch((err2) => console.error("[chat-agent] webSocketClose failed:", err2));
+    });
+    real2.on("error", (error2) => {
+      inPgScope(
+        () => Promise.resolve(this.instance?.webSocketError?.(ws, error2))
+      ).catch(
+        (err2) => console.error("[chat-agent] webSocketError failed:", err2)
+      );
+    });
+  }
+  getWebSockets(tag) {
+    const all = [...this.sockets.entries()];
+    return (tag ? all.filter(([, tags]) => tags.includes(tag)) : all).map(([ws]) => ws);
+  }
+  setWebSocketAutoResponse() {
+  }
+  getTags(ws) {
+    return this.sockets.get(ws) ?? [];
+  }
+  abort() {
+  }
+}
+function makeChatAgentNamespace(binding, loadCtor, getEnv) {
+  const instances = /* @__PURE__ */ new Map();
+  async function instantiate(name) {
+    const existing = instances.get(name);
+    if (existing) return existing;
+    const Ctor = await loadCtor();
+    const state = new NodeChatState(binding, name, () => instances.delete(name));
+    const instance = new Ctor(state, getEnv());
+    state.instance = instance;
+    state.storage.bindAlarmHandler(() => {
+      inPgScope(() => Promise.resolve(instance.alarm?.())).catch(
+        (err2) => console.error(`[chat-agent ${binding}:${name}] alarm failed:`, err2)
+      );
+    });
+    const entry2 = { state, instance };
+    instances.set(name, entry2);
+    return entry2;
+  }
+  return {
+    idFromName(name) {
+      return { name, toString: () => `${binding}:${name}` };
+    },
+    get(id) {
+      return new Proxy(
+        {},
+        {
+          get(_target, prop) {
+            if (typeof prop !== "string") return void 0;
+            if (prop === "fetch") {
+              return async (request) => {
+                const { instance } = await instantiate(id.name);
+                return inPgScope(() => instance.fetch(request));
+              };
+            }
+            return async (...args) => {
+              const { instance } = await instantiate(id.name);
+              const method = instance[prop];
+              if (typeof method !== "function") {
+                throw new TypeError(`${binding}.${prop} is not a method`);
+              }
+              return inPgScope(() => Promise.resolve(method.apply(instance, args)));
+            };
+          }
+        }
+      );
+    }
+  };
+}
 const ALARM_META_TABLE = "_node_runtime_alarm";
 const ALARM_SWEEP_INTERVAL_MS = 60 * 60 * 1e3;
 function scratchpadDir() {
@@ -5904,7 +6316,7 @@ function scratchpadDir() {
 function dbPath(name) {
   return U$1.join(scratchpadDir(), `${encodeURIComponent(name)}.sqlite`);
 }
-class SqlCursor {
+class SqlCursor2 {
   constructor(rows) {
     this.rows = rows;
   }
@@ -5937,17 +6349,17 @@ class NodeDoStorage {
       exec(query, ...params) {
         if (params.length === 0 && /;\s*\S/.test(query)) {
           storage.db.exec(query);
-          return new SqlCursor([]);
+          return new SqlCursor2([]);
         }
         const normalized = params.map(
           (p2) => typeof p2 === "boolean" ? p2 ? 1 : 0 : p2 ?? null
         );
         const stmt = storage.db.prepare(query);
         if (stmt.reader) {
-          return new SqlCursor(stmt.all(...normalized));
+          return new SqlCursor2(stmt.all(...normalized));
         }
         stmt.run(...normalized);
-        return new SqlCursor([]);
+        return new SqlCursor2([]);
       },
       get databaseSize() {
         const pageCount = storage.db.pragma("page_count", {
@@ -6358,9 +6770,21 @@ const bindings = {
   AUDIT_SCRATCHPAD: makeScratchpadNamespace(
     async () => (await Promise.resolve().then(() => AuditScratchpad$1)).AuditScratchpad,
     () => nodeEnv
+  ),
+  // Chat agents. partyserver discovers these by iterating env for objects
+  // with idFromName and kebab-cases the KEY — so these names must stay
+  // exactly ONBOARDING_CHAT / SAM_CHAT to match the client's
+  // /agents/onboarding-chat/... and /agents/sam-chat/... paths.
+  ONBOARDING_CHAT: makeChatAgentNamespace(
+    "ONBOARDING_CHAT",
+    async () => (await import("./assets/OnboardingChatAgent-CWnzRuG3.js")).OnboardingChatAgent,
+    () => nodeEnv
+  ),
+  SAM_CHAT: makeChatAgentNamespace(
+    "SAM_CHAT",
+    async () => (await import("./assets/SamChatAgent-BAc3DOIB.js").then((n2) => n2.S)).SamChatAgent,
+    () => nodeEnv
   )
-  // Chat agents (SAM, onboarding) are the last porting milestone. Leaving the
-  // bindings out entirely makes `routeAgentRequest` fall through to 404.
 };
 const nodeEnv = new Proxy(bindings, {
   get(target, prop) {
@@ -6377,14 +6801,6 @@ const env$2 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePropert
   nodeEnv
 }, Symbol.toStringTag, { value: "Module" }));
 const env$1 = nodeEnv;
-const pending = /* @__PURE__ */ new Set();
-function waitUntil(promise) {
-  pending.add(promise);
-  promise.catch((err2) => console.error("[node-runtime] waitUntil task failed:", err2)).finally(() => pending.delete(promise));
-}
-function drainWaitUntil() {
-  return Promise.allSettled(pending);
-}
 class DurableObject {
   ctx;
   env;
@@ -9983,6 +10399,7 @@ const channels = {
   email: channel("agents:email"),
   channel: channel("agents:channel")
 };
+const CHANNEL_DIAGNOSTIC_NAME_OVERRIDES = { agentTool: "agents:agent_tool" };
 function getChannel(type) {
   if (type.startsWith("mcp:")) return channels.mcp;
   if (type.startsWith("workflow:")) return channels.workflow;
@@ -10001,6 +10418,12 @@ function getChannel(type) {
 const genericObservability = { emit(event) {
   getChannel(event.type).publish(event);
 } };
+function subscribe(channelKey, callback) {
+  const name = CHANNEL_DIAGNOSTIC_NAME_OVERRIDES[channelKey] ?? `agents:${channelKey}`;
+  const handler = (message, _name) => callback(message);
+  subscribe$1(name, handler);
+  return () => unsubscribe(name, handler);
+}
 function extractDateElements(date) {
   return {
     second: date.getSeconds(),
@@ -10519,6 +10942,12 @@ var RootSubAgentConnectionBridge = class {
     _classPrivateFieldGet2(_root, this)._cf_broadcastToSubAgent(ownerPath, message, without);
   }
 };
+function callable(metadata = {}) {
+  return function callableDecorator(target, _context) {
+    if (!callableMetadata.has(target)) callableMetadata.set(target, metadata);
+    return target;
+  };
+}
 const _fiberALS = new AsyncLocalStorage();
 function getNextCronTime(cron) {
   return parseCronExpression(cron).getNextDate();
@@ -11730,7 +12159,7 @@ var Agent = class Agent2 extends Server {
       if (email._secureRouted && options.secret === void 0) throw new Error("This email was routed via createSecureReplyEmailResolver. You must pass a secret to replyToEmail() to sign replies, or pass explicit null to opt-out (not recommended).");
       const agentName = camelCaseToKebabCase$1(this._ParentClass.name);
       const agentId = this.name;
-      const { createMimeMessage } = await import("./assets/mimetext.node.es-ClCR2yAi.js");
+      const { createMimeMessage } = await import("./assets/mimetext.node.es-BMUWyco8.js");
       const msg = createMimeMessage();
       msg.setSender({
         addr: email.to,
@@ -17700,7 +18129,7 @@ const session$1 = sqliteTable(
     userId: text("user_id").notNull().references(() => user$2.id, { onDelete: "cascade" }),
     activeOrganizationId: text("active_organization_id")
   },
-  (table) => [index("session_userId_idx").on(table.userId)]
+  (table) => [index$1("session_userId_idx").on(table.userId)]
 );
 const account$2 = sqliteTable(
   "account",
@@ -17724,10 +18153,10 @@ const account$2 = sqliteTable(
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
   },
   (table) => [
-    index("account_userId_idx").on(table.userId),
+    index$1("account_userId_idx").on(table.userId),
     // better-auth looks up accounts by (accountId, providerId) on every
     // credential/OAuth sign-in; without this it seq-scans the account table.
-    index("account_accountId_providerId_idx").on(
+    index$1("account_accountId_providerId_idx").on(
       table.accountId,
       table.providerId
     )
@@ -17744,10 +18173,10 @@ const verification$1 = sqliteTable(
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).default(sql$2`(cast(unixepoch('subsecond') * 1000 as integer))`).$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
   },
   (table) => [
-    index("verification_identifier_idx").on(table.identifier),
+    index$1("verification_identifier_idx").on(table.identifier),
     // better-auth's periodic cleanup deletes rows via `expires_at < now()`,
     // a range scan that seq-scans the whole table without this index.
-    index("verification_expiresAt_idx").on(table.expiresAt)
+    index$1("verification_expiresAt_idx").on(table.expiresAt)
   ]
 );
 const organization$3 = sqliteTable(
@@ -17772,8 +18201,8 @@ const member$2 = sqliteTable(
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull()
   },
   (table) => [
-    index("member_organizationId_idx").on(table.organizationId),
-    index("member_userId_idx").on(table.userId)
+    index$1("member_organizationId_idx").on(table.organizationId),
+    index$1("member_userId_idx").on(table.userId)
   ]
 );
 const invitation$1 = sqliteTable(
@@ -17789,8 +18218,8 @@ const invitation$1 = sqliteTable(
     inviterId: text("inviter_id").notNull().references(() => user$2.id, { onDelete: "cascade" })
   },
   (table) => [
-    index("invitation_organizationId_idx").on(table.organizationId),
-    index("invitation_email_idx").on(table.email)
+    index$1("invitation_organizationId_idx").on(table.organizationId),
+    index$1("invitation_email_idx").on(table.email)
   ]
 );
 const apikey$1 = sqliteTable(
@@ -17822,9 +18251,9 @@ const apikey$1 = sqliteTable(
     metadata: text("metadata")
   },
   (table) => [
-    index("apikey_configId_idx").on(table.configId),
-    index("apikey_referenceId_idx").on(table.referenceId),
-    index("apikey_key_idx").on(table.key)
+    index$1("apikey_configId_idx").on(table.configId),
+    index$1("apikey_referenceId_idx").on(table.referenceId),
+    index$1("apikey_key_idx").on(table.key)
   ]
 );
 const userRelations$1 = relations(user$2, ({ many }) => ({
@@ -17905,7 +18334,7 @@ const userOnboardingAnswers$2 = sqliteTable(
     updatedAt: text("updated_at").notNull().default(sql$2`(current_timestamp)`)
   },
   (table) => [
-    index("user_onboarding_answers_organization_idx").on(table.organizationId)
+    index$1("user_onboarding_answers_organization_idx").on(table.organizationId)
   ]
 );
 const projects$2 = sqliteTable(
@@ -17936,7 +18365,7 @@ const projects$2 = sqliteTable(
     // above only covers the Default-project row, so without this the org-scoped
     // list queries seq-scan. Per-org row counts are small, so the archived/
     // created_at ordering sorts cheaply on top of this single-column lookup.
-    index("projects_organization_id_idx").on(table.organizationId)
+    index$1("projects_organization_id_idx").on(table.organizationId)
   ]
 );
 const savedKeywords$2 = sqliteTable(
@@ -17956,7 +18385,7 @@ const savedKeywords$2 = sqliteTable(
       table.locationCode,
       table.languageCode
     ),
-    index("saved_keywords_project_created_idx").on(
+    index$1("saved_keywords_project_created_idx").on(
       table.projectId,
       table.createdAt
     )
@@ -17979,7 +18408,7 @@ const savedKeywordTags$2 = sqliteTable(
       table.projectId,
       table.normalizedName
     ),
-    index("saved_keyword_tags_project_name_idx").on(
+    index$1("saved_keyword_tags_project_name_idx").on(
       table.projectId,
       table.name
     )
@@ -17999,7 +18428,7 @@ const savedKeywordTagAssignments$2 = sqliteTable(
     ),
     // No standalone index on savedKeywordId — the unique index above has it as
     // its leftmost column, so it already serves savedKeywordId lookups.
-    index("saved_keyword_tag_assignments_tag_idx").on(table.tagId)
+    index$1("saved_keyword_tag_assignments_tag_idx").on(table.tagId)
   ]
 );
 const keywordMetrics$2 = sqliteTable(
@@ -18025,7 +18454,7 @@ const keywordMetrics$2 = sqliteTable(
       table.locationCode,
       table.languageCode
     ),
-    index("keyword_metrics_lookup_idx").on(
+    index$1("keyword_metrics_lookup_idx").on(
       table.projectId,
       table.keyword,
       table.locationCode,
@@ -18057,7 +18486,7 @@ const rankTrackingConfigs$2 = sqliteTable(
     createdAt: text("created_at").notNull().default(sql$2`(current_timestamp)`)
   },
   (table) => [
-    index("rank_tracking_configs_project_active_created_idx").on(
+    index$1("rank_tracking_configs_project_active_created_idx").on(
       table.projectId,
       table.isActive,
       table.createdAt
@@ -18102,8 +18531,8 @@ const rankCheckRuns$2 = sqliteTable(
     completedAt: text("completed_at")
   },
   (table) => [
-    index("rank_check_runs_config_idx").on(table.configId, table.startedAt),
-    index("rank_check_runs_project_idx").on(table.projectId, table.startedAt),
+    index$1("rank_check_runs_config_idx").on(table.configId, table.startedAt),
+    index$1("rank_check_runs_project_idx").on(table.projectId, table.startedAt),
     uniqueIndex("rank_check_runs_one_active_per_config_idx").on(table.configId).where(sql$2`${table.status} IN ('pending', 'running')`)
   ]
 );
@@ -18128,7 +18557,7 @@ const rankSnapshots$2 = sqliteTable(
   (table) => [
     // No standalone index on runId — the unique index below has it as its
     // leftmost column, so it already serves runId lookups.
-    index("rank_snapshots_keyword_device_idx").on(
+    index$1("rank_snapshots_keyword_device_idx").on(
       table.trackingKeywordId,
       table.device,
       table.checkedAt
@@ -18178,7 +18607,7 @@ const backlinkSnapshots$2 = sqliteTable(
     capturedAt: text("captured_at").notNull().default(sql$2`(current_timestamp)`)
   },
   (table) => [
-    index("backlink_snapshots_project_captured_idx").on(
+    index$1("backlink_snapshots_project_captured_idx").on(
       table.projectId,
       table.capturedAt
     )
@@ -18268,7 +18697,7 @@ const projectResearchLog$2 = sqliteTable(
     createdAt: text("created_at").notNull().default(sql$2`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
   },
   (table) => [
-    index("project_research_log_project_date_idx").on(
+    index$1("project_research_log_project_date_idx").on(
       table.projectId,
       table.entryDate
     )
@@ -18312,8 +18741,8 @@ const audits$2 = sqliteTable(
     completedAt: text("completed_at")
   },
   (table) => [
-    index("audits_project_id_idx").on(table.projectId),
-    index("audits_started_by_user_id_idx").on(table.startedByUserId)
+    index$1("audits_project_id_idx").on(table.projectId),
+    index$1("audits_started_by_user_id_idx").on(table.startedByUserId)
   ]
 );
 const auditPages$2 = sqliteTable(
@@ -18370,7 +18799,7 @@ const auditPages$2 = sqliteTable(
     // Performance
     responseTimeMs: integer("response_time_ms")
   },
-  (table) => [index("audit_pages_audit_url_idx").on(table.auditId, table.url)]
+  (table) => [index$1("audit_pages_audit_url_idx").on(table.auditId, table.url)]
 );
 const auditIssues$2 = sqliteTable(
   "audit_issues",
@@ -18387,8 +18816,8 @@ const auditIssues$2 = sqliteTable(
     detailsJson: text("details_json")
   },
   (table) => [
-    index("audit_issues_audit_type_idx").on(table.auditId, table.issueType),
-    index("audit_issues_page_id_idx").on(table.pageId)
+    index$1("audit_issues_audit_type_idx").on(table.auditId, table.issueType),
+    index$1("audit_issues_page_id_idx").on(table.pageId)
   ]
 );
 const auditLighthouseResults$2 = sqliteTable(
@@ -18411,8 +18840,8 @@ const auditLighthouseResults$2 = sqliteTable(
     payloadSizeBytes: integer("payload_size_bytes")
   },
   (table) => [
-    index("audit_lighthouse_results_audit_id_idx").on(table.auditId),
-    index("audit_lighthouse_results_page_id_idx").on(table.pageId)
+    index$1("audit_lighthouse_results_audit_id_idx").on(table.auditId),
+    index$1("audit_lighthouse_results_page_id_idx").on(table.pageId)
   ]
 );
 const sqliteAudit = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
@@ -18437,7 +18866,7 @@ const samSessions$2 = sqliteTable(
   },
   (table) => [
     // The side-panel lists a project's sessions newest-first.
-    index("sam_sessions_project_updated_idx").on(
+    index$1("sam_sessions_project_updated_idx").on(
       table.projectId,
       table.updatedAt
     )
@@ -18482,8 +18911,8 @@ const ga4Connections$2 = sqliteTable(
   },
   (table) => [
     uniqueIndex("ga4_connections_project_idx").on(table.projectId),
-    index("ga4_connections_organization_idx").on(table.organizationId),
-    index("ga4_connections_connector_idx").on(
+    index$1("ga4_connections_organization_idx").on(table.organizationId),
+    index$1("ga4_connections_connector_idx").on(
       table.connectedByUserId,
       table.ga4AccountId
     )
@@ -18512,7 +18941,7 @@ const gscConnections$2 = sqliteTable(
   (table) => [
     // One selected property per project in v1; switching replaces the row.
     uniqueIndex("gsc_connections_project_idx").on(table.projectId),
-    index("gsc_connections_organization_idx").on(table.organizationId)
+    index$1("gsc_connections_organization_idx").on(table.organizationId)
   ]
 );
 const sqliteGsc = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
@@ -18682,7 +19111,7 @@ const session = pgTable(
     userId: text$1("user_id").notNull().references(() => user$1.id, { onDelete: "cascade" }),
     activeOrganizationId: text$1("active_organization_id")
   },
-  (table) => [index$1("session_userId_idx").on(table.userId)]
+  (table) => [index$2("session_userId_idx").on(table.userId)]
 );
 const account$1 = pgTable(
   "account",
@@ -18702,10 +19131,10 @@ const account$1 = pgTable(
     updatedAt: timestampColumn$2("updated_at").$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
   },
   (table) => [
-    index$1("account_userId_idx").on(table.userId),
+    index$2("account_userId_idx").on(table.userId),
     // better-auth looks up accounts by (accountId, providerId) on every
     // credential/OAuth sign-in; without this it seq-scans the account table.
-    index$1("account_accountId_providerId_idx").on(
+    index$2("account_accountId_providerId_idx").on(
       table.accountId,
       table.providerId
     )
@@ -18722,10 +19151,10 @@ const verification = pgTable(
     updatedAt: timestampColumn$2("updated_at").defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
   },
   (table) => [
-    index$1("verification_identifier_idx").on(table.identifier),
+    index$2("verification_identifier_idx").on(table.identifier),
     // better-auth's periodic cleanup deletes rows via `expires_at < now()`,
     // a range scan that seq-scans the whole table without this index.
-    index$1("verification_expiresAt_idx").on(table.expiresAt)
+    index$2("verification_expiresAt_idx").on(table.expiresAt)
   ]
 );
 const organization$2 = pgTable(
@@ -18750,8 +19179,8 @@ const member$1 = pgTable(
     createdAt: timestampColumn$2("created_at").notNull()
   },
   (table) => [
-    index$1("member_organizationId_idx").on(table.organizationId),
-    index$1("member_userId_idx").on(table.userId)
+    index$2("member_organizationId_idx").on(table.organizationId),
+    index$2("member_userId_idx").on(table.userId)
   ]
 );
 const invitation = pgTable(
@@ -18767,8 +19196,8 @@ const invitation = pgTable(
     inviterId: text$1("inviter_id").notNull().references(() => user$1.id, { onDelete: "cascade" })
   },
   (table) => [
-    index$1("invitation_organizationId_idx").on(table.organizationId),
-    index$1("invitation_email_idx").on(table.email)
+    index$2("invitation_organizationId_idx").on(table.organizationId),
+    index$2("invitation_email_idx").on(table.email)
   ]
 );
 const apikey = pgTable(
@@ -18798,9 +19227,9 @@ const apikey = pgTable(
     metadata: text$1("metadata")
   },
   (table) => [
-    index$1("apikey_configId_idx").on(table.configId),
-    index$1("apikey_referenceId_idx").on(table.referenceId),
-    index$1("apikey_key_idx").on(table.key)
+    index$2("apikey_configId_idx").on(table.configId),
+    index$2("apikey_referenceId_idx").on(table.referenceId),
+    index$2("apikey_key_idx").on(table.key)
   ]
 );
 const userRelations = relations(user$1, ({ many }) => ({
@@ -18883,7 +19312,7 @@ const userOnboardingAnswers$1 = pgTable(
     updatedAt: timestampColumn$1("updated_at").notNull().default(isoNow$6)
   },
   (table) => [
-    index$1("user_onboarding_answers_organization_idx").on(table.organizationId)
+    index$2("user_onboarding_answers_organization_idx").on(table.organizationId)
   ]
 );
 const projects$1 = pgTable(
@@ -18914,7 +19343,7 @@ const projects$1 = pgTable(
     // above only covers the Default-project row, so without this the org-scoped
     // list queries seq-scan. Per-org row counts are small, so the archived/
     // created_at ordering sorts cheaply on top of this single-column lookup.
-    index$1("projects_organization_id_idx").on(table.organizationId)
+    index$2("projects_organization_id_idx").on(table.organizationId)
   ]
 );
 const savedKeywords$1 = pgTable(
@@ -18934,7 +19363,7 @@ const savedKeywords$1 = pgTable(
       table.locationCode,
       table.languageCode
     ),
-    index$1("saved_keywords_project_created_idx").on(
+    index$2("saved_keywords_project_created_idx").on(
       table.projectId,
       table.createdAt
     )
@@ -18957,7 +19386,7 @@ const savedKeywordTags$1 = pgTable(
       table.projectId,
       table.normalizedName
     ),
-    index$1("saved_keyword_tags_project_name_idx").on(
+    index$2("saved_keyword_tags_project_name_idx").on(
       table.projectId,
       table.name
     )
@@ -18977,7 +19406,7 @@ const savedKeywordTagAssignments$1 = pgTable(
     ),
     // No standalone index on savedKeywordId — the unique index above has it as
     // its leftmost column, so it already serves savedKeywordId lookups.
-    index$1("saved_keyword_tag_assignments_tag_idx").on(table.tagId)
+    index$2("saved_keyword_tag_assignments_tag_idx").on(table.tagId)
   ]
 );
 const keywordMetrics$1 = pgTable(
@@ -19003,7 +19432,7 @@ const keywordMetrics$1 = pgTable(
       table.locationCode,
       table.languageCode
     ),
-    index$1("keyword_metrics_lookup_idx").on(
+    index$2("keyword_metrics_lookup_idx").on(
       table.projectId,
       table.keyword,
       table.locationCode,
@@ -19035,7 +19464,7 @@ const rankTrackingConfigs$1 = pgTable(
     createdAt: timestampColumn$1("created_at").notNull().default(isoNow$6)
   },
   (table) => [
-    index$1("rank_tracking_configs_project_active_created_idx").on(
+    index$2("rank_tracking_configs_project_active_created_idx").on(
       table.projectId,
       table.isActive,
       table.createdAt
@@ -19080,8 +19509,8 @@ const rankCheckRuns$1 = pgTable(
     completedAt: timestampColumn$1("completed_at")
   },
   (table) => [
-    index$1("rank_check_runs_config_idx").on(table.configId, table.startedAt),
-    index$1("rank_check_runs_project_idx").on(table.projectId, table.startedAt),
+    index$2("rank_check_runs_config_idx").on(table.configId, table.startedAt),
+    index$2("rank_check_runs_project_idx").on(table.projectId, table.startedAt),
     uniqueIndex$1("rank_check_runs_one_active_per_config_idx").on(table.configId).where(sql$2`${table.status} IN ('pending', 'running')`)
   ]
 );
@@ -19106,7 +19535,7 @@ const rankSnapshots$1 = pgTable(
   (table) => [
     // No standalone index on runId — the unique index below has it as its
     // leftmost column, so it already serves runId lookups.
-    index$1("rank_snapshots_keyword_device_idx").on(
+    index$2("rank_snapshots_keyword_device_idx").on(
       table.trackingKeywordId,
       table.device,
       table.checkedAt
@@ -19156,7 +19585,7 @@ const backlinkSnapshots$1 = pgTable(
     capturedAt: timestampColumn$1("captured_at").notNull().default(isoNow$6)
   },
   (table) => [
-    index$1("backlink_snapshots_project_captured_idx").on(
+    index$2("backlink_snapshots_project_captured_idx").on(
       table.projectId,
       table.capturedAt
     )
@@ -19245,7 +19674,7 @@ const projectResearchLog$1 = pgTable(
     createdAt: text$1("created_at").notNull().default(isoNow$5)
   },
   (table) => [
-    index$1("project_research_log_project_date_idx").on(
+    index$2("project_research_log_project_date_idx").on(
       table.projectId,
       table.entryDate
     )
@@ -19291,8 +19720,8 @@ const audits$1 = pgTable(
     completedAt: timestampColumn("completed_at")
   },
   (table) => [
-    index$1("audits_project_id_idx").on(table.projectId),
-    index$1("audits_started_by_user_id_idx").on(table.startedByUserId)
+    index$2("audits_project_id_idx").on(table.projectId),
+    index$2("audits_started_by_user_id_idx").on(table.startedByUserId)
   ]
 );
 const auditPages$1 = pgTable(
@@ -19349,7 +19778,7 @@ const auditPages$1 = pgTable(
     // Performance
     responseTimeMs: integer$1("response_time_ms")
   },
-  (table) => [index$1("audit_pages_audit_url_idx").on(table.auditId, table.url)]
+  (table) => [index$2("audit_pages_audit_url_idx").on(table.auditId, table.url)]
 );
 const auditIssues$1 = pgTable(
   "audit_issues",
@@ -19366,8 +19795,8 @@ const auditIssues$1 = pgTable(
     detailsJson: text$1("details_json")
   },
   (table) => [
-    index$1("audit_issues_audit_type_idx").on(table.auditId, table.issueType),
-    index$1("audit_issues_page_id_idx").on(table.pageId)
+    index$2("audit_issues_audit_type_idx").on(table.auditId, table.issueType),
+    index$2("audit_issues_page_id_idx").on(table.pageId)
   ]
 );
 const auditLighthouseResults$1 = pgTable(
@@ -19390,8 +19819,8 @@ const auditLighthouseResults$1 = pgTable(
     payloadSizeBytes: integer$1("payload_size_bytes")
   },
   (table) => [
-    index$1("audit_lighthouse_results_audit_id_idx").on(table.auditId),
-    index$1("audit_lighthouse_results_page_id_idx").on(table.pageId)
+    index$2("audit_lighthouse_results_audit_id_idx").on(table.auditId),
+    index$2("audit_lighthouse_results_page_id_idx").on(table.pageId)
   ]
 );
 const pgAudit = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
@@ -19417,7 +19846,7 @@ const samSessions$1 = pgTable(
   },
   (table) => [
     // The side-panel lists a project's sessions newest-first.
-    index$1("sam_sessions_project_updated_idx").on(
+    index$2("sam_sessions_project_updated_idx").on(
       table.projectId,
       table.updatedAt
     )
@@ -19463,8 +19892,8 @@ const ga4Connections$1 = pgTable(
   },
   (table) => [
     uniqueIndex$1("ga4_connections_project_idx").on(table.projectId),
-    index$1("ga4_connections_organization_idx").on(table.organizationId),
-    index$1("ga4_connections_connector_idx").on(
+    index$2("ga4_connections_organization_idx").on(table.organizationId),
+    index$2("ga4_connections_connector_idx").on(
       table.connectedByUserId,
       table.ga4AccountId
     )
@@ -19494,7 +19923,7 @@ const gscConnections$1 = pgTable(
   (table) => [
     // One selected property per project in v1; switching replaces the row.
     uniqueIndex$1("gsc_connections_project_idx").on(table.projectId),
-    index$1("gsc_connections_organization_idx").on(table.organizationId)
+    index$2("gsc_connections_organization_idx").on(table.organizationId)
   ]
 );
 const pgGsc = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
@@ -19600,6 +20029,11 @@ async function withPgClient(fn2) {
   return pgClientStore.run({ sql: sql2, db: createPgDb(sql2) }, fn2);
 }
 const db = getDatabaseProvider() === "postgres" ? pgDb : d1Db;
+const index = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  db,
+  withPgClient
+}, Symbol.toStringTag, { value: "Module" }));
 const runtimeSchema = getDatabaseProvider() === "postgres" ? {
   ...pgApp,
   ...pgProjectContext,
@@ -60427,6 +60861,42 @@ async function getUsageCreditsRemaining(customerId) {
     topupRemaining: topupCheck.balance?.remaining ?? 0
   };
 }
+async function checkUsageCreditsDepleted(customer) {
+  const check = await getUsageCreditsRemaining(customer.organizationId);
+  if (check.monthlyRemaining + check.topupRemaining > 0) {
+    return { depleted: false, monthlyRemaining: check.monthlyRemaining };
+  }
+  const full = await autumn.customers.getOrCreate({
+    customerId: customer.organizationId,
+    email: customer.userEmail
+  });
+  const confirmed = {
+    monthlyRemaining: full.balances[AUTUMN_SEO_DATA_BALANCE_FEATURE_ID]?.remaining ?? 0,
+    topupRemaining: full.balances[AUTUMN_SEO_DATA_TOPUP_BALANCE_FEATURE_ID]?.remaining ?? 0
+  };
+  if (confirmed.monthlyRemaining + confirmed.topupRemaining > 0) {
+    console.error(
+      "billing.credits-gate disagreement: /check read depleted but the customer object shows credits; proceeding on the customer reading",
+      {
+        organizationId: customer.organizationId,
+        check,
+        confirmed
+      }
+    );
+    return { depleted: false, monthlyRemaining: confirmed.monthlyRemaining };
+  }
+  await captureServerEvent({
+    distinctId: customer.userId,
+    event: "usage:credits_gate_refused",
+    organizationId: customer.organizationId,
+    properties: {
+      project_id: customer.projectId,
+      monthly_remaining: confirmed.monthlyRemaining,
+      topup_remaining: confirmed.topupRemaining
+    }
+  });
+  return { depleted: true, monthlyRemaining: check.monthlyRemaining };
+}
 async function assertUsageCreditsAvailable(customerId) {
   const { monthlyRemaining, topupRemaining } = await getUsageCreditsRemaining(customerId);
   if (monthlyRemaining + topupRemaining <= 0) {
@@ -65393,9 +65863,9 @@ function createStatelessMcpHandler(factory, options = {}) {
       return withCors(internalErrorResponse(), corsOptions);
     }
   };
-  const callable = (request, _env, ctx) => serve(request, void 0, ctx);
+  const callable2 = (request, _env, ctx) => serve(request, void 0, ctx);
   const fetch2 = (request, requestOptions) => serve(request, requestOptions);
-  return Object.assign(callable, {
+  return Object.assign(callable2, {
     fetch: fetch2,
     notify: sdkHandler.notify
   });
@@ -66121,7 +66591,7 @@ function parseTaskItems(endpoint, task, itemSchema) {
 }
 let sectionsPromise;
 function loadDataforseoSections() {
-  return sectionsPromise ??= import("./assets/sections-D54jb_Lt.js");
+  return sectionsPromise ??= import("./assets/sections-CnvzgxSS.js");
 }
 function meter(customer, pick, defaultFeature) {
   return (input) => meterDataforseoCall(
@@ -81385,6 +81855,7 @@ const server = {
     if (watchdogError) throw watchdogError;
   }
 };
+installCfWebSocketGlobals();
 const makeCtx = () => ({
   waitUntil,
   passThroughOnException() {
@@ -81534,20 +82005,20 @@ export {
   AUTUMN_SEO_DATA_TOPUP_BALANCE_FEATURE_ID as ac,
   userOnboardingAnswers as ad,
   user as ae,
-  AuditService as af,
-  MIN_AUDIT_PAGES as ag,
-  PAID_MAX_AUDIT_PAGES as ah,
-  DEFAULT_AUDIT_PAGES as ai,
-  getOptionalEnvValue as aj,
-  getProjectContextSchema as ak,
-  ProjectContextService as al,
-  updateProjectContextSchema as am,
-  TSS_SERVER_FUNCTION as an,
-  normalizeDomain$1 as ao,
-  domainField as ap,
-  rankTrackingConfigs as aq,
-  isSupportedLanguageCode as ar,
-  MAX_TRACKED_KEYWORD_LENGTH as as,
+  MIN_AUDIT_PAGES as af,
+  PAID_MAX_AUDIT_PAGES as ag,
+  DEFAULT_AUDIT_PAGES as ah,
+  TSS_SERVER_FUNCTION as ai,
+  normalizeDomain$1 as aj,
+  domainField as ak,
+  rankTrackingConfigs as al,
+  isSupportedLanguageCode as am,
+  MAX_TRACKED_KEYWORD_LENGTH as an,
+  AuditService as ao,
+  getOptionalEnvValue as ap,
+  getProjectContextSchema as aq,
+  ProjectContextService as ar,
+  updateProjectContextSchema as as,
   normalizeUrl as at,
   isSameOrigin as au,
   CompiledQuery as av,
@@ -81556,7 +82027,7 @@ export {
   SqliteQueryCompiler as ay,
   SqliteAdapter as az,
   getResponse$1 as b,
-  parseTaskItems as b$,
+  normalizeAndValidateStartUrl as b$,
   GA4_OAUTH_PROVIDER_ID as b0,
   Ga4TokenError as b1,
   Ga4OrganicOverviewService as b2,
@@ -81575,25 +82046,25 @@ export {
   ActivationRepository as bF,
   normalizeBacklinksTarget as bG,
   createDataforseoClient as bH,
-  mapDataforseoPathToCreditFeature as bI,
-  creditFeatureLabel as bJ,
-  AUTUMN_SEO_DATA_CREDITS_PER_USD as bK,
-  AUTUMN_SEO_DATA_TOP_UP_PLAN_ID as bL,
-  KEY_PAGE_ROLES as bM,
-  PROJECT_CONTEXT_SECTION_KEYS as bN,
-  PROJECT_CONTEXT_SECTION_LABELS as bO,
-  PROSE_MAX_CHARS as bP,
-  urlMatchesResearchTarget as bQ,
-  buildCacheKey as bR,
-  getCached as bS,
-  setCached as bT,
-  parseResearchTarget as bU,
-  AI_SEARCH_PROMPT_CACHE_NAMESPACE as bV,
-  customerHasPaidPlan as bW,
-  isTaskInProgress as bX,
-  isNoResultsTask as bY,
-  isRecord$1 as bZ,
-  buildTaskBilling as b_,
+  Agent as bI,
+  nanoid as bJ,
+  withInvocationScope as bK,
+  __DO_NOT_USE_WILL_BREAK__agentContext as bL,
+  isDurableObjectMemoryLimitReset as bM,
+  isLabsLocationCode as bN,
+  customerHasManagedAccess as bO,
+  checkUsageCreditsDepleted as bP,
+  trackUsageCreditSpend as bQ,
+  mapDataforseoPathToCreditFeature as bR,
+  creditFeatureLabel as bS,
+  AUTUMN_SEO_DATA_CREDITS_PER_USD as bT,
+  AUTUMN_SEO_DATA_TOP_UP_PLAN_ID as bU,
+  KEY_PAGE_ROLES as bV,
+  PROJECT_CONTEXT_SECTION_KEYS as bW,
+  PROJECT_CONTEXT_SECTION_LABELS as bX,
+  PROSE_MAX_CHARS as bY,
+  AGENT_TOOL_MILESTONE_PART as bZ,
+  AGENT_TOOL_PROGRESS_PART as b_,
   getAuth as ba,
   symmetricEncrypt as bb,
   GSC_OAUTH_SCOPES as bc,
@@ -81621,74 +82092,138 @@ export {
   toClientError as by,
   resolveUserContextFromHeaders as bz,
   createStartHandler as c,
-  ISSUE_SEVERITY_ORDER as c$,
-  normalizeBacklinksSpamFilterOptions as c0,
-  parseTaskTotalCount as c1,
-  MAX_TASKS_PER_POST as c2,
-  DataforseoChargedTaskError as c3,
-  AUDIT_ISSUE_TYPES as c4,
-  isLabsLocationCode as c5,
-  getIsoCountryCode as c6,
-  SERP_LANGUAGE_OPTIONS as c7,
-  pagesToDepth as c8,
-  depthToPages as c9,
-  BACKLINKS_DEFAULT_SORT as cA,
-  DEFAULT_BACKLINKS_PAGE_SIZE as cB,
-  isErrorCode as cC,
-  FREE_MAX_AUDIT_PAGES as cD,
-  getServerFnById as cE,
-  resolveHostedContext as cF,
-  hasHostedAuthConfig as cG,
-  keywordsSearchSchema as cH,
-  domainSearchSchema as cI,
-  backlinksSearchSchema as cJ,
-  AUTUMN_PAID_PLAN_FEATURE_ID as cK,
-  isSafeUrlScheme as cL,
-  getBaseURL as cM,
-  createFetch as cN,
-  defu as cO,
-  parseJSON as cP,
-  toKebabCase as cQ,
-  capitalizeFirstLetter as cR,
-  PACKAGE_VERSION as cS,
-  GENERIC_OAUTH_ERROR_CODES as cT,
-  ORGANIZATION_ERROR_CODES as cU,
-  hasPermissionFn as cV,
-  defaultRoles$1 as cW,
-  ownerAc as cX,
-  memberAc as cY,
-  adminAc as cZ,
-  getIssueDescriptor as c_,
-  estimateRankCheckCredits as ca,
-  isInternalJsStubProp as cb,
-  camelCaseToKebabCase$1 as cc,
-  nanoid as cd,
-  applyBillingMarkupUsd as ce,
-  toScopeSearchParam as cf,
-  devicesCount as cg,
-  KEYWORDS_PER_BATCH as ch,
-  SECONDS_PER_BATCH as ci,
-  resolveTagColor as cj,
-  tagDotClass as ck,
-  tagChipClass as cl,
-  TAG_COLOR_KEYS as cm,
-  tagSwatchClass as cn,
-  LABS_LOCATION_OPTIONS as co,
-  DOMAIN_KEYWORDS_PAGE_SIZES as cp,
-  RESEARCH_SCOPE_FILTER_SLOTS as cq,
-  DEFAULT_DOMAIN_KEYWORDS_PAGE_SIZE as cr,
-  defaultScopeForPath as cs,
-  isScopeAllowedForInput as ct,
-  defaultScopeForInput as cu,
-  BACKLINKS_SUBFOLDER_FILTER_CONDITIONS as cv,
-  BACKLINKS_PAGE_SIZES as cw,
-  backlinksRowsSortFieldSchema as cx,
-  referringDomainsSortFieldSchema as cy,
-  topPagesSortFieldSchema as cz,
+  toKebabCase as c$,
+  subscribe as c0,
+  urlMatchesResearchTarget as c1,
+  buildCacheKey as c2,
+  getCached as c3,
+  setCached as c4,
+  parseResearchTarget as c5,
+  AI_SEARCH_PROMPT_CACHE_NAMESPACE as c6,
+  customerHasPaidPlan as c7,
+  isTaskInProgress as c8,
+  isNoResultsTask as c9,
+  DOMAIN_KEYWORDS_PAGE_SIZES as cA,
+  RESEARCH_SCOPE_FILTER_SLOTS as cB,
+  DEFAULT_DOMAIN_KEYWORDS_PAGE_SIZE as cC,
+  defaultScopeForPath as cD,
+  isScopeAllowedForInput as cE,
+  defaultScopeForInput as cF,
+  BACKLINKS_SUBFOLDER_FILTER_CONDITIONS as cG,
+  BACKLINKS_PAGE_SIZES as cH,
+  backlinksRowsSortFieldSchema as cI,
+  referringDomainsSortFieldSchema as cJ,
+  topPagesSortFieldSchema as cK,
+  BACKLINKS_DEFAULT_SORT as cL,
+  DEFAULT_BACKLINKS_PAGE_SIZE as cM,
+  isErrorCode as cN,
+  FREE_MAX_AUDIT_PAGES as cO,
+  getServerFnById as cP,
+  resolveHostedContext as cQ,
+  hasHostedAuthConfig as cR,
+  keywordsSearchSchema as cS,
+  domainSearchSchema as cT,
+  backlinksSearchSchema as cU,
+  AUTUMN_PAID_PLAN_FEATURE_ID as cV,
+  isSafeUrlScheme as cW,
+  getBaseURL as cX,
+  createFetch as cY,
+  defu as cZ,
+  parseJSON as c_,
+  isRecord$1 as ca,
+  buildTaskBilling as cb,
+  parseTaskItems as cc,
+  normalizeBacklinksSpamFilterOptions as cd,
+  parseTaskTotalCount as ce,
+  MAX_TASKS_PER_POST as cf,
+  DataforseoChargedTaskError as cg,
+  isInternalJsStubProp as ch,
+  camelCaseToKebabCase$1 as ci,
+  AUDIT_ISSUE_TYPES as cj,
+  getIsoCountryCode as ck,
+  SERP_LANGUAGE_OPTIONS as cl,
+  pagesToDepth as cm,
+  depthToPages as cn,
+  estimateRankCheckCredits as co,
+  applyBillingMarkupUsd as cp,
+  toScopeSearchParam as cq,
+  devicesCount as cr,
+  KEYWORDS_PER_BATCH as cs,
+  SECONDS_PER_BATCH as ct,
+  resolveTagColor as cu,
+  tagDotClass as cv,
+  tagChipClass as cw,
+  TAG_COLOR_KEYS as cx,
+  tagSwatchClass as cy,
+  LABS_LOCATION_OPTIONS as cz,
   defaultStreamHandler as d,
-  setupStatus as d0,
+  getEnvValueSync as d$,
+  capitalizeFirstLetter as d0,
+  PACKAGE_VERSION as d1,
+  GENERIC_OAUTH_ERROR_CODES as d2,
+  ORGANIZATION_ERROR_CODES as d3,
+  hasPermissionFn as d4,
+  defaultRoles$1 as d5,
+  ownerAc as d6,
+  memberAc as d7,
+  adminAc as d8,
+  getIssueDescriptor as d9,
+  getKeywordMetricsTool as dA,
+  getLocalRankGridTool as dB,
+  listBusinessCategoriesTool as dC,
+  getBusinessUpdatesTool as dD,
+  getBusinessReviewsTool as dE,
+  getBusinessProfileTool as dF,
+  getGoogleBusinessQuestionsTool as dG,
+  getLocalSerpResultsTool as dH,
+  searchLocalBusinessesTool as dI,
+  findSerpCompetitorsTool as dJ,
+  getRankedKeywordsTool as dK,
+  runRankTrackerTool as dL,
+  estimateRankTrackerCostTool as dM,
+  removeRankTrackingKeywordsTool as dN,
+  addRankTrackingKeywordsTool as dO,
+  getRankTrackerTool as dP,
+  createRankTrackerTool as dQ,
+  getSerpResultsTool as dR,
+  getBacklinksProfileTool as dS,
+  getBacklinksOverviewTool as dT,
+  getDomainKeywordSuggestionsTool as dU,
+  getDomainOverviewTool as dV,
+  saveKeywordsTool as dW,
+  researchKeywordsTool as dX,
+  listSavedKeywordsTool as dY,
+  buildUpdateProjectContextTool as dZ,
+  whoamiTool as d_,
+  ISSUE_SEVERITY_ORDER as da,
+  getCurrentAgent as db,
+  RpcTarget as dc,
+  writeSpanAttributes as dd,
+  tracer as de,
   entry as default,
+  isPlatformTransientError as df,
+  callable as dg,
+  getAuditStatusTool as dh,
+  instrumentMcpToolHandler as di,
+  withPgClient as dj,
+  getAuditPagesTool as dk,
+  getAuditIssuesTool as dl,
+  runSiteAuditTool as dm,
+  getGoogleAnalyticsAudienceBreakdownTool as dn,
+  getGoogleAnalyticsSiteSearchTool as dp,
+  getGoogleAnalyticsEcommercePerformanceTool as dq,
+  getGoogleAnalyticsMeasurementHealthTool as dr,
+  getGoogleAnalyticsTrafficAcquisitionTool as ds,
+  getGoogleAnalyticsOrganicOverviewTool as dt,
+  getSearchOpportunitiesTool as du,
+  getGoogleAnalyticsKeyEventsTool as dv,
+  getGoogleAnalyticsPagePerformanceTool as dw,
+  getGoogleAnalyticsOrganicLandingPagesTool as dx,
+  inspectUrlsTool as dy,
+  getSearchConsolePerformanceTool as dz,
   createKyselyAdapter as e,
+  MCP_SCOPE as e0,
+  setupStatus as e1,
   getKyselyDatabaseType as f,
   getRequest as g,
   hashPassword$1 as h,

@@ -2,10 +2,15 @@
 // Delegates every request to the untouched upstream Worker entry
 // (src/server.ts) with a Node-built env and ExecutionContext, and replaces
 // the wrangler cron triggers with in-process timers.
+import { installCfWebSocketGlobals } from "./cf-websocket-globals";
 import server, { SiteAuditWorkflow, RankCheckWorkflow } from "../server";
 import { nodeEnv } from "./env";
 import { waitUntil } from "./cf-workers-shim";
 import { registerWorkflows, startWorkflowWorker } from "./workflow-engine";
+
+// partyserver reads these globals at request time (not at module load), so
+// installing here — before any request or agent instantiation — is safe.
+installCfWebSocketGlobals();
 
 const makeCtx = (): ExecutionContext =>
   ({

@@ -6,20 +6,7 @@ import { nodeEnv } from "./env";
 
 export const env = nodeEnv;
 
-// Track background work so a graceful shutdown can drain it, mirroring
-// workerd's invocation-lifetime guarantee closely enough for our use.
-const pending = new Set<Promise<unknown>>();
-
-export function waitUntil(promise: Promise<unknown>): void {
-  pending.add(promise);
-  promise
-    .catch((err) => console.error("[node-runtime] waitUntil task failed:", err))
-    .finally(() => pending.delete(promise));
-}
-
-export function drainWaitUntil(): Promise<unknown> {
-  return Promise.allSettled(pending);
-}
+export { waitUntil, drainWaitUntil } from "./wait-until";
 
 // Minimal base classes: enough for `extends` clauses to evaluate at module
 // load and for subclasses to reach this.ctx/this.env (assigned manually so
