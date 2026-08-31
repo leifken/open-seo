@@ -57,6 +57,13 @@ export function isGoogleAuthDisabled() {
   return import.meta.env.GOOGLE_AUTH_DISABLED === "true";
 }
 
+export function isAuthentikAuthEnabled() {
+  // LEIFKEN landscape SSO: renders the central-login button when the server
+  // has the AUTHENTIK_* provider configured. Same deploy-time contract as
+  // AUTH_MODE — set it in the client build env AND the server runtime.
+  return import.meta.env.AUTHENTIK_AUTH_ENABLED === "true";
+}
+
 export function isEmailVerificationBypassed() {
   // Local-dev escape hatch (BYPASS_EMAIL_VERIFICATION=true). The server skips
   // verification and never marks users emailVerified, so the client must treat

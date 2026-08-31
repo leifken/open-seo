@@ -24,6 +24,12 @@ export function createBaseAuthConfig() {
         // Allow connecting a Google account whose email differs from the
         // logged-in user's (agency/freelancer managing a client's property).
         allowDifferentEmails: true,
+        // LEIFKEN landscape SSO (Authentik OIDC): link a same-email sign-in
+        // to the pre-provisioned admin user instead of failing. Authentik
+        // already verifies the email, so no local verification is required
+        // (pattern from the OL-CRM implementation).
+        trustedProviders: ["authentik"],
+        requireLocalEmailVerified: false,
       },
     },
     plugins: [
@@ -54,6 +60,37 @@ export function createBaseAuthConfig() {
       }),
       genericOAuth({
         config: [
+          // LEIFKEN landscape SSO: Authentik (auth.leifken.ai) as the central
+          // OIDC provider — Authorization Code + PKCE, better-auth as the
+          // client lib. Mirrors the OL-CRM implementation (the landscape's
+          // production pattern): plugin loads only when client id+secret are
+          // set, redirect URI ends in /api/auth/oauth2/callback/authentik,
+          // and the central profile picture maps into user.image. With
+          // SIGNUP_DISABLED, implicit signup is off too: only pre-provisioned
+          // users (the bootstrapped admin) can sign in through it.
+          ...(env.AUTHENTIK_CLIENT_ID?.trim() && env.AUTHENTIK_CLIENT_SECRET?.trim()
+            ? [
+                {
+                  providerId: "authentik",
+                  clientId: env.AUTHENTIK_CLIENT_ID.trim(),
+                  clientSecret: env.AUTHENTIK_CLIENT_SECRET.trim(),
+                  discoveryUrl: `${(
+                    env.AUTHENTIK_ISSUER_URL?.trim() ||
+                    "https://auth.leifken.ai/application/o/seo/"
+                  ).replace(/\/?$/, "/")}.well-known/openid-configuration`,
+                  scopes: ["openid", "profile", "email"],
+                  pkce: true,
+                  // Central profile picture: picture claim → user.image
+                  // (defensive, exactly as in OL-CRM).
+                  mapProfileToUser: (profile: Record<string, unknown>) => {
+                    const picture = profile.picture;
+                    return typeof picture === "string" ? { image: picture } : {};
+                  },
+                  disableImplicitSignUp:
+                    Reflect.get(env, "SIGNUP_DISABLED") === "true",
+                },
+              ]
+            : []),
           {
             providerId: GSC_OAUTH_PROVIDER_ID,
             clientId: env.GOOGLE_CLIENT_ID?.trim() ?? "",

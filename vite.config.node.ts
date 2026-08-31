@@ -36,6 +36,7 @@ export default defineConfig(({ mode }) => {
       "BYPASS_EMAIL_VERIFICATION",
       "SIGNUP_DISABLED",
       "GOOGLE_AUTH_DISABLED",
+      "AUTHENTIK_AUTH_ENABLED",
       "POSTHOG_PUBLIC_KEY",
       "POSTHOG_HOST",
       "TURNSTILE_SITE_KEY",

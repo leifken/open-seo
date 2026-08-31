@@ -10,7 +10,11 @@ import {
 import { getFieldError, getFormError } from "@/client/lib/forms";
 import { captureClientEvent } from "@/client/lib/posthog";
 import { authClient } from "@/lib/auth-client";
-import { isGoogleAuthDisabled, isSignupDisabled } from "@/lib/auth-mode";
+import {
+  isAuthentikAuthEnabled,
+  isGoogleAuthDisabled,
+  isSignupDisabled,
+} from "@/lib/auth-mode";
 import { getSignInSearch, getVerifyEmailSearch } from "@/lib/auth-redirect";
 import { z } from "zod";
 
@@ -31,8 +35,10 @@ function SignInPage() {
     search.redirect,
   );
   const authCallbackURL = redirectTo;
-  // Without Google the method chooser is pointless — open the email form.
-  const [showEmailForm, setShowEmailForm] = useState(isGoogleAuthDisabled());
+  // Without Google or Authentik there is no chooser — open the email form.
+  const [showEmailForm, setShowEmailForm] = useState(
+    isGoogleAuthDisabled() && !isAuthentikAuthEnabled(),
+  );
   const [isStartingGoogle, setIsStartingGoogle] = useState(false);
   const [socialError, setSocialError] = useState<string | null>(null);
 
@@ -96,6 +102,30 @@ function SignInPage() {
     },
   });
 
+  // LEIFKEN landscape SSO: central login through Authentik (auth.leifken.ai),
+  // wired via the better-auth genericOAuth provider in auth-config.ts.
+  async function handleContinueWithAuthentik() {
+    setSocialError(null);
+    setIsStartingGoogle(true);
+    try {
+      const result = await authClient.signIn.oauth2({
+        providerId: "authentik",
+        callbackURL: authCallbackURL,
+      });
+      if (result.error) {
+        setSocialError(
+          result.error.message || "Central sign-in is not available right now.",
+        );
+        setIsStartingGoogle(false);
+      } else if (result.data?.url) {
+        window.location.href = result.data.url;
+      }
+    } catch {
+      setSocialError("Central sign-in is not available right now.");
+      setIsStartingGoogle(false);
+    }
+  }
+
   async function handleContinueWithGoogle() {
     setSocialError(null);
     setIsStartingGoogle(true);
@@ -155,7 +185,36 @@ function SignInPage() {
         ) : null
       }
     >
-      {!showEmailForm ? (
+      {isAuthentikAuthEnabled() && !showEmailForm ? (
+        // LEIFKEN landscape SSO: one central login for everything. The
+        // password form stays reachable as a fail-safe (OL-CRM principle:
+        // an SSO outage must never lock the admin out).
+        <>
+          <button
+            type="button"
+            className="btn btn-primary w-full"
+            onClick={() => {
+              void handleContinueWithAuthentik();
+            }}
+            disabled={!isHostedMode || isStartingGoogle}
+          >
+            {isStartingGoogle ? "Redirecting..." : "Sign in with LEIFKEN AI"}
+          </button>
+          {socialError ? (
+            <p className="text-sm text-error">{socialError}</p>
+          ) : null}
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm w-full text-base-content/60"
+            onClick={() => {
+              setShowEmailForm(true);
+              setSocialError(null);
+            }}
+          >
+            Sign in with password instead
+          </button>
+        </>
+      ) : !showEmailForm ? (
         <>
           <AuthMethodChooser
             googleLabel="Continue with Google"

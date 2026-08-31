@@ -10,7 +10,6 @@
     "Create account": "Konto erstellen",
     "Continue with email": "Mit E-Mail fortfahren",
     "Continue with Google": "Mit Google fortfahren",
-
     "Dashboard": "Übersicht",
     "Keyword Research": "Keyword-Recherche",
     "Saved Keywords": "Gespeicherte Keywords",
@@ -37,7 +36,6 @@
     "System": "System",
     "Light": "Hell",
     "Dark": "Dunkel",
-
     "What site are you working on?": "An welcher Website arbeitest du?",
     "Your site's domain": "Die Domain deiner Website",
     "Save": "Speichern",
@@ -70,7 +68,6 @@
     "Set up in AI & MCP →": "Einrichten unter KI & MCP →",
     "Dismiss": "Ausblenden",
     "ONBOARDING CHECKLIST": "ERSTE SCHRITTE",
-
     "Keywords": "Keywords",
     "Position": "Position",
     "Volume": "Suchvolumen",
@@ -85,7 +82,11 @@
     "Create project": "Projekt anlegen",
     "New project": "Neues Projekt",
     "Projects": "Projekte",
-    "Project settings": "Projekt-Einstellungen"
+    "Project settings": "Projekt-Einstellungen",
+    "Sign in with LEIFKEN AI": "Mit LEIFKEN AI anmelden",
+    "Sign in with password instead": "Stattdessen mit Passwort anmelden",
+    "Redirecting...": "Weiterleitung...",
+    "Central sign-in is not available right now.": "Der zentrale Login ist gerade nicht erreichbar."
   },
   "patterns": []
 }

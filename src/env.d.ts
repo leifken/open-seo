@@ -30,6 +30,10 @@ declare namespace Cloudflare {
     };
     GOOGLE_CLIENT_ID?: string;
     GOOGLE_CLIENT_SECRET?: string;
+    // LEIFKEN landscape SSO (Authentik OIDC on auth.leifken.ai)
+    AUTHENTIK_CLIENT_ID?: string;
+    AUTHENTIK_CLIENT_SECRET?: string;
+    AUTHENTIK_ISSUER_URL?: string;
     LOOPS_API_KEY?: string;
     LOOPS_TRANSACTIONAL_VERIFY_EMAIL_ID?: string;
     LOOPS_TRANSACTIONAL_RESET_PASSWORD_ID?: string;
@@ -59,6 +63,7 @@ interface ImportMetaEnv {
   readonly BYPASS_EMAIL_VERIFICATION?: string;
   readonly SIGNUP_DISABLED?: string;
   readonly GOOGLE_AUTH_DISABLED?: string;
+  readonly AUTHENTIK_AUTH_ENABLED?: string;
   readonly POSTHOG_PUBLIC_KEY?: string;
   readonly POSTHOG_HOST?: string;
   readonly TURNSTILE_SITE_KEY?: string;

@@ -3134,7 +3134,7 @@ const defaultSerovalPlugins = [
   p
 ];
 async function getStartManifest(matchedRoutes) {
-  const { tsrStartManifest } = await import("./assets/_tanstack-start-manifest_v-D_1GEurz.js");
+  const { tsrStartManifest } = await import("./assets/_tanstack-start-manifest_v-Cru2qmcl.js");
   const startManifest = tsrStartManifest();
   let routes = startManifest.routes;
   routes[rootRouteId];
@@ -3156,363 +3156,363 @@ async function getStartManifest(matchedRoutes) {
 const manifest = {
   "0146a46bbe4471991fcb6663852023dad568931c1314b55cc81892ca37f08e45": {
     functionName: "exportSavedKeywords_createServerFn_handler",
-    importer: () => import("./assets/keywords-CmeE_3hp.js")
+    importer: () => import("./assets/keywords-C1wS76Ga.js")
   },
   "02829e30c3478ce6fa128dba7467f3adc8a4086892ed668b6f9ca56a3b1c0c8b": {
     functionName: "getDomainPagesPage_createServerFn_handler",
-    importer: () => import("./assets/domain-9ObfAiuc.js")
+    importer: () => import("./assets/domain-iFVlFuHr.js")
   },
   "02a3f23c7994a670645e4ace9876310700d9e054aab37095332d1846e11ec462": {
     functionName: "disconnectGsc_createServerFn_handler",
-    importer: () => import("./assets/gsc-D2xygDB4.js")
+    importer: () => import("./assets/gsc-COmfauX7.js")
   },
   "03f6b933adea1749a90a3091b941383771384ee499865ac928e32750bb3b6da1": {
     functionName: "exportSearchPerformanceTable_createServerFn_handler",
-    importer: () => import("./assets/searchPerformance-CBJ3UPDe.js")
+    importer: () => import("./assets/searchPerformance-Cl-CdH7L.js")
   },
   "0400cd589829703979c0d6b38188a846f541034cb534b51326766d1a7f007970": {
     functionName: "exportAuditLighthouseIssues_createServerFn_handler",
-    importer: () => import("./assets/lighthouse-D9xNaht6.js")
+    importer: () => import("./assets/lighthouse-BzL_s6BB.js")
   },
   "046776517b68d488e3ee09004a9f31a90f45c35a2b32b60dc538eaaf00a36b9c": {
     functionName: "getDomainOverview_createServerFn_handler",
-    importer: () => import("./assets/domain-9ObfAiuc.js")
+    importer: () => import("./assets/domain-iFVlFuHr.js")
   },
   "048f26ede391a38ee6e00487163fdc66dd0897e3a1cc488354a840bbf9b0b9cf": {
     functionName: "getDomainKeywordsPage_createServerFn_handler",
-    importer: () => import("./assets/domain-9ObfAiuc.js")
+    importer: () => import("./assets/domain-iFVlFuHr.js")
   },
   "06c91e3888f8bcec4a820827c04796cd80041afad39d1b5549be4e2cf810951b": {
     functionName: "lookupBrand_createServerFn_handler",
-    importer: () => import("./assets/ai-search-jCMirqX1.js")
+    importer: () => import("./assets/ai-search-BEQFBBxy.js")
   },
   "0a0791b200d03eb44d9630e461ef914d1da85bde9c95b201dcbeb94624848971": {
     functionName: "refreshSavedKeywordMetrics_createServerFn_handler",
-    importer: () => import("./assets/keywords-CmeE_3hp.js")
+    importer: () => import("./assets/keywords-C1wS76Ga.js")
   },
   "0a4a16ebe522d754ddd99b702cf7418577545e6ce062ede31ea16bc201d64943": {
     functionName: "getGscConnection_createServerFn_handler",
-    importer: () => import("./assets/gsc-D2xygDB4.js")
+    importer: () => import("./assets/gsc-COmfauX7.js")
   },
   "0c268077775b1f812d23756142e5d64fff541f1240b6328a92da446160513af2": {
     functionName: "getBacklinksReferringDomains_createServerFn_handler",
-    importer: () => import("./assets/backlinks-acJ3YjnO.js")
+    importer: () => import("./assets/backlinks-B50YE_Y-.js")
   },
   "0c8bc9b67b0ea0a9717a6cab4355542e7c451887732f6d9ee99a8f0ed33cf5de": {
     functionName: "getDomainKeywordSuggestions_createServerFn_handler",
-    importer: () => import("./assets/domain-9ObfAiuc.js")
+    importer: () => import("./assets/domain-iFVlFuHr.js")
   },
   "0ca7e7fd914e198e72f6ce0f3a36134fc1ec7b6dedf4da1c013ccd9c2da36595": {
     functionName: "archiveProject_createServerFn_handler",
-    importer: () => import("./assets/projects-D9ETGupJ.js")
+    importer: () => import("./assets/projects-DSk1oaVL.js")
   },
   "0e2299d91fe830180a5418ad53dd35b4fca59a0bcbd2727c9f3eff6680a88592": {
     functionName: "triggerRankCheck_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
+    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
   },
   "0f196e5eafbe1adb2d3f31aa7558728e7648574a837571aa8f8f35b94a56d562": {
     functionName: "updateSavedKeywordTags_createServerFn_handler",
-    importer: () => import("./assets/keywords-CmeE_3hp.js")
+    importer: () => import("./assets/keywords-C1wS76Ga.js")
   },
   "131f47ab2c8b293725f7a4013737cb0d5e77f8ac22c985f4952b7140820a6430": {
     functionName: "setGa4Property_createServerFn_handler",
-    importer: () => import("./assets/ga4-Cu52Vnpo.js")
+    importer: () => import("./assets/ga4-CpJEqmRD.js")
   },
   "16b8b61d3cfc645bc36be38a136d9d7ad7096edf8550536a9b522e2833bd5c45": {
     functionName: "updateRankTrackingConfig_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
+    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
   },
   "16b95567643a21275b38fde625b8e1428bd2aeaff2440637c2a21009637d64d9": {
     functionName: "searchSerpLocations_createServerFn_handler",
-    importer: () => import("./assets/serp-locations-CaFlm97J.js")
+    importer: () => import("./assets/serp-locations-CAkFQFtL.js")
   },
   "17c1167140bde128372935a660b28fd6e0e183774ca3f90271799ba787ecb243": {
     functionName: "refreshTrackingKeywordMetrics_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
+    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
   },
   "1c37d6d588141eb6ff4ed0b1776196f3493d263cd15565fc317afeae0f41540c": {
     functionName: "restoreProject_createServerFn_handler",
-    importer: () => import("./assets/projects-D9ETGupJ.js")
+    importer: () => import("./assets/projects-DSk1oaVL.js")
   },
   "1d147786bb4efc50107e0030500c0d345b524d45211d5b5a8496b06fa13b2b18": {
     functionName: "listSamSessions_createServerFn_handler",
-    importer: () => import("./assets/sam-BHnfwrJ3.js")
+    importer: () => import("./assets/sam-BaEU7Nhm.js")
   },
   "1d75d4deb3fcbaf04305fae69c64722313c46f5620de0ece3b950cff9346e099": {
     functionName: "saveKeywords_createServerFn_handler",
-    importer: () => import("./assets/keywords-CmeE_3hp.js")
+    importer: () => import("./assets/keywords-C1wS76Ga.js")
   },
   "1e3e63b95fa90f1fafbcda79f9999a31747ab722474f0eae185243ffdd1b06ab": {
     functionName: "estimateRankCheckCost_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
+    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
   },
   "1e8f375975f9b25f935c01e1ed6d63147b5a7fe8693c2737dcc1869d8ef97f3b": {
     functionName: "removeSavedKeywords_createServerFn_handler",
-    importer: () => import("./assets/keywords-CmeE_3hp.js")
+    importer: () => import("./assets/keywords-C1wS76Ga.js")
   },
   "2498dc9ae1c9692a93484405a16016aa8af2296e6a6ac6c892aeff22c4154f17": {
     functionName: "getRankTrackingConfigs_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
+    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
   },
   "258d28f360a42fb9dc6a60c60b05f23782f2fe2bf58c46d6e683b5d80693aadf": {
     functionName: "createRankTrackingConfig_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
+    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
   },
   "273ab5dcd2c400c13c6eaf49ea723e422c6435074e7b455c4fa0d0bd03df362a": {
     functionName: "archiveSamSession_createServerFn_handler",
-    importer: () => import("./assets/sam-BHnfwrJ3.js")
+    importer: () => import("./assets/sam-BaEU7Nhm.js")
   },
   "278ebde0d517c2ebe20e607d3d88ad2fb75a216d2567a5dfcf5808ab244908f7": {
     functionName: "getProjects_createServerFn_handler",
-    importer: () => import("./assets/projects-D9ETGupJ.js")
+    importer: () => import("./assets/projects-DSk1oaVL.js")
   },
   "319d82ec75b2b49399d07e97a0efffd36bd56066017d95b692e7074cae6b1272": {
     functionName: "getAhrefsDomainRatings_createServerFn_handler",
-    importer: () => import("./assets/ahrefs-BOXsWscR.js")
+    importer: () => import("./assets/ahrefs-CPsEz5rT.js")
   },
   "364efb68f010cdd93e01da48b22253ac6e745a792ce18710f489a70100cde203": {
     functionName: "prewarmSerpLocations_createServerFn_handler",
-    importer: () => import("./assets/serp-locations-CaFlm97J.js")
+    importer: () => import("./assets/serp-locations-CAkFQFtL.js")
   },
   "39b646e1b210269ed692e316a1456d18b70794e8f2dd13b038ab141fc56de0c7": {
     functionName: "dismissDashboardGa4Card_createServerFn_handler",
-    importer: () => import("./assets/dashboard-CcujqZW7.js")
+    importer: () => import("./assets/dashboard-D1TPl9KL.js")
   },
   "3b7a7d39821bb858a8e568dde7f4b7c984fdcbb1b94e2a1b26d91fdf25ff537f": {
     functionName: "updateSavedKeywordTag_createServerFn_handler",
-    importer: () => import("./assets/keywords-CmeE_3hp.js")
+    importer: () => import("./assets/keywords-C1wS76Ga.js")
   },
   "3dbeccce043161813d8711ff4113fda42d161033a0efa91044658e370c98be80": {
     functionName: "getOnboardingChatState_createServerFn_handler",
-    importer: () => import("./assets/onboardingChat-Bb6b4c45.js")
+    importer: () => import("./assets/onboardingChat-C31tgBYx.js")
   },
   "40b504d5f882e6201483a0134c8f88c5b566a334664337c847b00819ab66c6cd": {
     functionName: "startSelfHostedGscLink_createServerFn_handler",
-    importer: () => import("./assets/gsc-D2xygDB4.js")
+    importer: () => import("./assets/gsc-COmfauX7.js")
   },
   "47f4e168632e9bfd56794677badebb717fc5ce10103810690f0c3bdc5d098227": {
     functionName: "getBacklinksTopPages_createServerFn_handler",
-    importer: () => import("./assets/backlinks-acJ3YjnO.js")
+    importer: () => import("./assets/backlinks-B50YE_Y-.js")
   },
   "4f6a59af64bb95847828f645f342cfbb203858ef0caca7ddb96adebcce44b7a0": {
     functionName: "getBillingUsageEvents_createServerFn_handler",
-    importer: () => import("./assets/billing-BT5Dfgya.js")
+    importer: () => import("./assets/billing-B2j-Oha1.js")
   },
   "5036bfbbb0648430f1305a7b8a9540118bd537d96bd6f393c94d703319ee3282": {
     functionName: "dismissGscNudge_createServerFn_handler",
-    importer: () => import("./assets/onboarding-Ck-9qRd8.js")
+    importer: () => import("./assets/onboarding-DbqNAr7Y.js")
   },
   "516782e359aa3cdba9ed9ea54db3d5b889263ae7b7a025542320a44198af7371": {
     functionName: "deleteAudit_createServerFn_handler",
-    importer: () => import("./assets/audit-1ERYwzgk.js")
+    importer: () => import("./assets/audit-CQLYc956.js")
   },
   "5508a7b8c2ede1eee34a3696a25fb1813f0d30238ed1d48ca28dfbbbe7f5ac14": {
     functionName: "createSamSession_createServerFn_handler",
-    importer: () => import("./assets/sam-BHnfwrJ3.js")
+    importer: () => import("./assets/sam-BaEU7Nhm.js")
   },
   "57eebe4b148ecd8baeab46c7dc1c92b78de5e9a45d9f805e437b74cda250d02e": {
     functionName: "getSamAccessSetupStatus_createServerFn_handler",
-    importer: () => import("./assets/samAccess-DSbOzZ45.js")
+    importer: () => import("./assets/samAccess-ErHWj9iu.js")
   },
   "75f7965168786313e194a1941f91dd242a6b8c06b1cf69463eae0e9ce5dd6773": {
     functionName: "getAuditStatus_createServerFn_handler",
-    importer: () => import("./assets/audit-1ERYwzgk.js")
+    importer: () => import("./assets/audit-CQLYc956.js")
   },
   "7a3ccd49a583d669523ebc977678f95cac97fe4eaa09a3151a6af5732a78eb03": {
     functionName: "getProjectContext_createServerFn_handler",
-    importer: () => import("./assets/projectContext-aWSDUZfN.js")
+    importer: () => import("./assets/projectContext-CgLdz2zY.js")
   },
   "7c953889116b01175d89dce1f11398e791a804844e06a729e8a40679c8e32137": {
     functionName: "markDashboardCompetitorClicked_createServerFn_handler",
-    importer: () => import("./assets/dashboard-CcujqZW7.js")
+    importer: () => import("./assets/dashboard-D1TPl9KL.js")
   },
   "8acb99c0e5b1aed5cfb75318e78747749f8c2c54884ba18ff1c945a9b06a9375": {
     functionName: "getSavedKeywords_createServerFn_handler",
-    importer: () => import("./assets/keywords-CmeE_3hp.js")
+    importer: () => import("./assets/keywords-C1wS76Ga.js")
   },
   "8e1e5f26a194415159d9074271d62e81c5b365b4c35612f4e23581af549700cf": {
     functionName: "getAuditHistory_createServerFn_handler",
-    importer: () => import("./assets/audit-1ERYwzgk.js")
+    importer: () => import("./assets/audit-CQLYc956.js")
   },
   "8ea81290b22122bff668b72a4292383130de89933a300adb2f16caed61f53731": {
     functionName: "dismissDashboardMcpCard_createServerFn_handler",
-    importer: () => import("./assets/dashboard-CcujqZW7.js")
+    importer: () => import("./assets/dashboard-D1TPl9KL.js")
   },
   "9059a6b8babf4dd972195adcbd6d5b0a44a9abda3a66071b8b90e201141c10d5": {
     functionName: "saveOnboardingAnswers_createServerFn_handler",
-    importer: () => import("./assets/onboarding-Ck-9qRd8.js")
+    importer: () => import("./assets/onboarding-DbqNAr7Y.js")
   },
   "955fb22c05a803998669e9e3cb307dc405e545b788cf580fa37af4236d97b07a": {
     functionName: "getAuditLighthouseIssues_createServerFn_handler",
-    importer: () => import("./assets/lighthouse-D9xNaht6.js")
+    importer: () => import("./assets/lighthouse-BzL_s6BB.js")
   },
   "956a5e2004016739fc80341f1095d7bd8a96655c6c9fe7ba4126d97f40498e2a": {
     functionName: "listGscSites_createServerFn_handler",
-    importer: () => import("./assets/gsc-D2xygDB4.js")
+    importer: () => import("./assets/gsc-COmfauX7.js")
   },
   "9632bd92f3de61b172319c2b693ceaafbbc52f214ba2a4fb93531fefa5b96d74": {
     functionName: "addTrackingKeywords_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
+    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
   },
   "9ce7a2858b82783ef908f4396d61f4645b09ab4cbc435936a1495f8c23bcdb8d": {
     functionName: "deleteSavedKeywordTag_createServerFn_handler",
-    importer: () => import("./assets/keywords-CmeE_3hp.js")
+    importer: () => import("./assets/keywords-C1wS76Ga.js")
   },
   "9d62c976afd0592ac01d146421e81b4b46e99090b01e75b15797fba6d6af5e1d": {
     functionName: "disconnectGa4_createServerFn_handler",
-    importer: () => import("./assets/ga4-Cu52Vnpo.js")
+    importer: () => import("./assets/ga4-CpJEqmRD.js")
   },
   "9da63329d53b960da32b79472469175d63f38b5e71bcef0cacabb66cba684931": {
     functionName: "getRankConfigTrend_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
+    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
   },
   "9f89caac05689c3f844d5e9fdb4453cd3dbe85e64cddf60d717dad8ccc0ef965": {
     functionName: "getArchivedProjects_createServerFn_handler",
-    importer: () => import("./assets/projects-D9ETGupJ.js")
+    importer: () => import("./assets/projects-DSk1oaVL.js")
   },
   "a19f7c4228fdbf301aeba791a8732ae65a0018a25d353bdeed6343876396dd0d": {
     functionName: "getSerpAnalysis_createServerFn_handler",
-    importer: () => import("./assets/keywords-CmeE_3hp.js")
+    importer: () => import("./assets/keywords-C1wS76Ga.js")
   },
   "a251675043aa688af223c180c37e19f98f6652a33f993dc7d1b14c4ce4ed3589": {
     functionName: "getSearchPerformanceReport_createServerFn_handler",
-    importer: () => import("./assets/searchPerformance-CBJ3UPDe.js")
+    importer: () => import("./assets/searchPerformance-Cl-CdH7L.js")
   },
   "a28e240f440a737b1ba00fa06c35615836e9658df9c6a9b04b18bd57f4533a93": {
     functionName: "getCrawlProgress_createServerFn_handler",
-    importer: () => import("./assets/audit-1ERYwzgk.js")
+    importer: () => import("./assets/audit-CQLYc956.js")
   },
   "a2d6a29497c1bebbf28ef40173a2712df71d7f163b0d27ba172aa05b8d2bd882": {
     functionName: "updateProjectContext_createServerFn_handler",
-    importer: () => import("./assets/projectContext-aWSDUZfN.js")
+    importer: () => import("./assets/projectContext-CgLdz2zY.js")
   },
   "a49c4261f3f65e415401c7162c49edf3e6134bc3554b0b96f1230779dcdebd9b": {
     functionName: "getBacklinksOverview_createServerFn_handler",
-    importer: () => import("./assets/backlinks-acJ3YjnO.js")
+    importer: () => import("./assets/backlinks-B50YE_Y-.js")
   },
   "a4a9247a2916093ffa4adf9b4628e1d7f55af8b119ae1f0147a8b5ef5fd08691": {
     functionName: "getBacklinksRows_createServerFn_handler",
-    importer: () => import("./assets/backlinks-acJ3YjnO.js")
+    importer: () => import("./assets/backlinks-B50YE_Y-.js")
   },
   "a4aee3230867065a09c55145cf58c1f5bc0fb9ed2f053bda4ac2d635a4d2bcb4": {
     functionName: "getSearchPerformanceTable_createServerFn_handler",
-    importer: () => import("./assets/searchPerformance-CBJ3UPDe.js")
+    importer: () => import("./assets/searchPerformance-Cl-CdH7L.js")
   },
   "a4c5ccb6a409cc77e5e7b9193c9dc297024a48793fcd4437e01eb3aa2e1e71ea": {
     functionName: "getGa4Connection_createServerFn_handler",
-    importer: () => import("./assets/ga4-Cu52Vnpo.js")
+    importer: () => import("./assets/ga4-CpJEqmRD.js")
   },
   "a652f6f5ac08420a126c8459db2cdb1b3b0da797b0151824db9674012541f2d3": {
     functionName: "updateProject_createServerFn_handler",
-    importer: () => import("./assets/projects-D9ETGupJ.js")
+    importer: () => import("./assets/projects-DSk1oaVL.js")
   },
   "a6e76ddc449222a502da7b7425f361fcfb4df793782aee76909707bf70ee90d4": {
     functionName: "saveOnboardingSite_createServerFn_handler",
-    importer: () => import("./assets/onboardingChat-Bb6b4c45.js")
+    importer: () => import("./assets/onboardingChat-C31tgBYx.js")
   },
   "a966ba8dbd2e5e2548b12a6c770c26da924f90ee327285fecd7df1d7afeafe95": {
     functionName: "getDashboardActivation_createServerFn_handler",
-    importer: () => import("./assets/dashboard-CcujqZW7.js")
+    importer: () => import("./assets/dashboard-D1TPl9KL.js")
   },
   "aef09a57d39104b1d10659a92003c6f2a2a124fab74bdfc9358f984506751295": {
     functionName: "getGa4DashboardReport_createServerFn_handler",
-    importer: () => import("./assets/ga4-Cu52Vnpo.js")
+    importer: () => import("./assets/ga4-CpJEqmRD.js")
   },
   "afea34b6bf4da665d300c562fed995ffb979fe6ebb3bdb7d08c7ce493506a148": {
     functionName: "listGa4Properties_createServerFn_handler",
-    importer: () => import("./assets/ga4-Cu52Vnpo.js")
+    importer: () => import("./assets/ga4-CpJEqmRD.js")
   },
   "b55a517c6ff4161ff3bcf8bfa47562d71dd21f63950855318e723829d164b395": {
     functionName: "getGscGrantStatus_createServerFn_handler",
-    importer: () => import("./assets/gsc-D2xygDB4.js")
+    importer: () => import("./assets/gsc-COmfauX7.js")
   },
   "b5858986f4b26fbc7f2cea62479e3b4d97d5c4af0a61b218af88501443a3939c": {
     functionName: "getSeoApiKeyStatus_createServerFn_handler",
-    importer: () => import("./assets/config-CnBVV0sy.js")
+    importer: () => import("./assets/config-XjIexExe.js")
   },
   "b85790a9585d03d2f8132b707c468c39db0e8f6c3f9921647d221ec8a3aa7a60": {
     functionName: "getAuditResults_createServerFn_handler",
-    importer: () => import("./assets/audit-1ERYwzgk.js")
+    importer: () => import("./assets/audit-CQLYc956.js")
   },
   "bae0716c278ff567d6fca6035b6fc999ec74301979582cb6eb930ca66771f85f": {
     functionName: "getWorkspaceMergeStatus_createServerFn_handler",
-    importer: () => import("./assets/workspace-BuNoZTPV.js")
+    importer: () => import("./assets/workspace-CW-kUeQv.js")
   },
   "bb79e98e928653ebc50e8c4bfd905ed74cfd81dc4ad11c40a96e517c7a538648": {
     functionName: "getRankTrackingConfigSummaries_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
+    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
   },
   "bf7707a336fe5f1a810d29eb9ddb4ccee4b8a2f0ce88e94d04a295456d7e71d1": {
     functionName: "getDashboardOverview_createServerFn_handler",
-    importer: () => import("./assets/dashboard-CcujqZW7.js")
+    importer: () => import("./assets/dashboard-D1TPl9KL.js")
   },
   "c36a03514a4a30b2f2aad7b77bba4606e70547fefc757782bb3f12ae4c226619": {
     functionName: "startSelfHostedGa4Link_createServerFn_handler",
-    importer: () => import("./assets/ga4-Cu52Vnpo.js")
+    importer: () => import("./assets/ga4-CpJEqmRD.js")
   },
   "c6715a7072113d7f7ea076796cf28e47be1bab5e1dfd14502e72467efab53306": {
     functionName: "getRankPositionMatrix_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
+    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
   },
   "d034f8888a5e1014831023cf2a868291cfd466101140d59d1f4251fd53203037": {
     functionName: "removeTrackingKeywords_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
+    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
   },
   "d1f2d6df775a95682f80a98e2ced1e2c0553c94a8452a94f9241ab709a5fce60": {
     functionName: "createProject_createServerFn_handler",
-    importer: () => import("./assets/projects-D9ETGupJ.js")
+    importer: () => import("./assets/projects-DSk1oaVL.js")
   },
   "d8e8c6a9e4e7768403aa7d208c2346921cf9660a816886bf406dc62cd437a155": {
     functionName: "refreshDashboardBacklinkSnapshot_createServerFn_handler",
-    importer: () => import("./assets/dashboard-CcujqZW7.js")
+    importer: () => import("./assets/dashboard-D1TPl9KL.js")
   },
   "dd3518eb8d7349f47f651bb345e6a70e7b48073f2557d873f09c577b0deab0bb": {
     functionName: "mergeLegacyWorkspaces_createServerFn_handler",
-    importer: () => import("./assets/workspace-BuNoZTPV.js")
+    importer: () => import("./assets/workspace-CW-kUeQv.js")
   },
   "ddd165935e6b49d3557cb04d17f77f9775c81fbb0c0f735387a032421a266542": {
     functionName: "getLatestRankResults_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
+    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
   },
   "de61ac92db2a9949b67232b0b1132b6cbdd66b7f381be8a22e9c245c8126d1f6": {
     functionName: "getProjectAccess_createServerFn_handler",
-    importer: () => import("./assets/projects-D9ETGupJ.js")
+    importer: () => import("./assets/projects-DSk1oaVL.js")
   },
   "e07b0dfacb31a403133cc5bf5e671e8b7735dd63c2c993749b4ecd399e779acb": {
     functionName: "getLatestRankRun_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
+    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
   },
   "e239daa45c0dc82d2216f3ac9a60781ba3bad43f9837cb6779399d0c3d87885c": {
     functionName: "startAudit_createServerFn_handler",
-    importer: () => import("./assets/audit-1ERYwzgk.js")
+    importer: () => import("./assets/audit-CQLYc956.js")
   },
   "e2b5146b78833600dfd30aa3bda214dfa8c480278644dcff1698db1e51e5759a": {
     functionName: "explorePrompt_createServerFn_handler",
-    importer: () => import("./assets/ai-search-jCMirqX1.js")
+    importer: () => import("./assets/ai-search-BEQFBBxy.js")
   },
   "e808431fe24faa5cddaa82ff3cee05037bdd2ddd1ba1ceef693aac01ca8e68bc": {
     functionName: "getRankKeywordHistory_createServerFn_handler",
-    importer: () => import("./assets/rank-tracking-SCKEhZq3.js")
+    importer: () => import("./assets/rank-tracking-B2CdRJH6.js")
   },
   "ee56593aa127e081b934d6fec3a8bc310d3d98cbb59dd0947c77be7c85514de4": {
     functionName: "setGscSite_createServerFn_handler",
-    importer: () => import("./assets/gsc-D2xygDB4.js")
+    importer: () => import("./assets/gsc-COmfauX7.js")
   },
   "f3b1afadd779b6abc3a38a06587159bb14c03c93475bc4c022b77539dc7dc811": {
     functionName: "setProjectDomain_createServerFn_handler",
-    importer: () => import("./assets/projects-D9ETGupJ.js")
+    importer: () => import("./assets/projects-DSk1oaVL.js")
   },
   "f3ccdf1c5f7849adbe55a38000c0c568b1f72b75fea6deea496f965b8c7ab155": {
     functionName: "getOnboardingAnswers_createServerFn_handler",
-    importer: () => import("./assets/onboarding-Ck-9qRd8.js")
+    importer: () => import("./assets/onboarding-DbqNAr7Y.js")
   },
   "f68c75b95b8026da27b760951b2ab7e797bf30f0be879b42fbf17d336034843c": {
     functionName: "setProjectMarket_createServerFn_handler",
-    importer: () => import("./assets/projects-D9ETGupJ.js")
+    importer: () => import("./assets/projects-DSk1oaVL.js")
   },
   "fa088bd63c78c66cb4de7e8be1d7567e0ec901107ad1afe33e0ffbeecc57bfbc": {
     functionName: "researchKeywords_createServerFn_handler",
-    importer: () => import("./assets/keywords-CmeE_3hp.js")
+    importer: () => import("./assets/keywords-C1wS76Ga.js")
   }
 };
 async function getServerFnById(id, access) {
@@ -5307,8 +5307,8 @@ var getBaseManifest = getProdBaseManifest;
 var createEarlyHintsForRequest = createEarlyHintsCollector;
 async function loadEntries() {
   const [routerEntry, startEntry, pluginAdapters] = await Promise.all([
-    import("./assets/router-c6o5ulT_.js").then((n2) => n2.aB),
-    import("./assets/start-D-I9Usew.js"),
+    import("./assets/router-DtCFKIJH.js").then((n2) => n2.aB),
+    import("./assets/start-Zng7cv0Q.js"),
     import("./assets/empty-plugin-adapters-BFgPZ6_d.js")
   ]);
   return {
@@ -17528,13 +17528,13 @@ function isHostedAuthMode(value) {
   return getAuthMode(value) === "hosted";
 }
 function isHostedClientAuthMode() {
-  return isHostedAuthMode(void 0);
+  return isHostedAuthMode("hosted");
 }
 function isGoogleAuthDisabled() {
-  return false;
+  return true;
 }
 function isEmailVerificationBypassed() {
-  return false;
+  return true;
 }
 const ERROR_CODES = [
   "UNAUTHENTICATED",
@@ -58888,7 +58888,13 @@ function createBaseAuthConfig() {
       accountLinking: {
         // Allow connecting a Google account whose email differs from the
         // logged-in user's (agency/freelancer managing a client's property).
-        allowDifferentEmails: true
+        allowDifferentEmails: true,
+        // LEIFKEN landscape SSO (Authentik OIDC): link a same-email sign-in
+        // to the pre-provisioned admin user instead of failing. Authentik
+        // already verifies the email, so no local verification is required
+        // (pattern from the OL-CRM implementation).
+        trustedProviders: ["authentik"],
+        requireLocalEmailVerified: false
       }
     },
     plugins: [
@@ -58919,6 +58925,31 @@ function createBaseAuthConfig() {
       }),
       genericOAuth({
         config: [
+          // LEIFKEN landscape SSO: Authentik (auth.leifken.ai) as the central
+          // OIDC provider — Authorization Code + PKCE, better-auth as the
+          // client lib. Mirrors the OL-CRM implementation (the landscape's
+          // production pattern): plugin loads only when client id+secret are
+          // set, redirect URI ends in /api/auth/oauth2/callback/authentik,
+          // and the central profile picture maps into user.image. With
+          // SIGNUP_DISABLED, implicit signup is off too: only pre-provisioned
+          // users (the bootstrapped admin) can sign in through it.
+          ...env$1.AUTHENTIK_CLIENT_ID?.trim() && env$1.AUTHENTIK_CLIENT_SECRET?.trim() ? [
+            {
+              providerId: "authentik",
+              clientId: env$1.AUTHENTIK_CLIENT_ID.trim(),
+              clientSecret: env$1.AUTHENTIK_CLIENT_SECRET.trim(),
+              discoveryUrl: `${(env$1.AUTHENTIK_ISSUER_URL?.trim() || "https://auth.leifken.ai/application/o/seo/").replace(/\/?$/, "/")}.well-known/openid-configuration`,
+              scopes: ["openid", "profile", "email"],
+              pkce: true,
+              // Central profile picture: picture claim → user.image
+              // (defensive, exactly as in OL-CRM).
+              mapProfileToUser: (profile) => {
+                const picture = profile.picture;
+                return typeof picture === "string" ? { image: picture } : {};
+              },
+              disableImplicitSignUp: Reflect.get(env$1, "SIGNUP_DISABLED") === "true"
+            }
+          ] : [],
           {
             providerId: GSC_OAUTH_PROVIDER_ID,
             clientId: env$1.GOOGLE_CLIENT_ID?.trim() ?? "",
@@ -66090,7 +66121,7 @@ function parseTaskItems(endpoint, task, itemSchema) {
 }
 let sectionsPromise;
 function loadDataforseoSections() {
-  return sectionsPromise ??= import("./assets/sections-CQhbZ21g.js");
+  return sectionsPromise ??= import("./assets/sections-D54jb_Lt.js");
 }
 function meter(customer, pick, defaultFeature) {
   return (input) => meterDataforseoCall(
@@ -81460,7 +81491,7 @@ export {
   RankTrackingRepository as Z,
   RankTrackingService as _,
   attachRouterServerSsrUtils as a,
-  Ga4AdminApiError as a$,
+  account as a$,
   asAppError as a0,
   AppError as a1,
   getRequiredEnvValue as a2,
@@ -81483,21 +81514,21 @@ export {
   SUBSCRIBE_ROUTE as aJ,
   AUTUMN_MANAGED_ACCESS_FEATURE_ID as aK,
   AUTUMN_PAID_PLAN_ID as aL,
-  isGoogleAuthDisabled as aM,
-  RESEARCH_SCOPE_LABELS as aN,
-  RESEARCH_SCOPES as aO,
-  RESEARCH_SCOPE_DESCRIPTIONS as aP,
-  RESEARCH_SCOPE_EXAMPLES as aQ,
-  createMiddleware$1 as aR,
-  createCsrfMiddleware as aS,
-  resolveDateRange as aT,
-  GscNotConnectedError as aU,
-  isExpectedGrantFailure as aV,
-  jsonCodec as aW,
-  AuditRepository as aX,
-  getJsonFromR2 as aY,
-  Ga4ConnectionRepository as aZ,
-  createGa4AdminClient as a_,
+  RESEARCH_SCOPE_LABELS as aM,
+  RESEARCH_SCOPES as aN,
+  RESEARCH_SCOPE_DESCRIPTIONS as aO,
+  RESEARCH_SCOPE_EXAMPLES as aP,
+  createMiddleware$1 as aQ,
+  createCsrfMiddleware as aR,
+  resolveDateRange as aS,
+  GscNotConnectedError as aT,
+  isExpectedGrantFailure as aU,
+  jsonCodec as aV,
+  AuditRepository as aW,
+  getJsonFromR2 as aX,
+  Ga4ConnectionRepository as aY,
+  createGa4AdminClient as aZ,
+  Ga4AdminApiError as a_,
   getLanguageCode as aa,
   AUTUMN_SEO_DATA_BALANCE_FEATURE_ID as ab,
   AUTUMN_SEO_DATA_TOPUP_BALANCE_FEATURE_ID as ac,
@@ -81526,16 +81557,16 @@ export {
   SqliteAdapter as az,
   getResponse$1 as b,
   parseTaskItems as b$,
-  account as b0,
-  GA4_OAUTH_PROVIDER_ID as b1,
-  Ga4TokenError as b2,
-  Ga4OrganicOverviewService as b3,
-  Ga4ReportError as b4,
-  shiftGa4Date as b5,
-  getAuthMode as b6,
-  isHostedAuthMode as b7,
-  resolveLocalNoAuthContext as b8,
-  resolveCloudflareAccessContext as b9,
+  GA4_OAUTH_PROVIDER_ID as b0,
+  Ga4TokenError as b1,
+  Ga4OrganicOverviewService as b2,
+  Ga4ReportError as b3,
+  shiftGa4Date as b4,
+  getAuthMode as b5,
+  isHostedAuthMode as b6,
+  resolveLocalNoAuthContext as b7,
+  resolveCloudflareAccessContext as b8,
+  getGoogleOAuthClientConfig as b9,
   GSC_SELF_HOSTED_SETUP_DOCS_URL as bA,
   MAX_DATAFORSEO_FILTER_CONDITIONS as bB,
   auditIssues as bC,
@@ -81563,20 +81594,20 @@ export {
   isNoResultsTask as bY,
   isRecord$1 as bZ,
   buildTaskBilling as b_,
-  getGoogleOAuthClientConfig as ba,
-  getAuth as bb,
-  symmetricEncrypt as bc,
-  GSC_OAUTH_SCOPES as bd,
-  GSC_OAUTH_PROVIDER_ID as be,
-  GA4_OAUTH_SCOPES as bf,
-  assertOk as bg,
-  formatLocationLabel as bh,
-  organization$1 as bi,
-  organizationActivationState as bj,
-  SHARED_WORKSPACE_ORGANIZATION_ID as bk,
-  runBatch as bl,
-  gscConnections as bm,
-  ga4Connections as bn,
+  getAuth as ba,
+  symmetricEncrypt as bb,
+  GSC_OAUTH_SCOPES as bc,
+  GSC_OAUTH_PROVIDER_ID as bd,
+  GA4_OAUTH_SCOPES as be,
+  assertOk as bf,
+  formatLocationLabel as bg,
+  organization$1 as bh,
+  organizationActivationState as bi,
+  SHARED_WORKSPACE_ORGANIZATION_ID as bj,
+  runBatch as bk,
+  gscConnections as bl,
+  ga4Connections as bm,
+  isGoogleAuthDisabled as bn,
   version as bo,
   autumnSeoDataCreditsToUsd as bp,
   BILLING_ROUTE as bq,
