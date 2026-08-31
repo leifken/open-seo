@@ -1,1 +1,0 @@
-import{m as u,p as n,u as c,i as d,q as h,r as l,j as r,A as f,O as p}from"./index-CXpUrAO9.js";function x(){const a=u.useSearch(),s=n(),{data:e,isPending:i}=c(),o=d(),t=h(a.redirect);return l.useEffect(()=>{e?.user?.id&&s({href:t,replace:!0})},[s,t,e?.user?.id]),o&&(i||e?.user?.id)?null:r.jsx(f,{children:r.jsx(p,{})})}export{x as component};

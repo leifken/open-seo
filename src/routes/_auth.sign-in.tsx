@@ -243,7 +243,7 @@ function SignInPage() {
                     <p className="text-sm text-error">{errorMessage}</p>
                   ) : null}
                   <button
-                    className="btn btn-soft w-full"
+                    className="btn btn-primary w-full"
                     disabled={!isHostedMode || isSubmitting}
                   >
                     {isSubmitting ? "Signing in..." : "Sign in"}

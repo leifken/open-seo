@@ -1,17 +1,62 @@
 @import "tailwindcss";
 
-@theme {
-  --container-8xl: 88rem;
+/* LEIFKEN AI brand fonts — self-hosted (SIL OFL, see /fonts/OFL.txt), never
+   loaded from a CDN. Geist for everything readable, Geist Mono for labels
+   and figures only. */
+@font-face {
+  font-family: "Geist";
+  src: url("/fonts/Geist-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist";
+  src: url("/fonts/Geist-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist";
+  src: url("/fonts/Geist-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/fonts/GeistMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/fonts/GeistMono-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
 }
 
+@theme {
+  --container-8xl: 88rem;
+  --font-sans:
+    "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    sans-serif;
+  --font-mono:
+    "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* Chart tokens — derived from the LEIFKEN palette (hue family 216°). */
 :root {
-  --trend-grid-color: oklch(56% 0.01 255 / 0.28);
-  --trend-axis-color: oklch(42% 0.01 255 / 0.85);
+  --trend-grid-color: rgba(221, 227, 236, 0.9); /* Linie */
+  --trend-axis-color: rgba(86, 103, 129, 0.85); /* Grau */
   --trend-fill-start-opacity: 0.32;
   --trend-fill-end-opacity: 0.05;
-  --trend-tooltip-bg: oklch(99% 0.005 255 / 0.96);
-  --trend-tooltip-border: oklch(84% 0.01 255 / 0.7);
-  --trend-tooltip-shadow: oklch(0% 0 0 / 0.1);
+  --trend-tooltip-bg: rgba(255, 255, 255, 0.96);
+  --trend-tooltip-border: rgba(221, 227, 236, 0.9);
+  --trend-tooltip-shadow: rgba(13, 28, 50, 0.12);
 }
 
 @plugin "daisyui" {
@@ -19,32 +64,34 @@
   exclude: properties;
 }
 
-/* Light theme */
+/* Light theme — LEIFKEN AI palette (216° family; see DESIGN-SYSTEM.md).
+   Blue #1B3966 is structure, orange is THE action: #C23F14 as button
+   surface on light (hover #E94E1B via the btn overrides below). */
 @plugin "daisyui/theme" {
   name: "openseo";
   default: true;
   prefersdark: false;
   color-scheme: light;
-  --color-base-100: oklch(100% 0 0);
-  --color-base-200: oklch(97% 0 0);
-  --color-base-300: oklch(92% 0 0);
-  --color-base-content: oklch(20% 0 0);
-  --color-primary: oklch(50% 0.12 262);
-  --color-primary-content: oklch(100% 0 0);
-  --color-secondary: oklch(55% 0.15 145);
-  --color-secondary-content: oklch(100% 0 0);
-  --color-accent: oklch(50% 0.12 262);
-  --color-accent-content: oklch(100% 0 0);
-  --color-neutral: oklch(25% 0 0);
-  --color-neutral-content: oklch(100% 0 0);
-  --color-info: oklch(70% 0.15 230);
-  --color-info-content: oklch(100% 0 0);
-  --color-success: oklch(65% 0.18 145);
-  --color-success-content: oklch(100% 0 0);
-  --color-warning: oklch(80% 0.15 80);
-  --color-warning-content: oklch(100% 0 0);
-  --color-error: oklch(65% 0.2 25);
-  --color-error-content: oklch(100% 0 0);
+  --color-base-100: #ffffff; /* Weiß — Karten, Formulare */
+  --color-base-200: #f7f9fb; /* Nebel — App-Grund */
+  --color-base-300: #edf1f6; /* Zwischen — Hover-Zeilen */
+  --color-base-content: #0d1c32; /* Navy — Fließtext */
+  --color-primary: #c23f14; /* Signal dunkel — Buttonfläche auf hell */
+  --color-primary-content: #ffffff;
+  --color-secondary: #1b3966; /* Blau — Struktur */
+  --color-secondary-content: #ffffff;
+  --color-accent: #c23f14;
+  --color-accent-content: #ffffff;
+  --color-neutral: #1b3966;
+  --color-neutral-content: #ffffff;
+  --color-info: #1b3966;
+  --color-info-content: #ffffff;
+  --color-success: #15803d;
+  --color-success-content: #ffffff;
+  --color-warning: #b45309;
+  --color-warning-content: #ffffff;
+  --color-error: #b91c1c;
+  --color-error-content: #ffffff;
   --radius-selector: 0.5rem;
   --radius-field: 0.5rem;
   --radius-box: 0.75rem;
@@ -55,31 +102,32 @@
   --noise: 0;
 }
 
-/* Dark theme - auto-activates via prefers-color-scheme */
+/* Dark theme — Navy world: primary flips to orange #E94E1B (per
+   DESIGN-SYSTEM.md §2b), surfaces step Navy → Blau. */
 @plugin "daisyui/theme" {
   name: "openseo-dark";
   prefersdark: true;
   color-scheme: dark;
-  --color-base-100: oklch(18% 0 0);
-  --color-base-200: oklch(12% 0 0);
-  --color-base-300: oklch(27% 0 0);
-  --color-base-content: oklch(92% 0 0);
-  --color-primary: oklch(66% 0.12 262);
-  --color-primary-content: oklch(100% 0 0);
-  --color-secondary: oklch(60% 0.15 145);
-  --color-secondary-content: oklch(100% 0 0);
-  --color-accent: oklch(66% 0.12 262);
-  --color-accent-content: oklch(100% 0 0);
-  --color-neutral: oklch(85% 0 0);
-  --color-neutral-content: oklch(20% 0 0);
-  --color-info: oklch(70% 0.15 230);
-  --color-info-content: oklch(100% 0 0);
-  --color-success: oklch(65% 0.18 145);
-  --color-success-content: oklch(100% 0 0);
-  --color-warning: oklch(80% 0.15 80);
-  --color-warning-content: oklch(100% 0 0);
-  --color-error: oklch(65% 0.2 25);
-  --color-error-content: oklch(100% 0 0);
+  --color-base-100: #0d1c32; /* Navy — Panels */
+  --color-base-200: #0a1628; /* dunkler Grund unter den Panels */
+  --color-base-300: #1b3966; /* Blau — Karten/Hover auf Navy */
+  --color-base-content: #ffffff;
+  --color-primary: #e94e1b; /* Signalorange — Aktion auf dunkel */
+  --color-primary-content: #ffffff;
+  --color-secondary: #1b3966;
+  --color-secondary-content: #ffffff;
+  --color-accent: #e94e1b;
+  --color-accent-content: #ffffff;
+  --color-neutral: #a8b7d1; /* Himmel */
+  --color-neutral-content: #0d1c32;
+  --color-info: #a8b7d1;
+  --color-info-content: #0d1c32;
+  --color-success: #15803d;
+  --color-success-content: #ffffff;
+  --color-warning: #b45309;
+  --color-warning-content: #ffffff;
+  --color-error: #b91c1c;
+  --color-error-content: #ffffff;
   --radius-selector: 0.5rem;
   --radius-field: 0.5rem;
   --radius-box: 0.75rem;
@@ -162,7 +210,17 @@ html[data-theme="openseo-dark"]
     .btn-outline,
     .btn-soft
   ) {
-  --btn-color: oklch(25% 0 0);
+  --btn-color: #1b3966; /* Blau — Sekundärfläche auf dunkel (CI) */
+}
+
+/* LEIFKEN app button formula: surface #C23F14, hover lightens to #E94E1B
+   (dark theme starts at #E94E1B and hovers to its screen tone #F26430) —
+   the flip of daisyUI's default darken-on-hover. */
+html[data-theme="openseo"] .btn-primary:hover {
+  --btn-color: #e94e1b;
+}
+html[data-theme="openseo-dark"] .btn-primary:hover {
+  --btn-color: #f26430;
 }
 
 /* Light mode: the base-200 default button is nearly invisible on the
@@ -179,6 +237,24 @@ html[data-theme="openseo"]
   ) {
   --btn-color: var(--color-base-100);
   --btn-border: var(--color-base-300);
+}
+
+/* Brand wordmark swap: `standard` (blue/orange) on light surfaces,
+   `negativ` (white/orange) on dark — driven by the daisyUI data-theme. */
+html[data-theme="openseo-dark"] .logo-light {
+  display: none;
+}
+html[data-theme="openseo"] .logo-dark {
+  display: none;
+}
+
+/* App-name half of the logo lockup: orange text — #C23F14 on light,
+   #E94E1B on dark (the one orange element in the chrome). */
+.brand-appname {
+  color: #c23f14;
+}
+html[data-theme="openseo-dark"] .brand-appname {
+  color: #e94e1b;
 }
 
 /* Underline tabs: DaisyUI's tabs-border underlines the active tab with
@@ -211,9 +287,9 @@ html[data-theme="openseo"]
 /* Tag chip colors — muted background + readable text in both themes.
    Text uses darker shades on light theme for contrast, lighter on dark. */
 .tag-chip-slate {
-  background-color: color-mix(in oklab, #64748b 14%, transparent);
-  color: #334155;
-  --tw-ring-color: color-mix(in oklab, #64748b 30%, transparent);
+  background-color: color-mix(in oklab, #566781 14%, transparent);
+  color: #566781;
+  --tw-ring-color: color-mix(in oklab, #566781 30%, transparent);
 }
 .tag-chip-rose {
   background-color: color-mix(in oklab, #f43f5e 14%, transparent);
@@ -233,7 +309,7 @@ html[data-theme="openseo"]
 .tag-chip-emerald {
   background-color: color-mix(in oklab, #10b981 14%, transparent);
   color: #065f46;
-  --tw-ring-color: color-mix(in oklab, #10b981 30%, transparent);
+  --tw-ring-color: color-mix(in oklab, #15803d 30%, transparent);
 }
 .tag-chip-sky {
   background-color: color-mix(in oklab, #0ea5e9 14%, transparent);
@@ -252,7 +328,7 @@ html[data-theme="openseo"]
 }
 
 html[data-theme="openseo-dark"] .tag-chip-slate {
-  color: #cbd5e1;
+  color: #a8b7d1;
 }
 html[data-theme="openseo-dark"] .tag-chip-rose {
   color: #fda4af;
@@ -282,15 +358,15 @@ html[data-theme="openseo-dark"] .tag-chip-fuchsia {
 }
 
 .score-tier-na {
-  background-color: color-mix(in oklab, #94a3b8 12%, transparent);
-  color: #475569;
-  --tw-ring-color: color-mix(in oklab, #94a3b8 28%, transparent);
+  background-color: color-mix(in oklab, #8c9bb6 12%, transparent);
+  color: #566781;
+  --tw-ring-color: color-mix(in oklab, #8c9bb6 28%, transparent);
 }
 
 .score-tier-1 {
-  background-color: color-mix(in oklab, #10b981 15%, transparent);
-  color: #065f46;
-  --tw-ring-color: color-mix(in oklab, #10b981 30%, transparent);
+  background-color: color-mix(in oklab, #15803d 15%, transparent);
+  color: #15803d;
+  --tw-ring-color: color-mix(in oklab, #15803d 30%, transparent);
 }
 
 .score-tier-2 {
@@ -300,9 +376,9 @@ html[data-theme="openseo-dark"] .tag-chip-fuchsia {
 }
 
 .score-tier-3 {
-  background-color: color-mix(in oklab, #eab308 16%, transparent);
-  color: #854d0e;
-  --tw-ring-color: color-mix(in oklab, #eab308 32%, transparent);
+  background-color: color-mix(in oklab, #b45309 16%, transparent);
+  color: #b45309;
+  --tw-ring-color: color-mix(in oklab, #b45309 32%, transparent);
 }
 
 .score-tier-4 {
@@ -312,9 +388,9 @@ html[data-theme="openseo-dark"] .tag-chip-fuchsia {
 }
 
 .score-tier-5 {
-  background-color: color-mix(in oklab, #ef4444 15%, transparent);
-  color: #991b1b;
-  --tw-ring-color: color-mix(in oklab, #ef4444 30%, transparent);
+  background-color: color-mix(in oklab, #b91c1c 15%, transparent);
+  color: #b91c1c;
+  --tw-ring-color: color-mix(in oklab, #b91c1c 30%, transparent);
 }
 
 .score-tier-6 {
@@ -324,7 +400,7 @@ html[data-theme="openseo-dark"] .tag-chip-fuchsia {
 }
 
 html[data-theme="openseo-dark"] .score-tier-na {
-  color: #cbd5e1;
+  color: #a8b7d1;
 }
 html[data-theme="openseo-dark"] .score-tier-1 {
   color: #6ee7b7;
@@ -346,13 +422,13 @@ html[data-theme="openseo-dark"] .score-tier-6 {
 }
 
 html[data-theme="openseo-dark"] {
-  --trend-grid-color: oklch(78% 0.01 255 / 0.22);
-  --trend-axis-color: oklch(84% 0.01 255 / 0.62);
+  --trend-grid-color: rgba(168, 183, 209, 0.2); /* Himmel */
+  --trend-axis-color: rgba(168, 183, 209, 0.7);
   --trend-fill-start-opacity: 0.24;
   --trend-fill-end-opacity: 0.03;
-  --trend-tooltip-bg: oklch(21% 0.01 255 / 0.95);
-  --trend-tooltip-border: oklch(40% 0.01 255 / 0.65);
-  --trend-tooltip-shadow: oklch(0% 0 0 / 0.35);
+  --trend-tooltip-bg: rgba(13, 28, 50, 0.95); /* Navy */
+  --trend-tooltip-border: rgba(27, 57, 102, 0.8); /* Blau */
+  --trend-tooltip-shadow: rgba(0, 0, 0, 0.35);
 }
 
 html[data-theme="openseo-dark"] .alert-warning {

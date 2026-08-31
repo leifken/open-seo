@@ -1,19 +1,25 @@
 {
-  "name": "OpenSEO",
-  "short_name": "OpenSEO",
+  "name": "LEIFKEN SEO",
+  "short_name": "SEO",
   "icons": [
     {
-      "src": "/android-chrome-192x192.png",
+      "src": "/brand/icon-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/android-chrome-512x512.png",
+      "src": "/brand/icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
+    },
+    {
+      "src": "/brand/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
-  "theme_color": "#0a0f0d",
-  "background_color": "#0a0f0d",
+  "theme_color": "#0D1C32",
+  "background_color": "#F7F9FB",
   "display": "standalone"
 }

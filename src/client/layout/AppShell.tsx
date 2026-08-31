@@ -180,8 +180,21 @@ function MobileTopBar({
       >
         <Menu className="h-5 w-5" />
       </button>
-      <Link to="/" className="ml-1 font-semibold text-base-content">
-        OpenSEO
+      <Link to="/" className="ml-1 flex items-center" aria-label="LEIFKEN SEO">
+        <img
+          src="/brand/leifken-lang-standard.svg"
+          alt=""
+          className="logo-light h-10 w-auto"
+        />
+        <img
+          src="/brand/leifken-lang-negativ.svg"
+          alt=""
+          className="logo-dark h-10 w-auto"
+        />
+        <span className="mx-3 h-6 w-px bg-gradient-to-b from-transparent via-[#8C9BB6] to-transparent" />
+        <span className="brand-appname font-mono text-[0.78rem] font-semibold uppercase tracking-[0.16em]">
+          SEO
+        </span>
       </Link>
     </div>
   );

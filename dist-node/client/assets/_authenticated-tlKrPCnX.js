@@ -1,0 +1,1 @@
+import{j as e,A as n,O as o}from"./index-DBrb3nLL.js";import{u}from"./useHostedAuthRouteGuard-Bsy8VsVm.js";function r(){const t=u();return!t.isHostedMode||!t.canRenderAuthenticatedContent?null:e.jsx(n,{children:e.jsx(o,{})})}export{r as component};
