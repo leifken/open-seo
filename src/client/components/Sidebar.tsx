@@ -120,7 +120,8 @@ export function Sidebar({ projectId, onNavigate, onClose }: SidebarProps) {
 
   return (
     <div className="flex h-full w-60 flex-col bg-base-200">
-      <div className="flex items-center justify-between px-4 pb-2 pt-3">
+      {/* LEIFKEN: h-14 header row with breathing room under the lockup. */}
+      <div className="flex min-h-14 items-center justify-between px-4 pb-4 pt-5">
         <Link
           to="/"
           onClick={onNavigate}

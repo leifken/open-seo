@@ -8,6 +8,7 @@ import {
   SeoApiStatusBanners,
 } from "@/client/layout/AppShellParts";
 import { GscReEngagementModal } from "@/client/features/gsc/GscReEngagementModal";
+import { LeifkenTopBar } from "@/client/components/LeifkenTopBar";
 import { Sidebar } from "@/client/components/Sidebar";
 import { BILLING_ROUTE } from "@/shared/billing";
 import { getSeoApiKeyStatus } from "@/serverFunctions/config";
@@ -126,9 +127,12 @@ export function AuthenticatedAppLayout({
           onOpenDrawer={() => setDrawerOpen(true)}
         />
 
+        {/* LEIFKEN landscape top bar (desktop): user menu with avatar, right. */}
+        <LeifkenTopBar />
+
         {/* PostHog-style cutout: the main content sits on a raised panel with a
             thin strip of the sidebar background above it and a hairline border. */}
-        <div className="flex min-h-0 flex-1 flex-col md:pt-2">
+        <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-base-100 md:rounded-tl-lg md:border-l md:border-t md:border-base-300">
             <SeoApiStatusBanners
               shouldShowSeoApiWarning={shouldShowSeoApiWarning}
