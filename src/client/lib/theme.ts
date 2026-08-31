@@ -37,16 +37,11 @@ function writeThemePreference(themePreference: ThemePreference) {
 }
 
 function resolveThemeName(themePreference: ThemePreference): string {
-  if (themePreference === "light") return LIGHT_THEME_NAME;
   if (themePreference === "dark") return DARK_THEME_NAME;
 
-  // "system" — resolve from OS preference
-  if (
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches
-  ) {
-    return DARK_THEME_NAME;
-  }
+  // LEIFKEN landscape rule: light leads — every app renders light by
+  // default, regardless of the OS scheme. Dark stays available as an
+  // explicit per-user choice in the settings.
   return LIGHT_THEME_NAME;
 }
 
@@ -122,10 +117,9 @@ export function useThemePreference() {
 export const themePreferenceInitScript = `(() => {
   try {
     var p = window.localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});
-    var t;
-    if (p === "light") t = ${JSON.stringify(LIGHT_THEME_NAME)};
-    else if (p === "dark") t = ${JSON.stringify(DARK_THEME_NAME)};
-    else t = window.matchMedia("(prefers-color-scheme: dark)").matches ? ${JSON.stringify(DARK_THEME_NAME)} : ${JSON.stringify(LIGHT_THEME_NAME)};
+    // Light leads (LEIFKEN landscape): dark only as an explicit user choice,
+    // never from the OS scheme.
+    var t = p === "dark" ? ${JSON.stringify(DARK_THEME_NAME)} : ${JSON.stringify(LIGHT_THEME_NAME)};
     document.documentElement.setAttribute("data-theme", t);
   } catch {
     document.documentElement.setAttribute("data-theme", ${JSON.stringify(LIGHT_THEME_NAME)});

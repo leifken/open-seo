@@ -106,7 +106,9 @@
    DESIGN-SYSTEM.md §2b), surfaces step Navy → Blau. */
 @plugin "daisyui/theme" {
   name: "openseo-dark";
-  prefersdark: true;
+  /* Light leads: never auto-activate dark from the OS scheme (LEIFKEN rule);
+     dark is only reachable through the explicit theme setting. */
+  prefersdark: false;
   color-scheme: dark;
   --color-base-100: #0d1c32; /* Navy — Panels */
   --color-base-200: #0a1628; /* dunkler Grund unter den Panels */
