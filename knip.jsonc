@@ -20,6 +20,12 @@
     "src/db/pg/schema.ts",
     // Standalone CLI/dev scripts, invoked via package.json scripts
     "scripts/**",
+    // Node self-host runtime: entry wired via vite.config.node.ts, shims via
+    // resolve.alias for cloudflare:* modules
+    "src/node-runtime/entry.ts",
+    "src/node-runtime/cf-workers-shim.ts",
+    "src/node-runtime/cf-workflows-shim.ts",
+    "src/node-runtime/cf-email-shim.ts",
     // DataForSEO section barrel — consumed via the dynamic import in
     // client.ts (loadDataforseoSections) + property access, which knip
     // can't trace

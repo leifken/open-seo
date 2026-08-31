@@ -1,0 +1,73 @@
+# LEIFKEN self-host stack: native Node runtime + Postgres + Redis.
+# Local test:   docker compose -f compose.node.yaml up -d --build
+# Coolify uses this file as the compose definition; secrets come from the
+# Coolify environment, never from the repo.
+services:
+  open-seo:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      - PORT=${PORT:-3001}
+      - AUTH_MODE=${AUTH_MODE:-hosted}
+      - SIGNUP_DISABLED=${SIGNUP_DISABLED:-true}
+      - GOOGLE_AUTH_DISABLED=${GOOGLE_AUTH_DISABLED:-true}
+      - BYPASS_EMAIL_VERIFICATION=${BYPASS_EMAIL_VERIFICATION:-true}
+      - BILLING_DISABLED=true
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:?set a 32+ char secret}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-http://localhost:3001}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - DATABASE_PROVIDER=postgres
+      - POSTGRES_DATABASE_URL=postgres://openseo:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/openseo
+      - REDIS_URL=redis://redis:6379
+      - DATA_DIR=/data
+      - DATAFORSEO_API_KEY=${DATAFORSEO_API_KEY:?set DATAFORSEO_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - OPENSEO_TELEMETRY_DISABLED=${OPENSEO_TELEMETRY_DISABLED:-1}
+      - VITE_SHOW_DEVTOOLS=false
+    ports:
+      - "127.0.0.1:${PORT:-3001}:${PORT:-3001}"
+    volumes:
+      - open_seo_node_data:/data
+      - open_seo_node_build:/app/dist-node
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: openseo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: openseo
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    volumes:
+      - open_seo_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openseo -d openseo"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # KV cache + BullMQ job state; appendonly keeps queued workflow jobs
+    # across restarts.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - open_seo_redis_data:/data
+
+volumes:
+  open_seo_node_data:
+  open_seo_node_build:
+  open_seo_pg_data:
+  open_seo_redis_data:

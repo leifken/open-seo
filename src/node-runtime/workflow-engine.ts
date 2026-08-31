@@ -89,7 +89,7 @@ function getQueue(): Queue {
 }
 
 // "5 seconds" | "2 minutes" | "1 hour" | number (ms)
-export function parseDuration(value: string | number | undefined): number {
+function parseDuration(value: string | number | undefined): number {
   if (value === undefined) return 0;
   if (typeof value === "number") return value;
   const match = /^(\d+(?:\.\d+)?)\s*(ms|milliseconds?|s|seconds?|m|minutes?|h|hours?|d|days?)$/.exec(

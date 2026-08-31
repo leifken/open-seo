@@ -5,6 +5,7 @@ yarn.lock
 .dev.vars
 dist/
 dist-sourcemaps/
+dist-node/
 .wrangler
 /tmp
 
