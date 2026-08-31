@@ -2,9 +2,10 @@
 // Delegates every request to the untouched upstream Worker entry
 // (src/server.ts) with a Node-built env and ExecutionContext, and replaces
 // the wrangler cron triggers with in-process timers.
-import server from "../server";
+import server, { SiteAuditWorkflow, RankCheckWorkflow } from "../server";
 import { nodeEnv } from "./env";
 import { waitUntil } from "./cf-workers-shim";
+import { registerWorkflows, startWorkflowWorker } from "./workflow-engine";
 
 const makeCtx = (): ExecutionContext =>
   ({
@@ -76,6 +77,18 @@ const globalState = globalThis as Record<symbol, boolean>;
 if (!globalState[CRON_FLAG] && process.env.DISABLE_CRON !== "1") {
   globalState[CRON_FLAG] = true;
   startCron();
+}
+
+// The workflow worker runs in-process. Workflow classes come from the
+// untouched upstream entry's named exports; the registry keys must match the
+// names used by makeWorkflowBinding in env.ts.
+registerWorkflows({ SiteAuditWorkflow, RankCheckWorkflow });
+const WORKER_FLAG = Symbol.for("openseo.node-runtime.workflow-worker");
+if (!globalState[WORKER_FLAG] && process.env.DISABLE_WORKFLOW_WORKER !== "1") {
+  globalState[WORKER_FLAG] = true;
+  startWorkflowWorker().catch((err) =>
+    console.error("[node-runtime] workflow worker failed to start:", err),
+  );
 }
 
 export default {

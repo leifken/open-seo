@@ -18,38 +18,45 @@ export function waitUntil(promise: Promise<unknown>): void {
 }
 
 export function drainWaitUntil(): Promise<unknown> {
-  return Promise.allSettled([...pending]);
+  return Promise.allSettled(pending);
 }
 
 // Minimal base classes: enough for `extends` clauses to evaluate at module
-// load. The scratchpad DO gets a real ctx from the do-scratchpad milestone;
-// until then nothing instantiates these under Node.
+// load and for subclasses to reach this.ctx/this.env (assigned manually so
+// the property named `env` doesn't shadow this module's `env` export).
 export class DurableObject<TEnv = unknown> {
-  constructor(
-    protected ctx: unknown,
-    protected env: TEnv,
-  ) {}
+  protected ctx: unknown;
+  protected env: TEnv;
+  constructor(ctx: unknown, workerEnv: TEnv) {
+    this.ctx = ctx;
+    this.env = workerEnv;
+  }
 }
 
 export class WorkflowEntrypoint<TEnv = unknown, TParams = unknown> {
-  constructor(
-    protected ctx: unknown,
-    protected env: TEnv,
-  ) {}
+  protected ctx: unknown;
+  protected env: TEnv;
+  constructor(ctx: unknown, workerEnv: TEnv) {
+    this.ctx = ctx;
+    this.env = workerEnv;
+  }
   // Subclasses override run(event, step); the workflow engine invokes it.
   declare run: (event: { payload: TParams }, step: unknown) => Promise<unknown>;
 }
 
 // A few libraries feature-detect `WorkerEntrypoint`; harmless to provide.
 export class WorkerEntrypoint<TEnv = unknown> {
-  constructor(
-    protected ctx: unknown,
-    protected env: TEnv,
-  ) {}
+  protected ctx: unknown;
+  protected env: TEnv;
+  constructor(ctx: unknown, workerEnv: TEnv) {
+    this.ctx = ctx;
+    this.env = workerEnv;
+  }
 }
 
 // The agents SDK imports RpcTarget for its RPC surface; nothing instantiates
 // it under Node until the chat milestone.
+// oxlint-disable-next-line typescript/no-extraneous-class
 export class RpcTarget {}
 
 // The agents SDK reads these defensively (`tracing ?? fallback`,

@@ -65,7 +65,7 @@ async function walkKeys(root: string): Promise<string[]> {
     const rel = path.relative(root, path.join(entry.parentPath, entry.name));
     keys.push(relPathToKey(rel));
   }
-  return keys.sort();
+  return keys.toSorted();
 }
 
 export class FsBucket {

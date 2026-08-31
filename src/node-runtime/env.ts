@@ -4,10 +4,8 @@
 // self-host, which the app's config reading already relies on).
 import { RedisKvNamespace } from "./kv-redis";
 import { FsBucket } from "./r2-fs";
-import {
-  makeUnportedDurableObjectNamespace,
-  makeUnportedWorkflowBinding,
-} from "./unported";
+import { makeScratchpadNamespace } from "./do-scratchpad";
+import { makeWorkflowBinding } from "./workflow-engine";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -39,9 +37,14 @@ const bindings: Record<string, unknown> = {
   get HYPERDRIVE() {
     return { connectionString: required("POSTGRES_DATABASE_URL") };
   },
-  SITE_AUDIT_WORKFLOW: makeUnportedWorkflowBinding("SITE_AUDIT_WORKFLOW"),
-  RANK_CHECK_WORKFLOW: makeUnportedWorkflowBinding("RANK_CHECK_WORKFLOW"),
-  AUDIT_SCRATCHPAD: makeUnportedDurableObjectNamespace("AUDIT_SCRATCHPAD"),
+  SITE_AUDIT_WORKFLOW: makeWorkflowBinding("SiteAuditWorkflow"),
+  RANK_CHECK_WORKFLOW: makeWorkflowBinding("RankCheckWorkflow"),
+  AUDIT_SCRATCHPAD: makeScratchpadNamespace(
+    async () =>
+      (await import("../server/features/audit/AuditScratchpad"))
+        .AuditScratchpad,
+    () => nodeEnv,
+  ),
   // Chat agents (SAM, onboarding) are the last porting milestone. Leaving the
   // bindings out entirely makes `routeAgentRequest` fall through to 404.
 };

@@ -1,4 +1,9 @@
 minimumReleaseAge: 11520
+
+# Node self-host port (src/node-runtime): better-sqlite3 backs the audit
+# scratchpad and needs its native build step.
+onlyBuiltDependencies:
+  - better-sqlite3
 minimumReleaseAgeExclude:
   - "@every-app/*"
   # TEMPORARY (remove after 2026-08-15): workers-oauth-provider 0.10.2 was
