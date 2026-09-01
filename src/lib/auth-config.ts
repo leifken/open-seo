@@ -80,6 +80,11 @@ export function createBaseAuthConfig() {
                   ).replace(/\/?$/, "/")}.well-known/openid-configuration`,
                   scopes: ["openid", "profile", "email"],
                   pkce: true,
+                  // Without this better-auth only applies the mapped profile
+                  // when it first creates the account — an existing user keeps
+                  // whatever name/picture it was bootstrapped with. The central
+                  // profile is the source of truth, so re-apply it every login.
+                  overrideUserInfo: true,
                   // Central profile picture: picture claim → user.image
                   // (defensive, exactly as in OL-CRM).
                   // Take the central profile on every login: full name plus
