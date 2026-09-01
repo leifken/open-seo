@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Pencil } from "lucide-react";
+import { Pencil, Sparkles } from "lucide-react";
 import { getStandardErrorMessage } from "@/client/lib/error-messages";
 import { getProjectContext } from "@/serverFunctions/projectContext";
 import {
@@ -20,6 +20,7 @@ import {
   RowActions,
   SectionHeader,
   projectContextQueryKey,
+  useContextDraftFromWebsite,
   useContextUpdate,
   type ProjectContextData,
 } from "./shared";
@@ -41,6 +42,36 @@ const SECTION_PLACEHOLDERS: Record<ProjectContextSectionKey, string> = {
   writing_preferences:
     "e.g. Plain and direct, no hype. Never say 'seamless' or 'game-changing'. Don't write about competitor pricing.",
 };
+
+/**
+ * LEIFKEN addition: one click reads the project's own website and drafts the
+ * whole context from it, instead of filling four text boxes by hand.
+ */
+function DraftFromWebsiteButton({ projectId }: { projectId: string }) {
+  const draft = useContextDraftFromWebsite(projectId);
+
+  return (
+    <button
+      type="button"
+      className="btn btn-primary btn-sm shrink-0"
+      disabled={draft.isPending}
+      onClick={() => draft.mutate()}
+      title="Liest die Website des Projekts und füllt den Kontext automatisch"
+    >
+      {draft.isPending ? (
+        <>
+          <span className="loading loading-spinner loading-xs" />
+          Website wird ausgewertet...
+        </>
+      ) : (
+        <>
+          <Sparkles className="h-4 w-4" />
+          Website scrapen
+        </>
+      )}
+    </button>
+  );
+}
 
 export function ProjectContextPage({ projectId }: { projectId: string }) {
   const contextQuery = useQuery({
@@ -78,11 +109,14 @@ export function ProjectContextPage({ projectId }: { projectId: string }) {
     // key remounts the whole page when the project switches under it, so no
     // draft, open form, or edit state can carry over to another project.
     <div key={projectId} className="space-y-8">
-      <p className="text-sm text-base-content/70">
-        What SAM, Claude Code, and any connected MCP client know about this
-        project. They read it before they work and write back what they learn,
-        so correct anything that looks wrong.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-2xl text-sm text-base-content/70">
+          What SAM, Claude Code, and any connected MCP client know about this
+          project. They read it before they work and write back what they
+          learn, so correct anything that looks wrong.
+        </p>
+        <DraftFromWebsiteButton projectId={projectId} />
+      </div>
 
       <ProseSections
         projectId={projectId}

@@ -4,7 +4,7 @@ import { LaunchFormCard } from "@/client/features/audit/launch/LaunchFormCard";
 import { useLaunchController } from "@/client/features/audit/launch/useLaunchController";
 import { getCustomerPlanStatus } from "@/client/features/billing/plan-detection";
 import { useSession } from "@/lib/auth-client";
-import { isHostedClientAuthMode } from "@/lib/auth-mode";
+import { isBillingClientEnabled } from "@/lib/auth-mode";
 
 type LaunchViewProps = {
   projectId: string;
@@ -14,7 +14,7 @@ type LaunchViewProps = {
 export function LaunchView(props: LaunchViewProps) {
   // Self-hosted has no Autumn customer and resolves to the paid tier on the
   // server, so only hosted mode needs to look up the plan.
-  if (!isHostedClientAuthMode()) {
+  if (!isBillingClientEnabled()) {
     return <LaunchContent {...props} isFreePlan={false} />;
   }
 

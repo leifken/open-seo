@@ -37,6 +37,7 @@ export default defineConfig(({ mode }) => {
       "SIGNUP_DISABLED",
       "GOOGLE_AUTH_DISABLED",
       "AUTHENTIK_AUTH_ENABLED",
+      "BILLING_DISABLED",
       "POSTHOG_PUBLIC_KEY",
       "POSTHOG_HOST",
       "TURNSTILE_SITE_KEY",

@@ -9,6 +9,7 @@ import {
 } from "@/serverFunctions/rank-tracking";
 import { AlertTriangle, ArrowLeft } from "lucide-react";
 import { useSession } from "@/lib/auth-client";
+import { isBillingClientEnabled } from "@/lib/auth-mode";
 import { getCustomerPlanStatus } from "@/client/features/billing/plan-detection";
 import { captureClientEvent } from "@/client/lib/posthog";
 import { FreePlanAlert } from "./FreePlanAlert";
@@ -70,7 +71,9 @@ export function RankTrackingDomainDetail({
 }) {
   const { data: session } = useSession();
   const customerQuery = useCustomer({
-    queryOptions: { enabled: Boolean(session?.user?.id) },
+    queryOptions: {
+      enabled: isBillingClientEnabled() && Boolean(session?.user?.id),
+    },
   });
   const isFreePlan =
     !!customerQuery.data &&

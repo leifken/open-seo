@@ -23,10 +23,21 @@ import {
 import { NotFound } from "@/client/components/NotFound";
 import appCss from "@/client/styles/app.css?url";
 import { useSession } from "@/lib/auth-client";
-import { isHostedClientAuthMode } from "@/lib/auth-mode";
+import {
+  isBillingClientEnabled,
+  isHostedClientAuthMode,
+} from "@/lib/auth-mode";
 import { Toaster } from "sonner";
 import { queryClient } from "@/client/tanstack-db";
 import { getActiveOrganizationId } from "@/lib/auth-session";
+
+// LEIFKEN: self-hosts have no Autumn account, and every mounted consumer
+// would hammer a handler that cannot answer. Skip the provider entirely
+// when billing is off.
+function BillingProvider({ children }: { children: React.ReactNode }) {
+  if (!isBillingClientEnabled()) return <>{children}</>;
+  return <AutumnProvider>{children}</AutumnProvider>;
+}
 
 export const Route = createRootRoute({
   head: () => ({
@@ -133,7 +144,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
               never shares the app QueryClient), and every extra provider mount
               pays its own ~1s getOrCreateCustomer round trip. It only provides
               context — nothing fetches until a useCustomer consumer mounts. */}
-          <AutumnProvider>
+          <BillingProvider>
             <QueryClientProvider client={queryClient}>
               <>
                 <PostHogBootstrap />
@@ -158,7 +169,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                 ) : null}
               </>
             </QueryClientProvider>
-          </AutumnProvider>
+          </BillingProvider>
         </ClientOnly>
         <Scripts />
       </body>

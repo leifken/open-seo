@@ -3,7 +3,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { getStandardErrorMessage } from "@/client/lib/error-messages";
-import { updateProjectContext } from "@/serverFunctions/projectContext";
+import {
+  draftProjectContextFromWebsite,
+  updateProjectContext,
+} from "@/serverFunctions/projectContext";
 import type { getProjectContext } from "@/serverFunctions/projectContext";
 import type {
   ContextAuthor,
@@ -43,6 +46,33 @@ export function useContextUpdate(projectId: string) {
     // patches can settle out of order and the slower (earlier-snapshotted)
     // response can land in the cache last; a settle-time refetch converges
     // the page back onto the server's state.
+    onSettled: () => queryClient.invalidateQueries({ queryKey }),
+  });
+}
+
+/**
+ * LEIFKEN addition: draft the whole context from the project's own website.
+ * Shares the cache/toast handling with useContextUpdate — the server returns
+ * the context as it stands afterwards, so it replaces the cache entry.
+ */
+export function useContextDraftFromWebsite(projectId: string) {
+  const queryClient = useQueryClient();
+  const queryKey = projectContextQueryKey(projectId);
+
+  return useMutation({
+    mutationFn: () => draftProjectContextFromWebsite({ data: { projectId } }),
+    onMutate: () => queryClient.cancelQueries({ queryKey }),
+    onSuccess: (context) => {
+      queryClient.setQueryData(queryKey, context);
+      toast.success("Projektgedächtnis aus der Website erstellt");
+    },
+    onError: (error) =>
+      toast.error(
+        getStandardErrorMessage(
+          error,
+          "Die Website konnte nicht ausgewertet werden",
+        ),
+      ),
     onSettled: () => queryClient.invalidateQueries({ queryKey }),
   });
 }

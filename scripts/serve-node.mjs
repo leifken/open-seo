@@ -166,7 +166,28 @@ async function handleUpdateDeploy() {
   return { ok: true, status: 200 };
 }
 
+// Profile pictures (see node-runtime/avatar-store.ts). Served to signed-in
+// users only; the key is a hash, so it carries no personal data itself.
+async function handleAvatar(request, pathname) {
+  if (!(await hasSession(request))) {
+    return new Response(null, { status: 401 });
+  }
+  const readAvatar = mod.readAvatar;
+  if (!readAvatar) return new Response(null, { status: 404 });
+  const stored = readAvatar(pathname.slice("/api/leifken/avatar/".length));
+  if (!stored) return new Response(null, { status: 404 });
+  return new Response(stored.body, {
+    headers: {
+      "content-type": stored.contentType,
+      "cache-control": "private, max-age=300",
+    },
+  });
+}
+
 async function handleLeifkenApi(request, pathname) {
+  if (pathname.startsWith("/api/leifken/avatar/")) {
+    return handleAvatar(request, pathname);
+  }
   if (!(await hasSession(request))) {
     return Response.json({ error: "Nicht angemeldet." }, { status: 401 });
   }

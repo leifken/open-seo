@@ -104,6 +104,10 @@ if (!globalState[WORKER_FLAG] && process.env.DISABLE_WORKFLOW_WORKER !== "1") {
   );
 }
 
+// Re-exported for scripts/serve-node.mjs, which serves stored profile
+// pictures at /api/leifken/avatar/<key>.
+export { readAvatar } from "./avatar-store";
+
 export default {
   fetch(request: Request): Promise<Response> {
     return Promise.resolve(server.fetch(request, nodeEnv, makeCtx()));

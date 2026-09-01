@@ -64,6 +64,7 @@ interface ImportMetaEnv {
   readonly SIGNUP_DISABLED?: string;
   readonly GOOGLE_AUTH_DISABLED?: string;
   readonly AUTHENTIK_AUTH_ENABLED?: string;
+  readonly BILLING_DISABLED?: string;
   readonly POSTHOG_PUBLIC_KEY?: string;
   readonly POSTHOG_HOST?: string;
   readonly TURNSTILE_SITE_KEY?: string;

@@ -9,6 +9,7 @@ import { useEffect } from "react";
 import { setLastProjectId } from "@/client/lib/active-project";
 import { useHostedAuthRouteGuard } from "@/client/features/auth/useHostedAuthRouteGuard";
 import { FreePlanBanner } from "@/client/features/billing/FreePlanBanner";
+import { isBillingClientEnabled } from "@/lib/auth-mode";
 import { useOnboardingRedirect } from "@/client/features/onboarding/useOnboardingRedirect";
 import { getErrorCode } from "@/client/lib/error-messages";
 import { AuthenticatedAppLayout } from "@/client/layout/AppShell";
@@ -87,7 +88,7 @@ function ProjectLayout() {
   return (
     <AuthenticatedAppLayout
       projectId={projectId}
-      banner={authGate.isHostedMode ? <FreePlanBanner /> : undefined}
+      banner={isBillingClientEnabled() ? <FreePlanBanner /> : undefined}
     >
       <Outlet />
     </AuthenticatedAppLayout>

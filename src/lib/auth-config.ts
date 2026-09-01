@@ -82,9 +82,38 @@ export function createBaseAuthConfig() {
                   pkce: true,
                   // Central profile picture: picture claim → user.image
                   // (defensive, exactly as in OL-CRM).
-                  mapProfileToUser: (profile: Record<string, unknown>) => {
+                  // Take the central profile on every login: full name plus
+                  // picture. Authentik ships avatars as ~26 KB data: URIs,
+                  // which would overflow better-auth's signed session cookie —
+                  // the Node runtime stores those on disk and returns a short
+                  // URL instead (see node-runtime/avatar-store.ts).
+                  mapProfileToUser: async (profile: Record<string, unknown>) => {
+                    const mapped: { name?: string; image?: string } = {};
+                    const name = profile.name;
+                    if (typeof name === "string" && name.trim()) {
+                      mapped.name = name.trim();
+                    }
                     const picture = profile.picture;
-                    return typeof picture === "string" ? { image: picture } : {};
+                    if (typeof picture === "string" && picture) {
+                      if (picture.startsWith("data:")) {
+                        try {
+                          const { storeDataUriAvatar } = await import(
+                            "@/node-runtime/avatar-store"
+                          );
+                          const identity =
+                            typeof profile.sub === "string"
+                              ? profile.sub
+                              : String(profile.email ?? "user");
+                          const url = storeDataUriAvatar(identity, picture);
+                          if (url) mapped.image = url;
+                        } catch {
+                          // Non-Node runtime: skip the oversized inline image.
+                        }
+                      } else {
+                        mapped.image = picture;
+                      }
+                    }
+                    return mapped;
                   },
                   disableImplicitSignUp:
                     Reflect.get(env, "SIGNUP_DISABLED") === "true",

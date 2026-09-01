@@ -5,7 +5,7 @@ import { ArrowRight, Settings, User } from "lucide-react";
 import { ThemePreferenceMenuItems } from "@/client/components/ThemePreferenceMenuItems";
 import { captureClientEvent } from "@/client/lib/posthog";
 import { signOutAndRedirect, useSession } from "@/lib/auth-client";
-import { isHostedClientAuthMode } from "@/lib/auth-mode";
+import { isBillingClientEnabled } from "@/lib/auth-mode";
 import { getStandardErrorMessage } from "@/client/lib/error-messages";
 import { getSubscribeRouteState } from "@/client/features/billing/route-state";
 import { getCustomerPlanStatus } from "@/client/features/billing/plan-detection";
@@ -62,7 +62,7 @@ function SubscribePage() {
   // Read managed access from the already-loaded Autumn customer (local, no API
   // call) instead of a separate server round-trip. Self-hosted has no Autumn
   // customer, so mirror the server's "always granted" behavior there.
-  const hasManagedAccess = isHostedClientAuthMode()
+  const hasManagedAccess = isBillingClientEnabled()
     ? customerQuery.check({ featureId: AUTUMN_MANAGED_ACCESS_FEATURE_ID })
         .allowed
     : true;

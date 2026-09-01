@@ -13,14 +13,25 @@
   var DICT_URL = "/leifken-i18n-de.json";
   var ATTRS = ["placeholder", "aria-label", "title", "alt"];
   var dict = null;
+  var patterns = [];
 
   function translateText(value) {
     // JSX collapses runs of whitespace, so match on a normalized key.
     var normalized = value.replace(/\s+/g, " ").trim();
     if (!normalized) return null;
     var hit = dict[normalized];
-    if (hit === undefined) return null;
-    return hit;
+    if (hit !== undefined) return hit;
+    // Texts carrying numbers ("Enter any value from 10 to 10,000.") can't be
+    // matched exactly — fall back to regex patterns with $1/$2 placeholders.
+    for (var i = 0; i < patterns.length; i++) {
+      var m = patterns[i].re.exec(normalized);
+      if (m) {
+        return patterns[i].to.replace(/\$(\d)/g, function (_, n) {
+          return m[Number(n)] ?? "";
+        });
+      }
+    }
+    return null;
   }
 
   function translateNode(node) {
@@ -92,6 +103,9 @@
     })
     .then(function (data) {
       dict = data.exact || {};
+      patterns = (data.patterns || []).map(function (p) {
+        return { re: new RegExp(p.from), to: p.to };
+      });
       if (document.body) start();
       else document.addEventListener("DOMContentLoaded", start);
     })

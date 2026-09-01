@@ -42,6 +42,17 @@ export function isHostedClientAuthMode() {
   return isHostedAuthMode(import.meta.env.AUTH_MODE);
 }
 
+export function isBillingClientEnabled() {
+  // Self-hosts run AUTH_MODE=hosted for its login but have no Autumn account.
+  // Upstream keys every paid-plan feature off hosted mode alone, so without
+  // this the client keeps calling an Autumn handler that doesn't exist and
+  // pages hang on a never-resolving customer query. Mirrors the server-side
+  // BILLING_DISABLED switch in server/billing/autumn.ts.
+  return (
+    isHostedClientAuthMode() && import.meta.env.BILLING_DISABLED !== "true"
+  );
+}
+
 export function isSignupDisabled() {
   // Single-admin self-hosts close public registration (SIGNUP_DISABLED=true).
   // Same deploy-time contract as AUTH_MODE: set it in the client build env

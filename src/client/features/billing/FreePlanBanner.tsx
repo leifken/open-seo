@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useCustomer } from "autumn-js/react";
 import { useSession } from "@/lib/auth-client";
+import { isBillingClientEnabled } from "@/lib/auth-mode";
 import { getCustomerPlanStatus } from "@/client/features/billing/plan-detection";
 import {
   AUTUMN_SEO_DATA_BALANCE_FEATURE_ID,
@@ -15,7 +16,7 @@ export function FreePlanBanner() {
   const { data: session } = useSession();
   const customerQuery = useCustomer({
     queryOptions: {
-      enabled: Boolean(session?.user?.id),
+      enabled: isBillingClientEnabled() && Boolean(session?.user?.id),
     },
   });
 
