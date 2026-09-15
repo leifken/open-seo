@@ -8,13 +8,35 @@
 // Usage: vite build --config vite.config.node.ts / vite dev --config ...
 import path from "node:path";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import tsConfigPaths from "vite-tsconfig-paths";
 import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 const shim = (file: string) =>
   path.resolve(import.meta.dirname, "src/node-runtime", file);
+
+// Upstream's Postgres client (src/db/pg/client.ts) opens one connection per
+// request and relies on Workers reclaiming it — in Node that leaks a
+// connection per request. Every import that resolves to that file (`@/db/pg/
+// client`, `./pg/client`) is redirected to the pooled shim instead, so the
+// upstream file stays untouched. See src/node-runtime/pg-client.ts.
+const upstreamPgClient = path.resolve(
+  import.meta.dirname,
+  "src/db/pg/client.ts",
+);
+const pooledPgClientPlugin: Plugin = {
+  name: "node-runtime-pg-client",
+  enforce: "pre",
+  async resolveId(source, importer, options) {
+    if (!source.endsWith("/pg/client")) return null;
+    const resolved = await this.resolve(source, importer, {
+      ...options,
+      skipSelf: true,
+    });
+    return resolved?.id === upstreamPgClient ? shim("pg-client.ts") : null;
+  },
+};
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -70,6 +92,7 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       tsConfigPaths(),
+      pooledPgClientPlugin,
       tanstackStart({
         server: {
           entry: "node-runtime/entry.ts",

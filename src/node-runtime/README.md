@@ -17,21 +17,35 @@ untouched and `git merge upstream/main` keeps working.
 
 ## Binding implementations
 
-| Cloudflare binding | Node implementation |
-|---|---|
-| `KV`, `OAUTH_KV` (KVNamespace) | `kv-redis.ts` (Redis via ioredis) |
-| `R2` (R2Bucket) | `r2-fs.ts` (filesystem under `DATA_DIR/r2`) |
-| `DB` (D1) | not supported — `DATABASE_PROVIDER=postgres` is required |
-| `HYPERDRIVE` | plain object carrying `POSTGRES_DATABASE_URL` |
-| `SITE_AUDIT_WORKFLOW`, `RANK_CHECK_WORKFLOW` | `workflow-engine/` (BullMQ) |
-| `AUDIT_SCRATCHPAD` (DO) | `do-scratchpad.ts` (better-sqlite3, one DB per audit) |
-| `ONBOARDING_CHAT`, `SAM_CHAT` (DO) | ported last; unavailable stubs until then |
+| Cloudflare binding                           | Node implementation                                      |
+| -------------------------------------------- | -------------------------------------------------------- |
+| `KV`, `OAUTH_KV` (KVNamespace)               | `kv-redis.ts` (Redis via ioredis)                        |
+| `R2` (R2Bucket)                              | `r2-fs.ts` (filesystem under `DATA_DIR/r2`)              |
+| `DB` (D1)                                    | not supported — `DATABASE_PROVIDER=postgres` is required |
+| `HYPERDRIVE`                                 | plain object carrying `POSTGRES_DATABASE_URL`            |
+| Postgres client (`src/db/pg/client.ts`)      | `pg-client.ts` (one pool per process, see below)         |
+| `SITE_AUDIT_WORKFLOW`, `RANK_CHECK_WORKFLOW` | `workflow-engine/` (BullMQ)                              |
+| `AUDIT_SCRATCHPAD` (DO)                      | `do-scratchpad.ts` (better-sqlite3, one DB per audit)    |
+| `ONBOARDING_CHAT`, `SAM_CHAT` (DO)           | ported last; unavailable stubs until then                |
+
+## Postgres pool
+
+Upstream's `src/db/pg/client.ts` opens a fresh postgres.js client per request
+and never ends it — correct on Workers (the socket dies with the invocation,
+Hyperdrive pools at the edge), a connection leak in Node. The `resolveId`
+hook in `vite.config.node.ts` redirects every import of that file to
+`pg-client.ts`, which serves the whole process from one bounded pool
+(`POSTGRES_POOL_MAX`, default 20; idle 30 s, lifetime 30 min).
+`scripts/pg-pool-load-check.mjs` reproduces the leak check against a running
+server.
 
 ## Environment variables (Node-only)
 
 - `POSTGRES_DATABASE_URL` (required)
 - `REDIS_URL` (required, e.g. `redis://redis:6379`)
 - `DATA_DIR` (default `./data`) — R2 objects + scratchpad SQLite files
+- `POSTGRES_POOL_MAX` (default `20`) — upper bound of the process-wide
+  Postgres pool; keep it well below the server's `max_connections`
 
 ## Rules
 
