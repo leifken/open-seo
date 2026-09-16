@@ -85,8 +85,8 @@ describe("withDataforseoCostMeta", () => {
       meta: { costUsd: 0, dataforseoCalls: 0 },
     });
     // No calls -> no breakdown key at all (not an empty array).
-    const meta = (result.structuredContent as { meta: Record<string, unknown> })
-      .meta;
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- test already asserted the shape above via toMatchObject
+    const meta = (result.structuredContent as { meta: Record<string, unknown> }).meta;
     expect(meta.costBreakdown).toBeUndefined();
   });
 
