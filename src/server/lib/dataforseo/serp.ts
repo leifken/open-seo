@@ -12,6 +12,7 @@ import {
   assertOk,
   buildTaskBilling,
   isNoResultsTask,
+  isPartialResultsTask,
   isTaskInProgress,
   parseTaskItems,
   type DataforseoApiResponse,
@@ -19,7 +20,7 @@ import {
 import { AppError } from "@/server/lib/errors";
 
 /** DataForSEO bills SERPs in pages of 10; depth outside 10-100 is rejected. */
-function clampSerpDepth(depth: number): number {
+export function clampSerpDepth(depth: number): number {
   return Math.min(100, Math.max(10, depth));
 }
 
@@ -82,11 +83,24 @@ const serpSnapshotItemSchema = z
 
 export type SerpLiveItem = z.infer<typeof serpSnapshotItemSchema>;
 
+export type SerpLiveResult = {
+  items: SerpLiveItem[];
+  /** True when DataForSEO could only retrieve some of the requested pages
+   *  ("Task completed with partial results ..."). The items it did retrieve
+   *  are still real, billed results — not a failure. */
+  partial: boolean;
+  partialReason?: string;
+};
+
 export async function fetchLiveSerp(input: {
   keyword: string;
   locationCode: number;
   languageCode: string;
-}): Promise<DataforseoApiResponse<SerpLiveItem[]>> {
+  /** Rows to crawl, clamped to DataForSEO's 10-100 page range. Defaults to
+   *  100 (full page) when omitted; callers that only need a handful of rows
+   *  should pass a smaller depth to avoid paying for pages they discard. */
+  depth?: number;
+}): Promise<DataforseoApiResponse<SerpLiveResult>> {
   const response = await serpApi().googleOrganicLiveAdvanced([
     new SerpGoogleOrganicLiveAdvancedRequestInfo({
       keyword: input.keyword,
@@ -94,16 +108,29 @@ export async function fetchLiveSerp(input: {
       language_code: input.languageCode,
       device: "desktop",
       os: "windows",
-      depth: 100,
+      depth: clampSerpDepth(input.depth ?? 100),
+      // Ask DataForSEO to wait for a slow-to-generate AI Overview instead of
+      // only returning it from cache. Extra charge only applies (and only
+      // once) when an async overview actually had to be loaded; DataForSEO
+      // refunds it automatically when the element is absent or was already
+      // synchronous (see load_async_ai_overview docs).
+      load_async_ai_overview: true,
     }),
   ]);
-  const task = assertOk(response);
+  const task = assertOk(response, { treatPartialResultsAsPartial: true });
+  const partial = isPartialResultsTask(task);
   return {
-    data: parseTaskItems(
-      "google-organic-live-advanced",
-      task,
-      serpSnapshotItemSchema,
-    ),
+    data: {
+      items: parseTaskItems(
+        "google-organic-live-advanced",
+        task,
+        serpSnapshotItemSchema,
+      ),
+      partial,
+      ...(partial && task.status_message
+        ? { partialReason: task.status_message }
+        : {}),
+    },
     billing: buildTaskBilling(task),
   };
 }

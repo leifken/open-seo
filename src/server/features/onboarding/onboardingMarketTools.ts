@@ -74,7 +74,7 @@ export function marketTools(ctx: ToolContext): ToolSet {
         const results = await Promise.all(
           keywords.map(async (keyword) => {
             try {
-              const items = await dfsClient.serp.live({
+              const serp = await dfsClient.serp.live({
                 keyword,
                 locationCode: project.locationCode,
                 languageCode: project.languageCode,
@@ -83,7 +83,7 @@ export function marketTools(ctx: ToolContext): ToolSet {
               return {
                 keyword,
                 ok: true as const,
-                results: items
+                results: serp.items
                   .filter((item) => item.type === "organic")
                   .slice(0, 10)
                   .map((item) => ({

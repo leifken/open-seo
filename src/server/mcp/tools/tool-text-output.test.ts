@@ -364,16 +364,19 @@ describe("MCP tool text output (service-backed tools)", () => {
   });
 
   it("get_serp_results renders each query's items as a text table", async () => {
-    const live = vi.fn().mockResolvedValue([
-      {
-        type: "organic",
-        rank_absolute: 1,
-        title: "Best SEO Tools",
-        url: "https://example.com/best",
-        domain: "example.com",
-        description: "desc",
-      },
-    ]);
+    const live = vi.fn().mockResolvedValue({
+      items: [
+        {
+          type: "organic",
+          rank_absolute: 1,
+          title: "Best SEO Tools",
+          url: "https://example.com/best",
+          domain: "example.com",
+          description: "desc",
+        },
+      ],
+      partial: false,
+    });
     mocks.createDataforseoClient.mockReturnValue({ serp: { live } });
 
     const result = await getSerpResultsTool.handler(

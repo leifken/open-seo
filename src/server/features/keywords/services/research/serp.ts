@@ -80,13 +80,13 @@ async function getSerpLiveAnalysis(
     return cached.data;
   }
 
-  const liveItems = await createDataforseoClient(billingCustomer).serp.live({
+  const liveSerp = await createDataforseoClient(billingCustomer).serp.live({
     keyword,
     locationCode: input.locationCode,
     languageCode: input.languageCode,
   });
 
-  const items = mapOrganicSerpItems(liveItems);
+  const items = mapOrganicSerpItems(liveSerp.items);
   const result: SerpAnalysisResult = { requestedKeyword: keyword, items };
   if (items.length === 0) {
     result.reason = "no_organic_results";

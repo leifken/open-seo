@@ -123,6 +123,19 @@ export function isNoResultsTask(task: DataforseoTaskLike): boolean {
   );
 }
 
+/**
+ * "Task completed with partial results. Some pages could not be retrieved
+ * after several retry attempts. You have not been charged for the pages that
+ * were not returned." DataForSEO still bills (and returns) whatever pages it
+ * did retrieve — e.g. page 1 of a depth-100 SERP crawl — so this must not be
+ * treated as a plain failure that discards those items.
+ */
+export function isPartialResultsTask(task: DataforseoTaskLike): boolean {
+  return (
+    task.status_message?.toLowerCase().includes("partial results") ?? false
+  );
+}
+
 /** Task lifecycle codes meaning "not done yet": Task Created / Task Handed /
  *  Task In Queue. A task_get returning one of these is pending, not failed. */
 const TASK_IN_PROGRESS_STATUS_CODES = new Set([20100, 40601, 40602]);
@@ -141,6 +154,9 @@ type AssertOkOptions = {
   classifyPath?: string;
   /** Treat DataForSEO's "no search results" (40501) as an empty success. */
   treatNoResultsAsEmpty?: boolean;
+  /** Treat DataForSEO's "Task completed with partial results" as a success
+   *  carrying whatever items it did retrieve, instead of throwing. */
+  treatPartialResultsAsPartial?: boolean;
   /** Task status that counts as success. Live endpoints return 20000; task_post
    *  entries return 20100 "Task Created". */
   okTaskStatusCode?: number;
@@ -163,8 +179,13 @@ export function assertOk<T extends DataforseoTaskLike>(
       "DataForSEO returned an empty response",
     );
   }
-  const { classify, classifyPath, treatNoResultsAsEmpty, okTaskStatusCode } =
-    options;
+  const {
+    classify,
+    classifyPath,
+    treatNoResultsAsEmpty,
+    treatPartialResultsAsPartial,
+    okTaskStatusCode,
+  } = options;
 
   if (response.status_code !== 20000) {
     const message = response.status_message || "DataForSEO request failed";
@@ -181,6 +202,8 @@ export function assertOk<T extends DataforseoTaskLike>(
 
   if (task.status_code !== (okTaskStatusCode ?? 20000)) {
     if (treatNoResultsAsEmpty && isNoResultsTask(task)) return task;
+    if (treatPartialResultsAsPartial && isPartialResultsTask(task))
+      return task;
 
     const message = task.status_message || "DataForSEO task failed";
     const path = classifyPath ?? (task.path ? `/${task.path.join("/")}` : "");

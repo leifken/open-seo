@@ -5,6 +5,7 @@ vi.mock("@/server/lib/runtime-env", () => ({
 }));
 
 import {
+  fetchLiveSerp,
   fetchRankCheckTaskResult,
   postRankCheckTasks,
 } from "@/server/lib/dataforseo/serp";
@@ -16,6 +17,93 @@ function parseDataforseoRequestBody(init: RequestInit | undefined): unknown {
   }
   return JSON.parse(body) as unknown;
 }
+
+describe("fetchLiveSerp", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // Fixed example modeled on the reported bug: "webdesign nottuln" (location
+  // 2276, de) returned page 1 but DataForSEO could not retrieve later pages.
+  // The task's own status_code isn't in the report; matching is intentionally
+  // on the status_message substring (isPartialResultsTask), not a specific code.
+  it("returns the retrieved items with partial: true instead of throwing", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({
+        status_code: 20000,
+        tasks: [
+          {
+            status_code: 40602,
+            status_message:
+              "Task completed with partial results. Some pages could not be retrieved after several retry attempts. You have not been charged for the pages that were not returned.",
+            path: ["v3", "serp", "google", "organic", "live", "advanced"],
+            cost: 0.002,
+            result: [
+              {
+                items: [
+                  {
+                    type: "organic",
+                    rank_group: 1,
+                    rank_absolute: 1,
+                    title: "Webdesign Nottuln – Agentur XY",
+                    domain: "example.com",
+                    url: "https://example.com/",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchLiveSerp({
+      keyword: "webdesign nottuln",
+      locationCode: 2276,
+      languageCode: "de",
+    });
+
+    expect(result.data.partial).toBe(true);
+    expect(result.data.partialReason).toMatch(/partial results/);
+    expect(result.data.items).toEqual([
+      expect.objectContaining({ domain: "example.com" }),
+    ]);
+    expect(result.billing).toEqual({
+      path: ["v3", "serp", "google", "organic", "live", "advanced"],
+      costUsd: 0.002,
+    });
+  });
+
+  it("clamps depth to 10-100 and requests async AI Overview loading", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({
+        status_code: 20000,
+        tasks: [
+          {
+            status_code: 20000,
+            path: ["v3", "serp", "google", "organic", "live", "advanced"],
+            cost: 0.0006,
+            result: [{ items: [] }],
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchLiveSerp({
+      keyword: "x",
+      locationCode: 2276,
+      languageCode: "de",
+      depth: 5,
+    });
+
+    const body = parseDataforseoRequestBody(fetchMock.mock.calls[0]?.[1]) as Array<
+      Record<string, unknown>
+    >;
+    expect(body[0]).toMatchObject({ depth: 10, load_async_ai_overview: true });
+  });
+});
 
 describe("rank check task queue", () => {
   beforeEach(() => {
