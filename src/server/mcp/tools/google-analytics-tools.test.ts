@@ -148,6 +148,10 @@ describe("Google Analytics MCP tools", () => {
       },
       toolContext,
     );
+    // LEIFKEN (SEO-4): a caught GA4/GSC error must surface as a real MCP tool
+    // error (isError: true), not just a soft structuredContent.status="error"
+    // a caller has to know to check.
+    expect(result.isError).toBe(true);
     expect(result.structuredContent).toMatchObject({
       status: "error",
       error: {

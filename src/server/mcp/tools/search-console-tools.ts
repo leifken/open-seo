@@ -80,6 +80,7 @@ async function missingSelfHostedGoogleClientResponse(
   return mcpResponse({
     text: `This self-hosted OpenSEO deployment is not configured for Search Console yet. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and BETTER_AUTH_SECRET, then reconnect Search Console from the project's settings page. Setup docs: ${GSC_SELF_HOSTED_SETUP_DOCS_URL}`,
     meta: buildProjectMeta(context, projectId),
+    isError: true,
     structuredContent: {
       ok: false,
       connected: false,
@@ -96,6 +97,7 @@ function invalidRequest(
   return mcpResponse({
     text: message,
     meta,
+    isError: true,
     structuredContent: { ok: false, reason: "invalid_request" },
   });
 }
@@ -291,6 +293,7 @@ export const getSearchConsolePerformanceTool = {
       return mcpResponse({
         text: `${describeGscError(error)}${isNotConnected ? ` Connect it here: ${connectUrl}` : ` (reconnect at ${connectUrl})`}`,
         meta,
+        isError: true,
         structuredContent: {
           ok: false,
           reason: isNotConnected ? "not_connected" : "api_error",
@@ -399,6 +402,7 @@ export const inspectUrlsTool = {
       return mcpResponse({
         text: `${describeGscError(error)}${isNotConnected ? ` Connect it here: ${connectUrl}` : ` (reconnect at ${connectUrl})`}`,
         meta,
+        isError: true,
         structuredContent: {
           ok: false,
           reason: isNotConnected ? "not_connected" : "api_error",

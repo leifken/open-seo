@@ -17,20 +17,27 @@ export function mcpResponse<T extends Record<string, unknown>>(opts: {
   text: string;
   meta?: McpResponseMeta;
   structuredContent: T;
+  /** Set on a handler-caught failure (e.g. "not connected", "api_error") so it
+   *  surfaces as an MCP tool error like a thrown one, instead of a silent
+   *  `structuredContent.status/ok` the caller has to know to check. */
+  isError?: boolean;
 }): CallToolResult & {
   structuredContent: T & { meta?: Record<string, unknown> };
 };
 export function mcpResponse(opts: {
   text: string;
   meta?: McpResponseMeta;
+  isError?: boolean;
 }): CallToolResult;
 export function mcpResponse(opts: {
   text: string;
   meta?: McpResponseMeta;
   structuredContent?: Record<string, unknown>;
+  isError?: boolean;
 }): CallToolResult {
   const result: CallToolResult = {
     content: [{ type: "text", text: opts.text }],
+    ...(opts.isError ? { isError: true } : {}),
   };
   let meta: Record<string, unknown> | undefined;
   if (opts.meta) {

@@ -114,6 +114,7 @@ describe("search console MCP tools", () => {
       toolContext,
     );
 
+    expect(result.isError).toBe(true);
     expect(result.structuredContent).toMatchObject({
       ok: false,
       reason: "not_connected",
@@ -136,6 +137,7 @@ describe("search console MCP tools", () => {
       toolContext,
     );
 
+    expect(result.isError).toBe(true);
     expect(result.structuredContent).toMatchObject({
       ok: false,
       reason: "api_error",
@@ -154,6 +156,7 @@ describe("search console MCP tools", () => {
       toolContext,
     );
 
+    expect(result.isError).toBe(true);
     expect(result.structuredContent).toMatchObject({
       reason: "invalid_request",
     });
@@ -168,6 +171,7 @@ describe("search console MCP tools", () => {
       toolContext,
     );
 
+    expect(result.isError).toBe(true);
     expect(result.structuredContent).toMatchObject({
       reason: "invalid_request",
     });
@@ -184,6 +188,7 @@ describe("search console MCP tools", () => {
       toolContext,
     );
 
+    expect(result.isError).toBe(true);
     expect(result.structuredContent).toMatchObject({
       reason: "gsc_oauth_not_configured",
     });
@@ -271,6 +276,7 @@ describe("search console MCP tools", () => {
       toolContext,
     );
 
+    expect(result.isError).toBe(true);
     expect(result.structuredContent).toMatchObject({
       ok: false,
       reason: "not_connected",
@@ -287,6 +293,7 @@ describe("search console MCP tools", () => {
       toolContext,
     );
 
+    expect(result.isError).toBe(true);
     expect(result.structuredContent).toMatchObject({
       reason: "gsc_oauth_not_configured",
     });

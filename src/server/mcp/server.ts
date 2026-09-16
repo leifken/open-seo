@@ -11,6 +11,7 @@ import {
 } from "@/server/mcp/context";
 import { objectSchema } from "@/server/mcp/output-schemas";
 import { instrumentMcpToolHandler } from "@/server/mcp/instrumentation";
+import { withDataforseoCostMeta } from "@/server/mcp/tool-cost-meta";
 import { getBacklinksOverviewTool } from "@/server/mcp/tools/get-backlinks-overview";
 import { getBacklinksProfileTool } from "@/server/mcp/tools/get-backlinks-profile";
 import { getDomainKeywordSuggestionsTool } from "@/server/mcp/tools/get-domain-keyword-suggestions";
@@ -106,10 +107,12 @@ function registerOpenSeoTool<Input extends ToolSchema>(
   authProps: McpProps,
 ) {
   const outputSchema = objectSchema(tool.config.outputSchema);
-  const handler = instrumentMcpToolHandler(
+  // LEIFKEN: real DataForSEO cost in meta + isError results with cost for
+  // thrown errors (tool-cost-meta.ts). Instrumentation stays inside so it still
+  // sees and reports thrown errors.
+  const handler = withDataforseoCostMeta(
     tool.name,
-    outputSchema,
-    tool.handler,
+    instrumentMcpToolHandler(tool.name, outputSchema, tool.handler),
   );
 
   server.registerTool(

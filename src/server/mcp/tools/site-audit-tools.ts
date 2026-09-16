@@ -113,6 +113,7 @@ export const runSiteAuditTool = {
             args.projectId,
             `/p/${args.projectId}/audit`,
           ),
+          isError: true,
         });
       }
       throw error;

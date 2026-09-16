@@ -11,6 +11,7 @@ import {
 import {
   businessDataApi,
   businessDataTaskApi,
+  MY_BUSINESS_INFO_TIMEOUT_MS,
 } from "@/server/lib/dataforseo/core";
 import {
   assertOk,
@@ -124,16 +125,47 @@ export async function fetchQuestionsAnswers(input: {
   };
 }
 
+/** True for the abort DataForSEO's own AbortSignal.timeout() raises — a
+ *  DOMException named "TimeoutError" per the fetch spec (some runtimes still
+ *  name it "AbortError"). Distinct from every other failure so the caller can
+ *  tell "we don't know" apart from a confirmed empty result. */
+function isRequestTimeout(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === "TimeoutError" || error.name === "AbortError")
+  );
+}
+
 export async function fetchMyBusinessInfo(
   input: { keyword: string } & BusinessLocationInput,
 ): Promise<DataforseoApiResponse<Record<string, unknown> | null>> {
-  const response = await businessDataApi().googleMyBusinessInfoLive([
-    new BusinessDataGoogleMyBusinessInfoLiveRequestInfo({
-      keyword: input.keyword,
-      ...locationParams(input),
-      language_code: input.languageCode,
-    }),
-  ]);
+  // Bounded, endpoint-specific timeout — see MY_BUSINESS_INFO_TIMEOUT_MS.
+  let response;
+  try {
+    response = await businessDataApi(
+      MY_BUSINESS_INFO_TIMEOUT_MS,
+    ).googleMyBusinessInfoLive([
+      new BusinessDataGoogleMyBusinessInfoLiveRequestInfo({
+        keyword: input.keyword,
+        ...locationParams(input),
+        language_code: input.languageCode,
+      }),
+    ]);
+  } catch (error) {
+    if (isRequestTimeout(error)) {
+      // DataForSEO's crawl kept running after we stopped waiting; we never
+      // received a response, so we have no cost/path to report and cannot
+      // tell whether the profile exists. Whether DataForSEO still billed the
+      // task server-side is unknown from our side — an aborted HTTP request
+      // does not cancel work already in flight upstream. Documented honestly
+      // in BETRIEB.md rather than guessed at here.
+      throw new AppError(
+        "UPSTREAM_UNAVAILABLE",
+        `DataForSEO did not confirm within ${MY_BUSINESS_INFO_TIMEOUT_MS / 1000}s whether this Google Business Profile exists. This is inconclusive, not a confirmed "not found" — try again, or narrow the search with a cid/placeId from get_local_serp_results.`,
+      );
+    }
+    throw error;
+  }
   // 40501 = billed empty result: a business Google has no profile for.
   const task = assertOk(response, { treatNoResultsAsEmpty: true });
   const entry = task.result?.[0];

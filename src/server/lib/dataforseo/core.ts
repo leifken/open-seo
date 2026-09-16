@@ -20,6 +20,17 @@ const DATAFORSEO_REQUEST_TIMEOUT_MS = 60_000;
 // shared request-timeout signal still caps overall wall time.
 const DATAFORSEO_MAX_RETRIES = 2;
 const DATAFORSEO_RETRY_BACKOFF_MS = 250;
+// google/my_business_info/live has no task-queue alternative (Live-only
+// endpoint), so a listing DataForSEO can't confidently resolve blocks the
+// whole request instead of returning a resumable task id (unlike reviews /
+// updates, which post-and-poll). DataForSEO's own live-endpoint guidance
+// recommends up to 120s of patience for a live call in general, but a
+// nonexistent business must not cost the caller the full 60s default before
+// they see a clean "not found" — so this endpoint gets its own, shorter
+// ceiling. A profile that IS genuinely slow to resolve within that ceiling
+// surfaces as a distinct "DataForSEO did not respond in time" error, never as
+// a false "not found" (see fetchMyBusinessInfo).
+export const MY_BUSINESS_INFO_TIMEOUT_MS = 25_000;
 
 /**
  * Translates a DataForSEO HTTP/task failure into a product-specific AppError
@@ -68,15 +79,15 @@ function formatDataforseoRequestPath(url: RequestInfo): string {
 function createAuthenticatedFetch(
   classify?: DataforseoErrorClassifier,
   maxServerErrorRetries = DATAFORSEO_MAX_RETRIES,
+  timeoutMs = DATAFORSEO_REQUEST_TIMEOUT_MS,
 ) {
   return async (url: RequestInfo, init?: RequestInit): Promise<Response> => {
     const apiKey = await getRequiredEnvValue("DATAFORSEO_API_KEY");
     const headers = new Headers(init?.headers);
     headers.set("Authorization", `Basic ${apiKey}`);
     // Resolve the signal once so retries share the overall request timeout
-    // rather than restarting a fresh 60s budget on each attempt.
-    const signal =
-      init?.signal ?? AbortSignal.timeout(DATAFORSEO_REQUEST_TIMEOUT_MS);
+    // rather than restarting a fresh budget on each attempt.
+    const signal = init?.signal ?? AbortSignal.timeout(timeoutMs);
 
     for (let attempt = 0; ; attempt++) {
       const response = await fetch(url, { ...init, headers, signal });
@@ -122,8 +133,11 @@ function createAuthenticatedFetch(
 function http(
   classify?: DataforseoErrorClassifier,
   maxServerErrorRetries = DATAFORSEO_MAX_RETRIES,
+  timeoutMs = DATAFORSEO_REQUEST_TIMEOUT_MS,
 ) {
-  return { fetch: createAuthenticatedFetch(classify, maxServerErrorRetries) };
+  return {
+    fetch: createAuthenticatedFetch(classify, maxServerErrorRetries, timeoutMs),
+  };
 }
 
 // Per-section API factories. Each is created per-request so the auth secret is
@@ -131,7 +145,8 @@ function http(
 export const labsApi = () => new DataforseoLabsApi(API_BASE, http());
 export const keywordsDataApi = () => new KeywordsDataApi(API_BASE, http());
 export const serpApi = () => new SerpApi(API_BASE, http());
-export const businessDataApi = () => new BusinessDataApi(API_BASE, http());
+export const businessDataApi = (timeoutMs = DATAFORSEO_REQUEST_TIMEOUT_MS) =>
+  new BusinessDataApi(API_BASE, http(undefined, DATAFORSEO_MAX_RETRIES, timeoutMs));
 // task_post creates a billed task. A 5xx does not prove the provider skipped
 // the charge, so this client must not replay it (same rule as Lighthouse).
 export const businessDataTaskApi = () =>

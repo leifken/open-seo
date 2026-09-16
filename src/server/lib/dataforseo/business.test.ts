@@ -102,6 +102,21 @@ describe("Google business_data fetchers", () => {
     expect(result.billing.costUsd).toBe(0.002);
   });
 
+  it("turns a my_business_info timeout into a clean, honest error instead of a raw abort", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockRejectedValue(new DOMException("signal timed out", "TimeoutError"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const call = fetchMyBusinessInfo({
+      keyword: "Slow Cafe",
+      locationCode: 2840,
+      languageCode: "en",
+    });
+    await expect(call).rejects.toMatchObject({ code: "UPSTREAM_UNAVAILABLE" });
+    await expect(call).rejects.toThrow(/inconclusive/);
+  });
+
   it("posts regular reviews with sort_by and bills from the post entry", async () => {
     const fetchMock = stubDataforseo({
       status_code: 20000,

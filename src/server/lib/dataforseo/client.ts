@@ -16,6 +16,7 @@ import {
   type DataforseoApiCallCost,
   type DataforseoApiResponse,
 } from "@/server/lib/dataforseo/envelope";
+import { recordDataforseoCost } from "@/server/lib/dataforseo/cost-ledger";
 import { isHostedServerAuthMode } from "@/server/lib/runtime-env";
 import { AppError } from "@/server/lib/errors";
 
@@ -153,9 +154,23 @@ export function createDataforseoClient(customer: BillingCustomerContext) {
 
 async function meterDataforseoCall<T>(
   customer: BillingCustomerContext,
-  execute: () => Promise<DataforseoApiResponse<T>>,
+  executeFetcher: () => Promise<DataforseoApiResponse<T>>,
   creditFeature?: CreditFeature,
 ): Promise<T> {
+  // LEIFKEN: record the real DataForSEO cost for the calling MCP tool in every
+  // mode (see cost-ledger.ts) — including charged task failures.
+  const execute = async () => {
+    try {
+      const result = await executeFetcher();
+      recordDataforseoCost(result.billing);
+      return result;
+    } catch (error) {
+      if (error instanceof DataforseoChargedTaskError) {
+        recordDataforseoCost(error.billing);
+      }
+      throw error;
+    }
+  };
   const isHostedMode = await isHostedServerAuthMode();
 
   if (!isHostedMode) {

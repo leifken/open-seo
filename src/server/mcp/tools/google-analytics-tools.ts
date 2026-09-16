@@ -203,6 +203,7 @@ function errorResponse(
   return mcpResponse({
     text: `${message}${url ? ` Continue here: ${url}` : ""}`,
     meta: buildProjectMeta(context, args.projectId),
+    isError: true,
     structuredContent: {
       status: "error",
       error: {
