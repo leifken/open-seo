@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- five related site-audit MCP tools (run/status/issues/pages/lighthouse) intentionally share one module, like local-seo-tools.ts and google-analytics-tools.ts */
 import { z } from "zod";
 import { AuditRepository } from "@/server/features/audit/repositories/AuditRepository";
 import { AuditService } from "@/server/features/audit/services/AuditService";
@@ -16,6 +17,7 @@ import {
 } from "@/server/mcp/output-schemas";
 import { withMcpProjectAuth } from "@/server/mcp/project-auth";
 import { projectIdSchema } from "@/server/mcp/schemas";
+import { formatMcpTable, readPath, type McpTableColumn } from "@/server/mcp/table";
 
 const auditIdSchema = z
   .string()
@@ -406,6 +408,126 @@ export const getAuditPagesTool = {
         auditPath(args.projectId, audit.id),
       ),
       structuredContent: { pages, total: filtered.length },
+    });
+  }),
+};
+
+// ─── get_audit_lighthouse ────────────────────────────────────────────────────
+// SEO-4 Punkt 3: expose the Lighthouse scores + Core Web Vitals the audit
+// already collects per page (when run_site_audit was called with
+// runLighthouse: true) — RankMeister's per-page "Tempo" card
+// (SEITEN-COCKPIT.md §3/§9) reads this instead of re-running Lighthouse.
+
+const lighthouseInputSchema = {
+  projectId: projectIdSchema,
+  auditId: auditIdSchema,
+  strategy: z
+    .enum(["mobile", "desktop"])
+    .optional()
+    .describe("Only return results for this device strategy."),
+  urlContains: z
+    .string()
+    .optional()
+    .describe("Filter to pages whose URL contains this substring."),
+} as const;
+
+type LighthouseArgs = z.infer<z.ZodObject<typeof lighthouseInputSchema>>;
+
+const LIGHTHOUSE_COLUMNS: McpTableColumn<unknown>[] = [
+  { header: "url", value: (row) => readPath(row, "url") },
+  { header: "strategy", value: (row) => readPath(row, "strategy") },
+  { header: "perf", value: (row) => readPath(row, "scores", "performance") },
+  { header: "a11y", value: (row) => readPath(row, "scores", "accessibility") },
+  {
+    header: "best-practices",
+    value: (row) => readPath(row, "scores", "bestPractices"),
+  },
+  { header: "seo", value: (row) => readPath(row, "scores", "seo") },
+  {
+    header: "LCP ms",
+    value: (row) => readPath(row, "coreWebVitals", "lcpMs"),
+  },
+  { header: "CLS", value: (row) => readPath(row, "coreWebVitals", "cls") },
+  {
+    header: "INP ms",
+    value: (row) => readPath(row, "coreWebVitals", "inpMs"),
+  },
+  {
+    header: "TTFB ms",
+    value: (row) => readPath(row, "coreWebVitals", "ttfbMs"),
+  },
+  { header: "error", value: (row) => readPath(row, "errorMessage") },
+];
+
+export const getAuditLighthouseTool = {
+  name: "get_audit_lighthouse",
+  config: {
+    title: "Get site audit Lighthouse results",
+    description:
+      "Read the Lighthouse scores (performance, accessibility, best practices, SEO) and Core Web Vitals (LCP, CLS, INP, TTFB) collected per page by a site audit. Only has data for audits run with run_site_audit's runLighthouse: true (a sample of up to 10 pages, mobile + desktop each); other audits return an empty list. Free — reads OpenSEO state. Omit auditId for the most recent audit.",
+    inputSchema: lighthouseInputSchema,
+    outputSchema: {
+      results: z.array(looseObjectOutputSchema),
+      total: z.number(),
+      ...optionalMetaOutputSchema,
+    },
+    annotations: {
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+    },
+  },
+  handler: withMcpProjectAuth(async (args: LighthouseArgs, context) => {
+    const audit = await resolveAudit(args.projectId, args.auditId);
+    const [lighthouseRows, pages] = await Promise.all([
+      AuditRepository.getLighthouseForAudit(audit.id),
+      AuditRepository.getPagesForAudit(audit.id),
+    ]);
+    const urlByPageId = new Map(pages.map((page) => [page.id, page.url]));
+
+    const urlContains = args.urlContains?.toLowerCase();
+    const results = lighthouseRows
+      .map((row) => ({
+        url: urlByPageId.get(row.pageId) ?? null,
+        strategy: row.strategy,
+        scores: {
+          performance: row.performanceScore,
+          accessibility: row.accessibilityScore,
+          bestPractices: row.bestPracticesScore,
+          seo: row.seoScore,
+        },
+        coreWebVitals: {
+          lcpMs: row.lcpMs,
+          cls: row.cls,
+          inpMs: row.inpMs,
+          ttfbMs: row.ttfbMs,
+        },
+        errorMessage: row.errorMessage,
+        hasDetailedReport: row.r2Key != null,
+      }))
+      .filter(
+        (row) =>
+          (!args.strategy || row.strategy === args.strategy) &&
+          (!urlContains || (row.url ?? "").toLowerCase().includes(urlContains)),
+      );
+
+    const text =
+      results.length === 0
+        ? `Audit ${audit.id}: no Lighthouse results${lighthouseRows.length === 0 ? " — run_site_audit was called without runLighthouse: true (or Lighthouse is still running)." : " matching the given filters."}`
+        : [
+            `Audit ${audit.id}: ${results.length} Lighthouse result${results.length === 1 ? "" : "s"}.`,
+            formatMcpTable(results, LIGHTHOUSE_COLUMNS),
+            "Scores are 0-100; LCP/TTFB in ms, CLS unitless, INP in ms. Full rows (with hasDetailedReport, errorMessage) are in structuredContent.results.",
+          ].join("\n");
+
+    return mcpResponse({
+      text,
+      meta: buildProjectMeta(
+        context,
+        args.projectId,
+        auditPath(args.projectId, audit.id),
+      ),
+      structuredContent: { results, total: results.length },
     });
   }),
 };

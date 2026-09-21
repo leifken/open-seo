@@ -69,6 +69,7 @@ import {
 } from "@/server/mcp/tools/search-console-tools";
 import {
   getAuditIssuesTool,
+  getAuditLighthouseTool,
   getAuditPagesTool,
   getAuditStatusTool,
   runSiteAuditTool,
@@ -207,6 +208,7 @@ export function createOpenSeoMcpServer(authProps: McpProps) {
   register(getAuditStatusTool);
   register(getAuditIssuesTool);
   register(getAuditPagesTool);
+  register(getAuditLighthouseTool);
 
   return server;
 }

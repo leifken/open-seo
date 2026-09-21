@@ -308,6 +308,15 @@ async function getPagesForAudit(auditId: string) {
     .where(eq(auditPages.auditId, auditId));
 }
 
+/** One row per Lighthouse test run for the audit (mobile + desktop per
+ * sampled page). Used by the get_audit_lighthouse MCP tool (SEO-4 Punkt 3) —
+ * callers join in the page url via getPagesForAudit's pageId. */
+async function getLighthouseForAudit(auditId: string) {
+  return db.query.auditLighthouseResults.findMany({
+    where: eq(auditLighthouseResults.auditId, auditId),
+  });
+}
+
 async function countBlockedPages(auditId: string): Promise<number> {
   const rows = await db
     .select({ blocked: count() })
@@ -434,6 +443,7 @@ export const AuditRepository = {
   getLatestAuditForProject,
   getIssuesForAudit,
   getPagesForAudit,
+  getLighthouseForAudit,
   countBlockedPages,
   hasPagesForAudit,
   getAuditsByProject,
