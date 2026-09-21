@@ -1,0 +1,71 @@
+# Baut das Produktions-Image auf GitHub statt auf dem Hetzner-Server und legt es
+# privat in der GitHub Container Registry ab. Coolify zieht danach nur noch das
+# fertige Image (compose.node.yaml: image: …:sha-${SOURCE_COMMIT}), inklusive Vite-Build.
+# Grund: Builds auf dem Server haben Prozesse wegen Speichermangels beendet
+# (Zentrale, ENTSCHEIDUNGEN.md, 21.09.2026). Rückfall: siehe docs/deploy-ohne-server-build.md.
+name: Image bauen
+
+on:
+  push:
+    branches: [node-port, builds-ghcr]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/leifken/open-seo
+
+jobs:
+  image:
+    if: github.repository == 'leifken/open-seo'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=sha,prefix=sha-,format=long
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/node-port' }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.node
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Nur nicht geheime Schalter, die Vite in den Client einbaut. Sie müssen den
+          # Werten in Coolify entsprechen; weicht einer ab, baut der Container beim
+          # Start wie früher selbst (Fingerprint-Vergleich im Entrypoint).
+          build-args: |
+            PREBUILD_COMMIT=${{ github.sha }}
+            VITE_SHOW_DEVTOOLS=false
+            AUTH_MODE=${{ vars.AUTH_MODE || 'hosted' }}
+            BYPASS_EMAIL_VERIFICATION=${{ vars.BYPASS_EMAIL_VERIFICATION || 'true' }}
+            SIGNUP_DISABLED=${{ vars.SIGNUP_DISABLED || 'true' }}
+            GOOGLE_AUTH_DISABLED=${{ vars.GOOGLE_AUTH_DISABLED || 'true' }}
+            AUTHENTIK_AUTH_ENABLED=${{ vars.AUTHENTIK_AUTH_ENABLED || 'true' }}
+            BILLING_DISABLED=true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

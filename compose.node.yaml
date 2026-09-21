@@ -4,9 +4,15 @@
 # Coolify environment, never from the repo.
 services:
   open-seo:
-    build:
-      context: .
-      dockerfile: Dockerfile.node
+    # Finished image from GitHub Actions (.github/workflows/image.yml), built from
+    # exactly this commit incl. the vite build. Coolify writes SOURCE_COMMIT into
+    # its .env; the server no longer builds (LEIFKEN, 21.09.2026).
+    # FALLBACK (one commit): replace the image line with
+    #   build:
+    #     context: .
+    #     dockerfile: Dockerfile.node
+    # push, deploy. See docs/deploy-ohne-server-build.md.
+    image: ghcr.io/leifken/open-seo:sha-${SOURCE_COMMIT}
     restart: unless-stopped
     depends_on:
       postgres:

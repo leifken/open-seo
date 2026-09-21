@@ -38,11 +38,20 @@ FP_FILE="$OUT_DIR/.openseo-node-build-env"
 # upstream selfhost, where a new image starts with no output) — so the
 # fingerprint must include the code revision, not just the build env.
 # Coolify injects SOURCE_COMMIT on every deploy.
-FINGERPRINT="$({ env | grep -E '^(VITE_|AUTH_MODE|BYPASS_EMAIL_VERIFICATION|SIGNUP_DISABLED|GOOGLE_AUTH_DISABLED|AUTHENTIK_AUTH_ENABLED|BILLING_DISABLED|POSTHOG_PUBLIC_KEY|POSTHOG_HOST|TURNSTILE_SITE_KEY)'; echo "commit=${SOURCE_COMMIT:-unknown}"; } | sort | sha256sum | cut -d' ' -f1)"
+FINGERPRINT="$(sh scripts/node-build-fingerprint.sh)"
 test -n "$FINGERPRINT"
 
+# Build baked into the image by GitHub Actions (Dockerfile.node, PREBUILD_COMMIT).
+# Used when it was made for exactly this commit and build env; otherwise the
+# runtime build below runs as before. Keeps heavy builds off the server.
+PREBUILT=/app/dist-node-image
 if [ -f "$FP_FILE" ] && [ "$(cat "$FP_FILE")" = "$FINGERPRINT" ]; then
   echo "[entrypoint] reusing existing build (build-relevant env unchanged)."
+elif [ -f "$PREBUILT/.openseo-node-build-env" ] && [ "$(cat "$PREBUILT/.openseo-node-build-env")" = "$FINGERPRINT" ]; then
+  echo "[entrypoint] using the build baked into the image (no build on this server)."
+  mkdir -p "$OUT_DIR"
+  find "$OUT_DIR" -mindepth 1 -delete
+  cp -a "$PREBUILT"/. "$OUT_DIR"/
 else
   echo "[entrypoint] building client + server (first start, changed build env, or new image)..."
   rm -f "$FP_FILE"

@@ -19,6 +19,25 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
+# Optional: bake the vite build into the image (GitHub Actions, image.yml).
+# Without PREBUILD_COMMIT nothing changes: the build runs at container start.
+# With it, the build-relevant flags come in as build args and must equal the
+# runtime values in Coolify; the entrypoint compares fingerprints and falls
+# back to a runtime build on any difference. No secrets are needed here.
+ARG PREBUILD_COMMIT=
+ARG VITE_SHOW_DEVTOOLS
+ARG AUTH_MODE
+ARG BYPASS_EMAIL_VERIFICATION
+ARG SIGNUP_DISABLED
+ARG GOOGLE_AUTH_DISABLED
+ARG AUTHENTIK_AUTH_ENABLED
+ARG BILLING_DISABLED
+RUN if [ -n "$PREBUILD_COMMIT" ]; then \
+      pnpm exec vite build --config vite.config.node.ts \
+      && SOURCE_COMMIT="$PREBUILD_COMMIT" sh scripts/node-build-fingerprint.sh > dist-node/.openseo-node-build-env \
+      && mv dist-node /app/dist-node-image; \
+    fi
+
 EXPOSE 3001
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=3 \

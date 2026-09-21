@@ -157,6 +157,28 @@ async function handleUpdateDeploy() {
   if (!token || !uuid) {
     return { ok: false, status: 400, error: "Installations-Schlüssel ist nicht konfiguriert." };
   }
+  // The server no longer builds: Coolify pulls ghcr.io/leifken/open-seo:sha-<commit>,
+  // built by .github/workflows/image.yml. Only deploy once that image exists,
+  // otherwise the pull fails (the running container would stay, but the update would not land).
+  try {
+    const branch = await githubJson(
+      `https://api.github.com/repos/${UPDATE_REPO}/branches/${UPDATE_BRANCH}`,
+    );
+    const sha = branch?.commit?.sha ?? "";
+    const runs = await githubJson(
+      `https://api.github.com/repos/${UPDATE_REPO}/actions/workflows/image.yml/runs?head_sha=${sha}&per_page=1`,
+    );
+    const run = runs?.workflow_runs?.[0];
+    if (!run || run.status !== "completed" || run.conclusion !== "success") {
+      return {
+        ok: false,
+        status: 409,
+        error: `Das Image für ${sha.slice(0, 7)} ist noch nicht fertig (${run ? `${run.status}/${run.conclusion ?? "läuft"}` : "kein Build gefunden"}). Bitte in einigen Minuten erneut.`,
+      };
+    }
+  } catch (error) {
+    return { ok: false, status: 502, error: `Image-Prüfung bei GitHub fehlgeschlagen: ${String(error)}` };
+  }
   const res = await fetch(`${apiUrl}/deploy?uuid=${uuid}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
