@@ -45,6 +45,12 @@ export const fetchBusinessListingsCategories: DataforseoSections["fetchBusinessL
   async () =>
     (await loadDataforseoSections()).fetchBusinessListingsCategories();
 
+/** LEIFKEN: GET /v3/appendix/user_data — free at DataForSEO (deposit,
+ *  balance, spend by function), so it also skips the metered client. Used by
+ *  the whoami MCP tool to show the real DataForSEO account balance. */
+export const fetchUserData: DataforseoSections["fetchUserData"] = async () =>
+  (await loadDataforseoSections()).fetchUserData();
+
 export type {
   BusinessTaskEndpoint,
   BusinessTaskOutcome,

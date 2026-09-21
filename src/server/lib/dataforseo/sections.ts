@@ -16,6 +16,8 @@ export {
   postMyBusinessUpdatesTask,
 } from "@/server/lib/dataforseo/business";
 
+export { fetchUserData } from "@/server/lib/dataforseo/appendix";
+
 export {
   fetchBacklinksHistory,
   fetchBacklinksRows,
