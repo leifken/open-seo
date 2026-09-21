@@ -380,6 +380,10 @@ export const getSerpResultsTool = {
         `/p/${args.projectId}/keywords`,
       ),
       structuredContent: { results },
+      // Same rule as research_keywords: every query failing is a call
+      // failure, not a 200 full of "FAILED" text; a partial failure with at
+      // least one usable SERP stays a success.
+      isError: okCount === 0,
     });
   }),
 };

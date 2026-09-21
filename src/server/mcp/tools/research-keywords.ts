@@ -167,6 +167,11 @@ export const researchKeywordsTool = {
         `/p/${args.projectId}/keywords`,
       ),
       structuredContent: { results },
+      // Every seed failing means the call delivered nothing usable — flag it
+      // like any other tool failure instead of a silent all-FAILED body inside
+      // a 200-shaped response. A partial failure (some seeds ok) stays a
+      // success: the caller gets real rows for what worked.
+      isError: okCount === 0,
     });
   }),
 };

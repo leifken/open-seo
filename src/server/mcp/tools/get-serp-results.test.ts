@@ -85,6 +85,40 @@ describe("get_serp_results", () => {
     expect(entry.ok).toBe(false);
     if (entry.ok) throw new Error("expected ok: false");
     expect(typeof entry.error).toBe("string");
+    // Every query in the batch failed, so the call itself is an error — not a
+    // 200 whose body happens to say "FAILED" for the only query asked.
+    expect(result.isError).toBe(true);
+  });
+
+  it("does not set isError when at least one query in the batch succeeds", async () => {
+    const live = vi
+      .fn()
+      .mockResolvedValueOnce({ items: [], partial: true, partialReason: "boom" })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            type: "organic",
+            rank_group: 1,
+            rank_absolute: 1,
+            title: "Agentur XY",
+            url: "https://example.com/",
+            domain: "example.com",
+            description: null,
+          },
+        ],
+        partial: false,
+      });
+    mocks.createDataforseoClient.mockReturnValue({ serp: { live } });
+
+    const result = await getSerpResultsTool.handler(
+      {
+        projectId: "project_1",
+        queries: [{ keyword: "a" }, { keyword: "b" }],
+      },
+      toolContext,
+    );
+
+    expect(result.isError).toBeUndefined();
   });
 
   it("extracts aiOverview, peopleAlsoAsk, and localPack from the full item list", async () => {
