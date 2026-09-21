@@ -2,7 +2,10 @@
 import { z } from "zod";
 import { createDataforseoClient } from "@/server/lib/dataforseo";
 import { normalizeDomainInput } from "@/server/lib/domainUtils";
-import { assertLabsLocationCode, assertLanguageForLocation } from "@/server/lib/market";
+import {
+  assertLabsLocationCode,
+  assertLanguageForLocation,
+} from "@/server/lib/market";
 import { buildProjectMeta } from "@/server/mcp/context";
 import { mcpResponse } from "@/server/mcp/formatters";
 import {
@@ -75,10 +78,14 @@ function hasSerpElement(row: unknown, field: string): boolean {
 }
 
 const KEYWORD_GAP_COLUMNS: McpTableColumn<unknown>[] = [
-  { header: "keyword", value: (row) => readPath(row, "keyword_data", "keyword") },
+  {
+    header: "keyword",
+    value: (row) => readPath(row, "keyword_data", "keyword"),
+  },
   {
     header: "volume",
-    value: (row) => readPath(row, "keyword_data", "keyword_info", "search_volume"),
+    value: (row) =>
+      readPath(row, "keyword_data", "keyword_info", "search_volume"),
   },
   {
     header: "KD",
@@ -87,7 +94,8 @@ const KEYWORD_GAP_COLUMNS: McpTableColumn<unknown>[] = [
   },
   {
     header: "competitor rank",
-    value: (row) => readPath(row, "second_domain_serp_element", "rank_absolute"),
+    value: (row) =>
+      readPath(row, "second_domain_serp_element", "rank_absolute"),
   },
   {
     header: "competitor url",
@@ -95,7 +103,8 @@ const KEYWORD_GAP_COLUMNS: McpTableColumn<unknown>[] = [
   },
   {
     header: "your rank",
-    value: (row) => readPath(row, "first_domain_serp_element", "rank_absolute") ?? "—",
+    value: (row) =>
+      readPath(row, "first_domain_serp_element", "rank_absolute") ?? "—",
   },
 ];
 
@@ -187,7 +196,11 @@ export const getKeywordGapTool = {
 
 const getHistoricalRankOverviewInputSchema = {
   projectId: projectIdSchema,
-  domain: z.string().min(1).max(2048).describe("Domain to look up history for."),
+  domain: z
+    .string()
+    .min(1)
+    .max(2048)
+    .describe("Domain to look up history for."),
   includeSubdomains: z
     .boolean()
     .optional()
@@ -196,7 +209,9 @@ const getHistoricalRankOverviewInputSchema = {
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional()
-    .describe("Inclusive start date YYYY-MM-DD. Earliest available: 2020-10-01."),
+    .describe(
+      "Inclusive start date YYYY-MM-DD. Earliest available: 2020-10-01.",
+    ),
   dateTo: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -223,11 +238,26 @@ const HISTORICAL_RANK_COLUMNS: McpTableColumn<unknown>[] = [
     header: "month",
     value: (row) => formatYearMonth(row),
   },
-  { header: "pos 1", value: (row) => readPath(row, "metrics", "organic", "pos_1") },
-  { header: "pos 2-3", value: (row) => readPath(row, "metrics", "organic", "pos_2_3") },
-  { header: "pos 4-10", value: (row) => readPath(row, "metrics", "organic", "pos_4_10") },
-  { header: "pos 11-20", value: (row) => readPath(row, "metrics", "organic", "pos_11_20") },
-  { header: "keywords", value: (row) => readPath(row, "metrics", "organic", "count") },
+  {
+    header: "pos 1",
+    value: (row) => readPath(row, "metrics", "organic", "pos_1"),
+  },
+  {
+    header: "pos 2-3",
+    value: (row) => readPath(row, "metrics", "organic", "pos_2_3"),
+  },
+  {
+    header: "pos 4-10",
+    value: (row) => readPath(row, "metrics", "organic", "pos_4_10"),
+  },
+  {
+    header: "pos 11-20",
+    value: (row) => readPath(row, "metrics", "organic", "pos_11_20"),
+  },
+  {
+    header: "keywords",
+    value: (row) => readPath(row, "metrics", "organic", "count"),
+  },
   { header: "ETV", value: (row) => readPath(row, "metrics", "organic", "etv") },
 ];
 
@@ -328,7 +358,10 @@ type GetKeywordsForSiteArgs = z.infer<
 
 const KEYWORDS_FOR_SITE_COLUMNS: McpTableColumn<unknown>[] = [
   { header: "keyword", value: (row) => readPath(row, "keyword") },
-  { header: "volume", value: (row) => readPath(row, "keyword_info", "search_volume") },
+  {
+    header: "volume",
+    value: (row) => readPath(row, "keyword_info", "search_volume"),
+  },
   { header: "CPC", value: (row) => readPath(row, "keyword_info", "cpc") },
   {
     header: "competition",
@@ -406,7 +439,9 @@ const getAutocompleteSuggestionsInputSchema = {
     .string()
     .min(1)
     .max(700)
-    .describe("Partial search phrase to get Google Autocomplete suggestions for."),
+    .describe(
+      "Partial search phrase to get Google Autocomplete suggestions for.",
+    ),
   locationCode: locationCodeSchema.optional(),
   languageCode: languageCodeSchema.optional(),
 } as const;

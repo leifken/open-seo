@@ -107,7 +107,11 @@ export const getChatGptAnswerTool = {
       lines.push("", `Brands mentioned: ${brandNames.join(", ")}`);
     }
     if (result.sources && result.sources.length > 0) {
-      lines.push("", "Sources:", formatMcpTable(result.sources, CHATGPT_SOURCE_COLUMNS));
+      lines.push(
+        "",
+        "Sources:",
+        formatMcpTable(result.sources, CHATGPT_SOURCE_COLUMNS),
+      );
     }
     if (result.check_url) lines.push("", `check_url: ${result.check_url}`);
 
@@ -139,7 +143,9 @@ const getGeminiAiAnswerInputSchema = {
   device: z
     .enum(["desktop", "mobile"])
     .optional()
-    .describe("Device the AI Mode result is rendered for. Defaults to desktop."),
+    .describe(
+      "Device the AI Mode result is rendered for. Defaults to desktop.",
+    ),
 } as const;
 
 type GetGeminiAiAnswerArgs = z.infer<
@@ -184,7 +190,10 @@ export const getGeminiAiAnswerTool = {
       `Google AI Mode answer for "${args.query}" (location ${result.location_code ?? locationCode}, language ${result.language_code ?? languageCode}).`,
     ];
     if (!overview) {
-      lines.push("", "No AI Mode answer was shown for this query in this market.");
+      lines.push(
+        "",
+        "No AI Mode answer was shown for this query in this market.",
+      );
     } else {
       lines.push(
         "",

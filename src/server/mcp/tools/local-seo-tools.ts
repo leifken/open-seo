@@ -219,11 +219,7 @@ function formatRatingDistribution(profile: Record<string, unknown>): string {
 // unavailable ones.
 function formatAttributes(profile: Record<string, unknown>): string {
   const available = readPath(profile, "attributes", "available_attributes");
-  const unavailable = readPath(
-    profile,
-    "attributes",
-    "unavailable_attributes",
-  );
+  const unavailable = readPath(profile, "attributes", "unavailable_attributes");
   const flatten = (group: unknown, suffix: string): string[] => {
     if (!isRecord(group)) return [];
     return Object.values(group).flatMap((values) =>
@@ -358,11 +354,16 @@ async function findTopLocalCompetitors(
 
   return Promise.all(
     candidates.map(async (item): Promise<CompetitorLookup> => {
-      const rank = readPath(item, "rank_group") ?? readPath(item, "rank_absolute");
+      const rank =
+        readPath(item, "rank_group") ?? readPath(item, "rank_absolute");
       const cid = readString(item, "cid");
       const placeId = readString(item, "place_id");
       const title = readString(item, "title");
-      const identifierKeyword = cid ? `cid:${cid}` : placeId ? `place_id:${placeId}` : null;
+      const identifierKeyword = cid
+        ? `cid:${cid}`
+        : placeId
+          ? `place_id:${placeId}`
+          : null;
       if (!identifierKeyword) {
         // Nothing precise enough to look up — report what the SERP itself had.
         return {
@@ -428,7 +429,7 @@ export const getBusinessProfileTool = {
   config: {
     title: "Get business profile",
     description:
-      "Reads one Google Business Profile: categories, description, attributes, rating and review count, rating breakdown, address, phone, website, claimed status, opening hours, and photo count — plus, with includeTopCompetitors, the 3 strongest nearby competitors on the same fields (GOOGLE-UNTERNEHMENSPROFIL.md §4 'Profil-Soll'). Note: DataForSEO does not expose a services/products list, special/holiday opening hours, or per-photo ages for this endpoint — dataGaps in the response says so explicitly rather than omitting them silently. Runs over DataForSEO's task queue (not the live endpoint), polling for up to ~45s — a cid or placeId (from get_local_serp_results) resolves fastest and most reliably; an ambiguous business name can take longer or fail to match. A lookup that is still unresolved after the poll window returns status \"timeout\" (isError, code zeitueberschreitung) with a taskId to resume for free — never reported as \"not found\", which only status \"completed\" with profile: null means. Charges credits.",
+      'Reads one Google Business Profile: categories, description, attributes, rating and review count, rating breakdown, address, phone, website, claimed status, opening hours, and photo count — plus, with includeTopCompetitors, the 3 strongest nearby competitors on the same fields (GOOGLE-UNTERNEHMENSPROFIL.md §4 \'Profil-Soll\'). Note: DataForSEO does not expose a services/products list, special/holiday opening hours, or per-photo ages for this endpoint — dataGaps in the response says so explicitly rather than omitting them silently. Runs over DataForSEO\'s task queue (not the live endpoint), polling for up to ~45s — a cid or placeId (from get_local_serp_results) resolves fastest and most reliably; an ambiguous business name can take longer or fail to match. A lookup that is still unresolved after the poll window returns status "timeout" (isError, code zeitueberschreitung) with a taskId to resume for free — never reported as "not found", which only status "completed" with profile: null means. Charges credits.',
     inputSchema: getBusinessProfileInputSchema,
     outputSchema: {
       status: z.enum(["completed", "timeout"]),

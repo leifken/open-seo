@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getChatGptAnswerTool, getGeminiAiAnswerTool } from "./llm-scraper-tools";
+import {
+  getChatGptAnswerTool,
+  getGeminiAiAnswerTool,
+} from "./llm-scraper-tools";
 import { makeToolContext, textContent } from "./tool-test-support";
 
 const mocks = vi.hoisted(() => ({
@@ -36,7 +39,13 @@ describe("get_chatgpt_answer", () => {
       language_code: "de",
       model: "gpt-5",
       markdown: "Es gibt mehrere Agenturen in Nottuln.",
-      sources: [{ title: "Agentur XY", domain: "example.com", url: "https://example.com/" }],
+      sources: [
+        {
+          title: "Agentur XY",
+          domain: "example.com",
+          url: "https://example.com/",
+        },
+      ],
       brand_entities: [{ title: "Agentur XY" }],
     });
     mocks.createDataforseoClient.mockReturnValue({
@@ -92,7 +101,11 @@ describe("get_gemini_ai_answer", () => {
         {
           markdown: "In Nottuln gibt es mehrere Webdesign-Agenturen.",
           references: [
-            { title: "Agentur XY", domain: "example.com", url: "https://example.com/" },
+            {
+              title: "Agentur XY",
+              domain: "example.com",
+              url: "https://example.com/",
+            },
           ],
         },
       ],

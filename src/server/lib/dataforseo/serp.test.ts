@@ -99,9 +99,9 @@ describe("fetchLiveSerp", () => {
       depth: 5,
     });
 
-    const body = parseDataforseoRequestBody(fetchMock.mock.calls[0]?.[1]) as Array<
-      Record<string, unknown>
-    >;
+    const body = parseDataforseoRequestBody(
+      fetchMock.mock.calls[0]?.[1],
+    ) as Array<Record<string, unknown>>;
     expect(body[0]).toMatchObject({ depth: 10, load_async_ai_overview: true });
   });
 });
@@ -324,7 +324,14 @@ describe("fetchAutocomplete", () => {
             {
               status_code: 40501,
               status_message: "No Search Results.",
-              path: ["v3", "serp", "google", "autocomplete", "live", "advanced"],
+              path: [
+                "v3",
+                "serp",
+                "google",
+                "autocomplete",
+                "live",
+                "advanced",
+              ],
               cost: 0.0005,
               result: [],
             },

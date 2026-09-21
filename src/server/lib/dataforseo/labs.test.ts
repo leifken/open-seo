@@ -44,7 +44,10 @@ describe("fetchDomainIntersection", () => {
               {
                 keyword_data: { keyword: "webdesign nottuln" },
                 first_domain_serp_element: null,
-                second_domain_serp_element: { rank_absolute: 3, url: "https://rival.example/" },
+                second_domain_serp_element: {
+                  rank_absolute: 3,
+                  url: "https://rival.example/",
+                },
               },
             ],
           },
@@ -62,7 +65,11 @@ describe("fetchDomainIntersection", () => {
     });
 
     expect(requestBody(fetchMock)).toMatchObject([
-      { target_1: "example.com", target_2: "rival.example", intersections: false },
+      {
+        target_1: "example.com",
+        target_2: "rival.example",
+        intersections: false,
+      },
     ]);
     expect(result.data).toHaveLength(1);
     expect(result.data[0]?.second_domain_serp_element).toMatchObject({
@@ -109,7 +116,11 @@ describe("fetchHistoricalRankOverview", () => {
       { target: "example.com", correlate: true },
     ]);
     expect(result.data).toEqual([
-      { year: 2026, month: 8, metrics: { organic: { pos_1: 2, count: 40, etv: 120.5 } } },
+      {
+        year: 2026,
+        month: 8,
+        metrics: { organic: { pos_1: 2, count: 40, etv: 120.5 } },
+      },
     ]);
   });
 });
@@ -148,7 +159,10 @@ describe("fetchKeywordsForSite", () => {
       { target: "example.com", include_subdomains: true },
     ]);
     expect(result.data).toEqual([
-      { keyword: "webdesign agentur nottuln", keyword_info: { search_volume: 90, cpc: 2.1 } },
+      {
+        keyword: "webdesign agentur nottuln",
+        keyword_info: { search_volume: 90, cpc: 2.1 },
+      },
     ]);
   });
 });

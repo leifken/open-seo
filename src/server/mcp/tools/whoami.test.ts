@@ -82,7 +82,9 @@ describe("whoami", () => {
 
     expect(result.isError).toBeUndefined();
     expect(result.structuredContent.dataforseoAccountBalance).toBeNull();
-    expect(textContent(result)).toContain("DataForSEO account balance: unknown");
+    expect(textContent(result)).toContain(
+      "DataForSEO account balance: unknown",
+    );
   });
 
   it("still reports hosted credits alongside the DataForSEO balance", async () => {

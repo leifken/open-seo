@@ -17,7 +17,11 @@ import {
 } from "@/server/mcp/output-schemas";
 import { withMcpProjectAuth } from "@/server/mcp/project-auth";
 import { projectIdSchema } from "@/server/mcp/schemas";
-import { formatMcpTable, readPath, type McpTableColumn } from "@/server/mcp/table";
+import {
+  formatMcpTable,
+  readPath,
+  type McpTableColumn,
+} from "@/server/mcp/table";
 
 const auditIdSchema = z
   .string()

@@ -155,7 +155,9 @@ describe("get_business_profile", () => {
       status: "completed",
       profile: null,
     });
-    expect(textContent(result)).toContain("confirmed empty result, not a timeout");
+    expect(textContent(result)).toContain(
+      "confirmed empty result, not a timeout",
+    );
   });
 
   it("reports a genuine timeout as isError with code zeitueberschreitung, never as not found", async () => {
@@ -186,7 +188,7 @@ describe("get_business_profile", () => {
       taskId: "task-3",
       profile: null,
     });
-    expect(textContent(result)).toContain("not a confirmed \"not found\"");
+    expect(textContent(result)).toContain('not a confirmed "not found"');
     expect(textContent(result)).toContain('taskId "task-3"');
   });
 
@@ -229,7 +231,9 @@ describe("get_business_profile", () => {
             title: "Acme Cafe",
             description: "The best coffee in town.",
             attributes: {
-              available_attributes: { Accessibility: ["Wheelchair accessible entrance"] },
+              available_attributes: {
+                Accessibility: ["Wheelchair accessible entrance"],
+              },
               unavailable_attributes: { Offerings: ["Alcohol"] },
             },
           },
@@ -252,9 +256,9 @@ describe("get_business_profile", () => {
       "dataGaps" in result.structuredContent
         ? result.structuredContent.dataGaps
         : undefined;
-    expect(dataGaps?.some((gap) => gap.includes("services/products list"))).toBe(
-      true,
-    );
+    expect(
+      dataGaps?.some((gap) => gap.includes("services/products list")),
+    ).toBe(true);
   });
 
   it("looks up the 3 strongest nearby competitors when includeTopCompetitors is set", async () => {
@@ -284,12 +288,16 @@ describe("get_business_profile", () => {
       },
       "task-cid:rival-a": {
         status: "completed",
-        result: { items: [{ title: "Rival A", cid: "rival-a", rating: { value: 4.2 } }] },
+        result: {
+          items: [{ title: "Rival A", cid: "rival-a", rating: { value: 4.2 } }],
+        },
       },
       "task-cid:rival-b": { status: "pending", result: null },
       "task-cid:rival-c": {
         status: "completed",
-        result: { items: [{ title: "Rival C", cid: "rival-c", rating: { value: 3.9 } }] },
+        result: {
+          items: [{ title: "Rival C", cid: "rival-c", rating: { value: 3.9 } }],
+        },
       },
     };
     mocks.fetchBusinessDataTaskResult.mockImplementation(
@@ -301,7 +309,11 @@ describe("get_business_profile", () => {
       { rank_group: 2, title: "Rival A", cid: "rival-a" },
       { rank_group: 3, title: "Rival B", cid: "rival-b" },
       { rank_group: 4, title: "Rival C", cid: "rival-c" },
-      { rank_group: 5, title: "Rival D (excluded, only top 3 wanted)", cid: "rival-d" },
+      {
+        rank_group: 5,
+        title: "Rival D (excluded, only top 3 wanted)",
+        cid: "rival-d",
+      },
     ]);
     mocks.createDataforseoClient.mockReturnValue({
       business: { myBusinessInfoTaskPost },
@@ -338,13 +350,19 @@ describe("get_business_profile", () => {
       status: "completed",
       profile: { title: "Rival A" },
     });
-    expect(competitors?.[1]).toMatchObject({ cid: "rival-b", status: "timeout", profile: null });
+    expect(competitors?.[1]).toMatchObject({
+      cid: "rival-b",
+      status: "timeout",
+      profile: null,
+    });
     expect(competitors?.[2]).toMatchObject({
       cid: "rival-c",
       status: "completed",
       profile: { title: "Rival C" },
     });
-    expect(textContent(result)).toContain('Top 3 nearby competitor(s) for "Coffee shop"');
+    expect(textContent(result)).toContain(
+      'Top 3 nearby competitor(s) for "Coffee shop"',
+    );
   });
 
   it("skips competitor lookup (empty array, no extra calls) when the profile has no coordinates", async () => {

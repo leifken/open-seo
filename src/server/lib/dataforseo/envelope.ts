@@ -202,8 +202,7 @@ export function assertOk<T extends DataforseoTaskLike>(
 
   if (task.status_code !== (okTaskStatusCode ?? 20000)) {
     if (treatNoResultsAsEmpty && isNoResultsTask(task)) return task;
-    if (treatPartialResultsAsPartial && isPartialResultsTask(task))
-      return task;
+    if (treatPartialResultsAsPartial && isPartialResultsTask(task)) return task;
 
     const message = task.status_message || "DataForSEO task failed";
     const path = classifyPath ?? (task.path ? `/${task.path.join("/")}` : "");

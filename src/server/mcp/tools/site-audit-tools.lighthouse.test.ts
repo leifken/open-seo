@@ -87,7 +87,12 @@ describe("get_audit_lighthouse", () => {
     expect(row).toMatchObject({
       url: "https://example.com/",
       strategy: "mobile",
-      scores: { performance: 72, accessibility: 95, bestPractices: 89, seo: 100 },
+      scores: {
+        performance: 72,
+        accessibility: 95,
+        bestPractices: 89,
+        seo: 100,
+      },
       coreWebVitals: { lcpMs: 2400, cls: 0.05, inpMs: 180, ttfbMs: 320 },
       hasDetailedReport: true,
     });

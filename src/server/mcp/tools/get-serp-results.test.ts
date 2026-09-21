@@ -93,7 +93,11 @@ describe("get_serp_results", () => {
   it("does not set isError when at least one query in the batch succeeds", async () => {
     const live = vi
       .fn()
-      .mockResolvedValueOnce({ items: [], partial: true, partialReason: "boom" })
+      .mockResolvedValueOnce({
+        items: [],
+        partial: true,
+        partialReason: "boom",
+      })
       .mockResolvedValueOnce({
         items: [
           {
@@ -126,9 +130,14 @@ describe("get_serp_results", () => {
       items: [
         {
           type: "ai_overview",
-          markdown: "Webdesign in Nottuln wird von mehreren Agenturen angeboten.",
+          markdown:
+            "Webdesign in Nottuln wird von mehreren Agenturen angeboten.",
           references: [
-            { domain: "example.com", url: "https://example.com/", title: "Agentur XY" },
+            {
+              domain: "example.com",
+              url: "https://example.com/",
+              title: "Agentur XY",
+            },
           ],
         },
         {
@@ -137,7 +146,11 @@ describe("get_serp_results", () => {
             {
               title: "Was kostet Webdesign in Nottuln?",
               expanded_element: [
-                { domain: "example.com", url: "https://example.com/preise", title: "Preise" },
+                {
+                  domain: "example.com",
+                  url: "https://example.com/preise",
+                  title: "Preise",
+                },
               ],
             },
           ],
@@ -174,16 +187,32 @@ describe("get_serp_results", () => {
     expect(entry.aiOverview).toEqual({
       present: true,
       text: "Webdesign in Nottuln wird von mehreren Agenturen angeboten.",
-      sources: [{ domain: "example.com", url: "https://example.com/", title: "Agentur XY" }],
+      sources: [
+        {
+          domain: "example.com",
+          url: "https://example.com/",
+          title: "Agentur XY",
+        },
+      ],
     });
     expect(entry.peopleAlsoAsk).toEqual([
       {
         question: "Was kostet Webdesign in Nottuln?",
-        source: { domain: "example.com", url: "https://example.com/preise", title: "Preise" },
+        source: {
+          domain: "example.com",
+          url: "https://example.com/preise",
+          title: "Preise",
+        },
       },
     ]);
     expect(entry.localPack).toEqual([
-      { name: "Agentur XY", domain: "example.com", rating: 4.8, ratingCount: 23, rank: 1 },
+      {
+        name: "Agentur XY",
+        domain: "example.com",
+        rating: 4.8,
+        ratingCount: 23,
+        rank: 1,
+      },
     ]);
     // The pre-existing items array (incl. local_pack entries) stays untouched.
     expect(entry.items.some((item) => item.type === "organic")).toBe(true);

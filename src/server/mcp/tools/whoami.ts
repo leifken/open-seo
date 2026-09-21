@@ -94,7 +94,10 @@ export const whoamiTool = {
     const [creditsRemaining, dataforseoAccountBalance] = await Promise.all([
       isHosted
         ? Promise.all([
-            checkBalance(AUTUMN_SEO_DATA_BALANCE_FEATURE_ID, auth.organizationId),
+            checkBalance(
+              AUTUMN_SEO_DATA_BALANCE_FEATURE_ID,
+              auth.organizationId,
+            ),
             checkBalance(
               AUTUMN_SEO_DATA_TOPUP_BALANCE_FEATURE_ID,
               auth.organizationId,

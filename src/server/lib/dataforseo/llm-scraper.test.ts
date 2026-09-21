@@ -40,7 +40,14 @@ describe("fetchChatGptScrape", () => {
   it("sends location_code/language_code and returns the parsed answer", async () => {
     const fetchMock = stubDataforseo(
       okTask(
-        ["v3", "ai_optimization", "chat_gpt", "llm_scraper", "live", "advanced"],
+        [
+          "v3",
+          "ai_optimization",
+          "chat_gpt",
+          "llm_scraper",
+          "live",
+          "advanced",
+        ],
         [
           {
             keyword: "beste Webdesign Agentur Nottuln",
@@ -50,7 +57,11 @@ describe("fetchChatGptScrape", () => {
             check_url: "https://chatgpt.com/...",
             markdown: "Es gibt mehrere Agenturen in Nottuln...",
             sources: [
-              { title: "Agentur XY", domain: "example.com", url: "https://example.com/" },
+              {
+                title: "Agentur XY",
+                domain: "example.com",
+                url: "https://example.com/",
+              },
             ],
             fan_out_queries: ["Webdesign Nottuln Preise"],
             brand_entities: [{ title: "Agentur XY" }],
@@ -70,7 +81,11 @@ describe("fetchChatGptScrape", () => {
       "https://api.dataforseo.com/v3/ai_optimization/chat_gpt/llm_scraper/live/advanced",
     );
     expect(body).toMatchObject([
-      { keyword: "beste Webdesign Agentur Nottuln", location_code: 2276, language_code: "de" },
+      {
+        keyword: "beste Webdesign Agentur Nottuln",
+        location_code: 2276,
+        language_code: "de",
+      },
     ]);
     expect(result.data.markdown).toContain("mehrere Agenturen");
     expect(result.data.brand_entities).toEqual([{ title: "Agentur XY" }]);
@@ -97,7 +112,11 @@ describe("fetchGoogleAiModeScrape", () => {
               {
                 markdown: "In Nottuln gibt es mehrere Webdesign-Agenturen...",
                 references: [
-                  { title: "Agentur XY", domain: "example.com", url: "https://example.com/" },
+                  {
+                    title: "Agentur XY",
+                    domain: "example.com",
+                    url: "https://example.com/",
+                  },
                 ],
               },
             ],
@@ -114,7 +133,11 @@ describe("fetchGoogleAiModeScrape", () => {
 
     expect(result.data.items?.[0]?.markdown).toContain("Webdesign-Agenturen");
     expect(result.data.items?.[0]?.references).toEqual([
-      { title: "Agentur XY", domain: "example.com", url: "https://example.com/" },
+      {
+        title: "Agentur XY",
+        domain: "example.com",
+        url: "https://example.com/",
+      },
     ]);
   });
 

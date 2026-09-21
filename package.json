@@ -56,7 +56,8 @@
     "ci:check": "prettier --check . && knip && tsc --noEmit && tsc --noEmit -p badseo/tsconfig.json && oxlint . --type-aware && pnpm sync-plugin-skills && test -z \"$(git status --porcelain -- plugins/openseo/skills)\"",
     "build:node": "vite build --config vite.config.node.ts",
     "dev:node": "vite dev --config vite.config.node.ts",
-    "serve:node": "node scripts/serve-node.mjs"
+    "serve:node": "node scripts/serve-node.mjs",
+    "rankmeister:sofortpaket-pruefen": "node scripts/rankmeister-sofortpaket-pruefen.mjs"
   },
   "cloudflare": {
     "bindings": {

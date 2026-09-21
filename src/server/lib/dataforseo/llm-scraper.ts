@@ -65,7 +65,10 @@ const chatGptScrapeBrandEntitySchema = z
   })
   .passthrough();
 
-export const chatGptScrapeResultSchema = z
+// Not exported: nothing outside this file needs the schema or its inferred
+// type directly (callers get typed results through fetchChatGptScrape's
+// return type). Keep it that way — knip flags an unused export otherwise.
+const chatGptScrapeResultSchema = z
   .object({
     keyword: z.string().nullable().optional(),
     location_code: z.number().nullable().optional(),
@@ -75,11 +78,14 @@ export const chatGptScrapeResultSchema = z
     markdown: z.string().nullable().optional(),
     sources: z.array(chatGptScrapeSourceSchema).nullable().optional(),
     fan_out_queries: z.array(z.string()).nullable().optional(),
-    brand_entities: z.array(chatGptScrapeBrandEntitySchema).nullable().optional(),
+    brand_entities: z
+      .array(chatGptScrapeBrandEntitySchema)
+      .nullable()
+      .optional(),
   })
   .passthrough();
 
-export type ChatGptScrapeResult = z.infer<typeof chatGptScrapeResultSchema>;
+type ChatGptScrapeResult = z.infer<typeof chatGptScrapeResultSchema>;
 
 export async function fetchChatGptScrape(input: {
   keyword: string;
@@ -131,7 +137,8 @@ const aiModeOverviewItemSchema = z
   })
   .passthrough();
 
-export const googleAiModeScrapeResultSchema = z
+// Not exported — same reasoning as chatGptScrapeResultSchema above.
+const googleAiModeScrapeResultSchema = z
   .object({
     keyword: z.string().nullable().optional(),
     location_code: z.number().nullable().optional(),
@@ -141,9 +148,7 @@ export const googleAiModeScrapeResultSchema = z
   })
   .passthrough();
 
-export type GoogleAiModeScrapeResult = z.infer<
-  typeof googleAiModeScrapeResultSchema
->;
+type GoogleAiModeScrapeResult = z.infer<typeof googleAiModeScrapeResultSchema>;
 
 export async function fetchGoogleAiModeScrape(input: {
   keyword: string;
@@ -162,7 +167,9 @@ export async function fetchGoogleAiModeScrape(input: {
   // "No Search Results" (40501) — AI Mode has no answer for some keywords or
   // is unavailable in that market; a valid empty result, still billed.
   const task = assertOk(response, { treatNoResultsAsEmpty: true });
-  const parsed = googleAiModeScrapeResultSchema.safeParse(firstResult(task) ?? {});
+  const parsed = googleAiModeScrapeResultSchema.safeParse(
+    firstResult(task) ?? {},
+  );
   if (!parsed.success) {
     throw new AppError(
       "INTERNAL_ERROR",

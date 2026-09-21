@@ -109,7 +109,11 @@ const peopleAlsoAskItemSchema = z
 
 type PeopleAlsoAskQuestion = {
   question: string;
-  source: { domain: string | null; url: string | null; title: string | null } | null;
+  source: {
+    domain: string | null;
+    url: string | null;
+    title: string | null;
+  } | null;
 };
 
 function extractPeopleAlsoAsk(items: SerpLiveItem[]): PeopleAlsoAskQuestion[] {
@@ -300,9 +304,7 @@ export const getSerpResultsTool = {
     const results = await Promise.all(
       args.queries.map(async (q) => {
         try {
-          const depth = q.depth
-            ? Math.ceil(q.depth / 10) * 10
-            : undefined;
+          const depth = q.depth ? Math.ceil(q.depth / 10) * 10 : undefined;
           const serp = await client.serp.live({
             keyword: q.keyword,
             depth: depth ?? 20,
