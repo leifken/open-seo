@@ -1,14 +1,20 @@
+/* eslint-disable max-lines -- one file per DataForSEO API section (labs = DataforseoLabsApi), matching business.ts/ai.ts/serp.ts */
 import { z } from "zod";
 import {
   DataforseoLabsGoogleDomainRankOverviewLiveRequestInfo,
+  DataforseoLabsGoogleHistoricalRankOverviewLiveRequestInfo,
   DataforseoLabsGoogleKeywordIdeasLiveRequestInfo,
   DataforseoLabsGoogleKeywordOverviewLiveRequestInfo,
   DataforseoLabsGoogleKeywordSuggestionsLiveRequestInfo,
+  DataforseoLabsGoogleKeywordsForSiteLiveRequestInfo,
   DataforseoLabsGoogleRankedKeywordsLiveRequestInfo,
   DataforseoLabsGoogleRelatedKeywordsLiveRequestInfo,
   DataforseoLabsGoogleRelevantPagesLiveRequestInfo,
   DataforseoLabsGoogleSerpCompetitorsLiveRequestInfo,
+  type DataforseoLabsDomainIntersectionLiveItem,
   type DataforseoLabsDomainRankOverviewLiveItem,
+  type DataforseoLabsGoogleDomainIntersectionLiveRequestInfo,
+  type DataforseoLabsGoogleHistoricalRankOverviewLiveItem,
   type DataforseoLabsGoogleKeywordOverviewLiveItem,
   type DataforseoLabsRelatedKeywordsLiveItem,
   type DataforseoLabsRelevantPagesLiveItem,
@@ -19,6 +25,7 @@ import { labsApi } from "@/server/lib/dataforseo/core";
 import {
   assertOk,
   buildTaskBilling,
+  isRecord,
   parseTaskItems,
   type DataforseoApiResponse,
 } from "@/server/lib/dataforseo/envelope";
@@ -288,6 +295,122 @@ export async function fetchKeywordOverview(input: {
       location_code: input.locationCode,
       language_code: input.languageCode,
       include_clickstream_data: input.includeClickstreamData ?? false,
+    }),
+  ]);
+  const task = assertOk(response);
+  return {
+    data: task.result?.[0]?.items ?? [],
+    billing: buildTaskBilling(task),
+  };
+}
+
+// The generated request class's toJSON() writes this.target_1/this.target_2
+// out under the keys "target1"/"target2" (no underscore) — a bug in the SDK's
+// codegen, verified by reading DataforseoLabsGoogleDomainIntersectionLiveRequestInfo's
+// compiled toJSON (dist/esm/models/…): `data["target1"] = this.target_1`.
+// DataForSEO's documented field is target_1/target_2 with the underscore, so
+// build the request body by hand instead — same workaround as
+// buildPerplexityLlmResponseRequest in ai.ts for a different broken toJSON().
+type DomainIntersectionRequestFields = {
+  target_1: string;
+  target_2: string;
+  location_code: number;
+  language_code: string;
+  intersections?: boolean;
+  limit: number;
+  offset?: number;
+};
+
+function buildDomainIntersectionRequest(
+  fields: DomainIntersectionRequestFields,
+): DataforseoLabsGoogleDomainIntersectionLiveRequestInfo {
+  return {
+    ...fields,
+    init(data?: unknown) {
+      if (isRecord(data)) Object.assign(this, data);
+    },
+    toJSON(data?: unknown) {
+      return { ...(isRecord(data) ? data : {}), ...fields };
+    },
+  };
+}
+
+// LEIFKEN (RankMeister SEO-4 Punkt 5): keyword gap. `intersections: false`
+// asks DataForSEO for the FULL union of both domains' rankings (not just the
+// keywords they share) so a "gap" — target1 not ranking, target2 ranking —
+// is computable from first_domain_serp_element/second_domain_serp_element
+// being present or null; the MCP tool (get_keyword_gap) does that filtering.
+export async function fetchDomainIntersection(input: {
+  target1: string;
+  target2: string;
+  locationCode: number;
+  languageCode: string;
+  intersections?: boolean;
+  limit: number;
+  offset?: number;
+}): Promise<DataforseoApiResponse<DataforseoLabsDomainIntersectionLiveItem[]>> {
+  const response = await labsApi().googleDomainIntersectionLive([
+    buildDomainIntersectionRequest({
+      target_1: input.target1,
+      target_2: input.target2,
+      location_code: input.locationCode,
+      language_code: input.languageCode,
+      intersections: input.intersections,
+      limit: input.limit,
+      offset: input.offset,
+    }),
+  ]);
+  const task = assertOk(response);
+  return {
+    data: task.result?.[0]?.items ?? [],
+    billing: buildTaskBilling(task),
+  };
+}
+
+export async function fetchHistoricalRankOverview(input: {
+  target: string;
+  locationCode: number;
+  languageCode: string;
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<
+  DataforseoApiResponse<DataforseoLabsGoogleHistoricalRankOverviewLiveItem[]>
+> {
+  const response = await labsApi().googleHistoricalRankOverviewLive([
+    new DataforseoLabsGoogleHistoricalRankOverviewLiveRequestInfo({
+      target: input.target,
+      location_code: input.locationCode,
+      language_code: input.languageCode,
+      date_from: input.dateFrom,
+      date_to: input.dateTo,
+      // DataForSEO's own guidance: always set this to reconcile database
+      // changes across months.
+      correlate: true,
+    }),
+  ]);
+  const task = assertOk(response);
+  return {
+    data: task.result?.[0]?.items ?? [],
+    billing: buildTaskBilling(task),
+  };
+}
+
+export async function fetchKeywordsForSite(input: {
+  target: string;
+  locationCode: number;
+  languageCode: string;
+  includeSubdomains?: boolean;
+  limit: number;
+  offset?: number;
+}): Promise<DataforseoApiResponse<LabsKeywordDataItem[]>> {
+  const response = await labsApi().googleKeywordsForSiteLive([
+    new DataforseoLabsGoogleKeywordsForSiteLiveRequestInfo({
+      target: input.target,
+      location_code: input.locationCode,
+      language_code: input.languageCode,
+      include_subdomains: input.includeSubdomains,
+      limit: input.limit,
+      offset: input.offset,
     }),
   ]);
   const task = assertOk(response);

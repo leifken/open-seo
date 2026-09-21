@@ -118,6 +118,12 @@ export function createDataforseoClient(customer: BillingCustomerContext) {
       rankOverview: meter(customer, (s) => s.fetchDomainRankOverview),
       rankedKeywords: meter(customer, (s) => s.fetchRankedKeywords),
       relevantPages: meter(customer, (s) => s.fetchRelevantPages),
+      intersection: meter(customer, (s) => s.fetchDomainIntersection),
+      historicalRankOverview: meter(
+        customer,
+        (s) => s.fetchHistoricalRankOverview,
+      ),
+      keywordsForSite: meter(customer, (s) => s.fetchKeywordsForSite),
     },
     serp: {
       live: meter(customer, (s) => s.fetchLiveSerp),
@@ -131,6 +137,7 @@ export function createDataforseoClient(customer: BillingCustomerContext) {
         "rank_tracking",
       ),
       local: meter(customer, (s) => s.fetchLocalSerp, "local_seo"),
+      autocomplete: meter(customer, (s) => s.fetchAutocomplete),
     },
     labs: {
       // Callers (e.g. the keyword-metrics MCP tool) can attribute the spend to
@@ -155,6 +162,8 @@ export function createDataforseoClient(customer: BillingCustomerContext) {
         (s) => s.fetchLlmCrossAggregatedMetrics,
       ),
       llmResponse: meter(customer, (s) => s.fetchLlmResponse),
+      chatGptScrape: meter(customer, (s) => s.fetchChatGptScrape),
+      googleAiModeScrape: meter(customer, (s) => s.fetchGoogleAiModeScrape),
     },
   } as const;
 }

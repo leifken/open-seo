@@ -1,10 +1,12 @@
 import { z } from "zod";
 import {
   SerpApiStopCrawlOnMatchInfo,
+  SerpGoogleAutocompleteLiveAdvancedRequestInfo,
   SerpGoogleLocalFinderLiveAdvancedRequestInfo,
   SerpGoogleMapsLiveAdvancedRequestInfo,
   SerpGoogleOrganicLiveAdvancedRequestInfo,
   SerpGoogleOrganicTaskPostRequestInfo,
+  type Autocomplete,
 } from "dataforseo-client";
 import { serpApi } from "@/server/lib/dataforseo/core";
 import { MAX_TASKS_PER_POST } from "@/server/lib/dataforseo/shared";
@@ -404,6 +406,29 @@ export async function fetchLocalSerp(input: {
       depth: input.depth,
     }),
   ]);
+  const task = assertOk(response, { treatNoResultsAsEmpty: true });
+  return {
+    data: task.result?.[0]?.items ?? [],
+    billing: buildTaskBilling(task),
+  };
+}
+
+/** Google Autocomplete suggestions for one partial query (SEO-4 Punkt 5). */
+export async function fetchAutocomplete(input: {
+  keyword: string;
+  locationCode: number;
+  languageCode: string;
+  cursorPointer?: number;
+}): Promise<DataforseoApiResponse<Autocomplete[]>> {
+  const response = await serpApi().googleAutocompleteLiveAdvanced([
+    new SerpGoogleAutocompleteLiveAdvancedRequestInfo({
+      keyword: input.keyword,
+      location_code: input.locationCode,
+      language_code: input.languageCode,
+      cursor_pointer: input.cursorPointer,
+    }),
+  ]);
+  // 40501 = billed empty result: no suggestions for this keyword/market.
   const task = assertOk(response, { treatNoResultsAsEmpty: true });
   return {
     data: task.result?.[0]?.items ?? [],

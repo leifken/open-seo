@@ -28,9 +28,12 @@ export {
 } from "@/server/lib/dataforseo/backlinks";
 
 export {
+  fetchDomainIntersection,
   fetchDomainRankOverview,
+  fetchHistoricalRankOverview,
   fetchKeywordIdeas,
   fetchKeywordOverview,
+  fetchKeywordsForSite,
   fetchKeywordSuggestions,
   fetchRankedKeywords,
   fetchRelatedKeywords,
@@ -44,6 +47,7 @@ export {
 } from "@/server/lib/dataforseo/google-ads";
 
 export {
+  fetchAutocomplete,
   fetchLiveSerp,
   fetchLocalSerp,
   fetchRankCheckSerp,
@@ -60,3 +64,8 @@ export {
   fetchLlmResponse,
   fetchLlmTopPages,
 } from "@/server/lib/dataforseo/ai";
+
+export {
+  fetchChatGptScrape,
+  fetchGoogleAiModeScrape,
+} from "@/server/lib/dataforseo/llm-scraper";

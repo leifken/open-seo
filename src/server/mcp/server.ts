@@ -55,6 +55,16 @@ import {
   getAiVisibilityTool,
 } from "@/server/mcp/tools/ai-visibility-tools";
 import {
+  getChatGptAnswerTool,
+  getGeminiAiAnswerTool,
+} from "@/server/mcp/tools/llm-scraper-tools";
+import {
+  getAutocompleteSuggestionsTool,
+  getHistoricalRankOverviewTool,
+  getKeywordGapTool,
+  getKeywordsForSiteTool,
+} from "@/server/mcp/tools/dataforseo-labs-extra-tools";
+import {
   getBusinessProfileTool,
   getBusinessReviewsTool,
   getBusinessUpdatesTool,
@@ -192,6 +202,12 @@ export function createOpenSeoMcpServer(authProps: McpProps) {
   register(getKeywordMetricsTool);
   register(getAiVisibilityTool);
   register(exploreAiPromptTool);
+  register(getChatGptAnswerTool);
+  register(getGeminiAiAnswerTool);
+  register(getKeywordGapTool);
+  register(getHistoricalRankOverviewTool);
+  register(getKeywordsForSiteTool);
+  register(getAutocompleteSuggestionsTool);
   register(getSearchConsolePerformanceTool);
   register(inspectUrlsTool);
   register(getGoogleAnalyticsOrganicLandingPagesTool);
