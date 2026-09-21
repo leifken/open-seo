@@ -5,6 +5,7 @@ import {
   extractMyBusinessInfoProfile,
   fetchBusinessDataTaskResult,
   fetchBusinessListingsCategories,
+  isRecord,
   type BusinessTaskEndpoint,
   type BusinessTaskOutcome,
 } from "@/server/lib/dataforseo";
@@ -146,6 +147,20 @@ const getBusinessProfileInputSchema = {
     .describe(
       'Resume a previous call that returned status "timeout". Pass back the taskId exactly as returned — resuming charges no extra credits and does not need the identifier fields again.',
     ),
+  includeTopCompetitors: z
+    .boolean()
+    .optional()
+    .describe(
+      "Also look up the 3 strongest nearby competitors on the same Google Maps search and return the same profile fields for each (GOOGLE-UNTERNEHMENSPROFIL.md §4 'Profil-Soll'). Defaults to false — it runs one extra local SERP search plus up to 3 more task-queue profile lookups (in parallel), so it multiplies both cost and latency roughly 4x. Only used when the main lookup resolves to a real profile.",
+    ),
+  competitorKeyword: z
+    .string()
+    .min(1)
+    .max(120)
+    .optional()
+    .describe(
+      "Search term for finding competitors on Google Maps (e.g. 'Webdesign Nottuln'). Defaults to the resolved profile's own category. Ignored unless includeTopCompetitors is true.",
+    ),
 } as const;
 
 type GetBusinessProfileArgs = z.infer<
@@ -198,6 +213,42 @@ function formatRatingDistribution(profile: Record<string, unknown>): string {
   return stars.join(", ");
 }
 
+// DataForSEO reports attributes as "yes/no" checks (e.g. "Accessibility":
+// ["Wheelchair accessible entrance"]), split into available/unavailable maps
+// keyed by category — flatten both into one readable list, marking the
+// unavailable ones.
+function formatAttributes(profile: Record<string, unknown>): string {
+  const available = readPath(profile, "attributes", "available_attributes");
+  const unavailable = readPath(
+    profile,
+    "attributes",
+    "unavailable_attributes",
+  );
+  const flatten = (group: unknown, suffix: string): string[] => {
+    if (!isRecord(group)) return [];
+    return Object.values(group).flatMap((values) =>
+      Array.isArray(values)
+        ? values.map((value) => `${formatMcpCell(value)}${suffix}`)
+        : [],
+    );
+  };
+  const entries = [...flatten(available, ""), ...flatten(unavailable, " (no)")];
+  return entries.length === 0 ? "—" : entries.join(", ");
+}
+
+// GOOGLE-UNTERNEHMENSPROFIL.md §4 also wants "Leistungen" (a services/products
+// list), special/holiday opening hours, and per-photo age — none of which
+// DataForSEO's business_data/google/my_business_info exposes (verified
+// against the SDK's GoogleBusinessInfo/WorkHours models, which carry no
+// services, special_hours, or per-photo fields). Reported honestly as gaps
+// rather than guessed at, per this repo's "missing data is not a finding"
+// rule (SEITEN-COCKPIT.md §3).
+const BUSINESS_PROFILE_DATA_GAPS = [
+  "services/products list (Leistungen) — not exposed by DataForSEO's business_data/google/my_business_info",
+  "special or holiday opening hours (Sonderöffnungszeiten) — not exposed by DataForSEO's business_data/google/my_business_info",
+  "individual photo ages — only total_photos (a count) is exposed, not per-photo timestamps",
+] as const;
+
 function formatProfileText(profile: Record<string, unknown>): string {
   const additional = readPath(profile, "additional_categories");
   const category = formatMcpCell(readPath(profile, "category"));
@@ -209,6 +260,13 @@ function formatProfileText(profile: Record<string, unknown>): string {
         ? `${category} (+ ${additional.map(formatMcpCell).join(", ")})`
         : category,
     ],
+    [
+      "description",
+      formatMcpCell(
+        readPath(profile, "description") ?? readPath(profile, "snippet"),
+      ),
+    ],
+    ["attributes", formatAttributes(profile)],
     [
       "rating",
       `${formatMcpCell(readPath(profile, "rating", "value"))} from ${formatMcpCell(readPath(profile, "rating", "votes_count"))} reviews`,
@@ -226,7 +284,7 @@ function formatProfileText(profile: Record<string, unknown>): string {
       ),
     ],
     ["hours", formatTimetable(profile)],
-    ["photos", formatMcpCell(readPath(profile, "total_photos"))],
+    ["photos (count)", formatMcpCell(readPath(profile, "total_photos"))],
     ["cid", formatMcpCell(readPath(profile, "cid"))],
     ["place_id", formatMcpCell(readPath(profile, "place_id"))],
     ["check_url", formatMcpCell(readPath(profile, "check_url"))],
@@ -234,18 +292,151 @@ function formatProfileText(profile: Record<string, unknown>): string {
   return lines.map(([label, value]) => `- ${label}: ${value}`).join("\n");
 }
 
+// ---------------------------------------------------------------------------
+// Competitors (GOOGLE-UNTERNEHMENSPROFIL.md §4 "Profil-Soll": the 3 strongest
+// local competitors get the same fields as the target profile).
+// ---------------------------------------------------------------------------
+
+type CompetitorLookup = {
+  rank: number | null;
+  cid: string | null;
+  placeId: string | null;
+  title: string | null;
+  status: "completed" | "timeout";
+  profile: Record<string, unknown> | null;
+};
+
+const COMPETITOR_SEARCH_DEPTH = 10;
+const COMPETITOR_COUNT = 3;
+
+function matchesTarget(
+  item: unknown,
+  target: { cid: string | null; placeId: string | null },
+): boolean {
+  const itemCid = readString(item, "cid");
+  const itemPlaceId = readString(item, "place_id");
+  return (
+    (target.cid != null && itemCid === target.cid) ||
+    (target.placeId != null && itemPlaceId === target.placeId)
+  );
+}
+
+/**
+ * Runs one local SERP search near the target's own coordinates to find the
+ * COMPETITOR_COUNT strongest nearby competitors (Maps is already rank-ordered,
+ * so "strongest" = highest-ranked, excluding the target itself), then fetches
+ * each one's full profile the same way as the target — in parallel, so the
+ * added wall time stays bounded to roughly one profile poll window rather
+ * than stacking three of them.
+ */
+async function findTopLocalCompetitors(
+  client: ReturnType<typeof createDataforseoClient>,
+  input: {
+    keyword: string;
+    latitude: number;
+    longitude: number;
+    languageCode: string;
+    target: { cid: string | null; placeId: string | null };
+  },
+): Promise<CompetitorLookup[]> {
+  const items = await client.serp.local({
+    keyword: input.keyword,
+    locationCoordinate: formatLocalSerpCoordinate({
+      latitude: input.latitude,
+      longitude: input.longitude,
+    }),
+    languageCode: input.languageCode,
+    searchType: "maps",
+    device: "desktop",
+    depth: COMPETITOR_SEARCH_DEPTH,
+    searchPlaces: false,
+  });
+
+  const candidates = items
+    .filter((item) => !matchesTarget(item, input.target))
+    .slice(0, COMPETITOR_COUNT);
+
+  return Promise.all(
+    candidates.map(async (item): Promise<CompetitorLookup> => {
+      const rank = readPath(item, "rank_group") ?? readPath(item, "rank_absolute");
+      const cid = readString(item, "cid");
+      const placeId = readString(item, "place_id");
+      const title = readString(item, "title");
+      const identifierKeyword = cid ? `cid:${cid}` : placeId ? `place_id:${placeId}` : null;
+      if (!identifierKeyword) {
+        // Nothing precise enough to look up — report what the SERP itself had.
+        return {
+          rank: typeof rank === "number" ? rank : null,
+          cid,
+          placeId,
+          title,
+          status: "completed",
+          profile: null,
+        };
+      }
+
+      const taskId = await client.business.myBusinessInfoTaskPost({
+        keyword: identifierKeyword,
+        locationCoordinate: formatBusinessDataCoordinate({
+          latitude: input.latitude,
+          longitude: input.longitude,
+        }),
+        languageCode: input.languageCode,
+      });
+      const outcome = await pollBusinessTask(
+        { endpoint: "my_business_info", taskId },
+        taskId,
+        {
+          attempts: PROFILE_TASK_POLL_ATTEMPTS,
+          intervalMs: PROFILE_TASK_POLL_INTERVAL_MS,
+        },
+      );
+      return {
+        rank: typeof rank === "number" ? rank : null,
+        cid,
+        placeId,
+        title,
+        status: outcome.status === "pending" ? "timeout" : "completed",
+        profile:
+          outcome.status === "pending"
+            ? null
+            : extractMyBusinessInfoProfile(outcome.result),
+      };
+    }),
+  );
+}
+
+const COMPETITOR_COLUMNS: McpTableColumn<CompetitorLookup>[] = [
+  { header: "#", value: (row) => row.rank },
+  { header: "title", value: (row) => row.title },
+  { header: "status", value: (row) => row.status },
+  {
+    header: "rating",
+    value: (row) => readPath(row.profile, "rating", "value"),
+  },
+  {
+    header: "reviews",
+    value: (row) => readPath(row.profile, "rating", "votes_count"),
+  },
+  { header: "photos", value: (row) => readPath(row.profile, "total_photos") },
+  { header: "claimed", value: (row) => readPath(row.profile, "is_claimed") },
+  { header: "cid", value: (row) => row.cid },
+];
+
 export const getBusinessProfileTool = {
   name: "get_business_profile",
   config: {
     title: "Get business profile",
     description:
-      "Reads one Google Business Profile: categories, rating and review count, rating breakdown, address, phone, website, claimed status, opening hours, and photo count. Use it to audit your own profile or to compare a competitor's. Runs over DataForSEO's task queue (not the live endpoint), polling for up to ~45s — a cid or placeId (from get_local_serp_results) resolves fastest and most reliably; an ambiguous business name can take longer or fail to match. A lookup that is still unresolved after the poll window returns status \"timeout\" (isError, code zeitueberschreitung) with a taskId to resume for free — never reported as \"not found\", which only status \"completed\" with profile: null means. Charges credits.",
+      "Reads one Google Business Profile: categories, description, attributes, rating and review count, rating breakdown, address, phone, website, claimed status, opening hours, and photo count — plus, with includeTopCompetitors, the 3 strongest nearby competitors on the same fields (GOOGLE-UNTERNEHMENSPROFIL.md §4 'Profil-Soll'). Note: DataForSEO does not expose a services/products list, special/holiday opening hours, or per-photo ages for this endpoint — dataGaps in the response says so explicitly rather than omitting them silently. Runs over DataForSEO's task queue (not the live endpoint), polling for up to ~45s — a cid or placeId (from get_local_serp_results) resolves fastest and most reliably; an ambiguous business name can take longer or fail to match. A lookup that is still unresolved after the poll window returns status \"timeout\" (isError, code zeitueberschreitung) with a taskId to resume for free — never reported as \"not found\", which only status \"completed\" with profile: null means. Charges credits.",
     inputSchema: getBusinessProfileInputSchema,
     outputSchema: {
       status: z.enum(["completed", "timeout"]),
       taskId: z.string(),
       errorCode: z.literal("zeitueberschreitung").optional(),
       profile: looseObjectOutputSchema.nullable(),
+      dataGaps: z.array(z.string()).optional(),
+      competitors: z.array(looseObjectOutputSchema).optional(),
       ...optionalMetaOutputSchema,
     },
     annotations: {
@@ -255,12 +446,12 @@ export const getBusinessProfileTool = {
     },
   },
   handler: withMcpProjectAuth(async (args: GetBusinessProfileArgs, context) => {
+    const client = createDataforseoClient(context.billing);
     let taskId: string;
     if (args.taskId) {
       taskId = args.taskId;
     } else {
       const identifier = resolveBusinessIdentifier(args);
-      const client = createDataforseoClient(context.billing);
       taskId = await client.business.myBusinessInfoTaskPost({
         keyword: businessIdentifierKeyword(identifier),
         ...resolveBusinessLocation(args, context.project),
@@ -295,12 +486,64 @@ export const getBusinessProfileTool = {
     }
 
     const profile = extractMyBusinessInfoProfile(outcome.result);
+    if (!profile) {
+      return mcpResponse({
+        text: "No Google Business Profile matched that identifier (confirmed empty result, not a timeout). Try a cid or placeId from get_local_serp_results.",
+        meta: buildProjectMeta(context, args.projectId, `/p/${args.projectId}`),
+        structuredContent: { status: "completed", taskId, profile: null },
+      });
+    }
+
+    let competitors: CompetitorLookup[] | undefined;
+    if (args.includeTopCompetitors) {
+      const latitude = readPath(profile, "latitude");
+      const longitude = readPath(profile, "longitude");
+      const competitorKeyword =
+        args.competitorKeyword ?? readString(profile, "category");
+      competitors =
+        typeof latitude === "number" &&
+        typeof longitude === "number" &&
+        competitorKeyword
+          ? await findTopLocalCompetitors(client, {
+              keyword: competitorKeyword,
+              latitude,
+              longitude,
+              languageCode: args.languageCode ?? context.project.languageCode,
+              target: {
+                cid: readString(profile, "cid"),
+                placeId: readString(profile, "place_id"),
+              },
+            })
+          : [];
+    }
+    const competitorKeywordUsed =
+      args.competitorKeyword ?? readString(profile, "category");
+
+    const text = [
+      `Google Business Profile:\n${formatProfileText(profile)}`,
+      `\nNot available from DataForSEO for this endpoint: ${BUSINESS_PROFILE_DATA_GAPS.join("; ")}.`,
+      ...(competitors
+        ? competitors.length > 0
+          ? [
+              `\nTop ${competitors.length} nearby competitor(s) for "${competitorKeywordUsed}":`,
+              formatMcpTable(competitors, COMPETITOR_COLUMNS),
+            ]
+          : [
+              "\nNo competitors looked up (missing coordinates or a search keyword — pass competitorKeyword explicitly).",
+            ]
+        : []),
+    ].join("\n");
+
     return mcpResponse({
-      text: profile
-        ? `Google Business Profile:\n${formatProfileText(profile)}`
-        : "No Google Business Profile matched that identifier (confirmed empty result, not a timeout). Try a cid or placeId from get_local_serp_results.",
+      text,
       meta: buildProjectMeta(context, args.projectId, `/p/${args.projectId}`),
-      structuredContent: { status: "completed", taskId, profile },
+      structuredContent: {
+        status: "completed",
+        taskId,
+        profile,
+        dataGaps: [...BUSINESS_PROFILE_DATA_GAPS],
+        ...(competitors ? { competitors } : {}),
+      },
     });
   }),
 };

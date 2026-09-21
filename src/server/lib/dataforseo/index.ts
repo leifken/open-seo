@@ -30,7 +30,10 @@ export { normalizeBacklinksTarget } from "@/server/lib/dataforseoBacklinksTarget
 
 // envelope.ts is an SDK-free leaf module (only zod + a type-only import), so
 // this is safe to re-export eagerly like the values above.
-export { extractMyBusinessInfoProfile } from "@/server/lib/dataforseo/envelope";
+export {
+  extractMyBusinessInfoProfile,
+  isRecord,
+} from "@/server/lib/dataforseo/envelope";
 
 /** Lazy wrappers for the section fetchers called outside the metered client.
  * Task collection is free at DataForSEO (the task was charged at task_post), so

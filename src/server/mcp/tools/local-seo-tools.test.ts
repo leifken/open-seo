@@ -22,14 +22,16 @@ const mocks = vi.hoisted(() => ({
 vi.mock("cloudflare:workers", () => ({ env: {} }));
 
 vi.mock("@/server/lib/dataforseo", async () => {
-  // extractMyBusinessInfoProfile is pure, SDK-free logic (lives in
-  // envelope.ts) — use the real implementation instead of mocking it away.
+  // extractMyBusinessInfoProfile and isRecord are pure, SDK-free logic (they
+  // live in envelope.ts) — use the real implementations instead of mocking
+  // them away.
   const envelope = await vi.importActual<typeof envelopeModule>(
     "@/server/lib/dataforseo/envelope",
   );
   return {
     createDataforseoClient: mocks.createDataforseoClient,
     extractMyBusinessInfoProfile: envelope.extractMyBusinessInfoProfile,
+    isRecord: envelope.isRecord,
     fetchBusinessDataTaskResult: mocks.fetchBusinessDataTaskResult,
     fetchBusinessListingsCategories: mocks.fetchBusinessListingsCategories,
   };
@@ -212,6 +214,162 @@ describe("get_business_profile", () => {
       status: "completed",
       profile: { title: "LEIFKEN AI" },
     });
+  });
+
+  it("reports description, attributes, and the documented DataForSEO data gaps", async () => {
+    const myBusinessInfoTaskPost = vi.fn().mockResolvedValue("task-4");
+    mocks.createDataforseoClient.mockReturnValue({
+      business: { myBusinessInfoTaskPost },
+    });
+    mocks.fetchBusinessDataTaskResult.mockResolvedValue({
+      status: "completed",
+      result: {
+        items: [
+          {
+            title: "Acme Cafe",
+            description: "The best coffee in town.",
+            attributes: {
+              available_attributes: { Accessibility: ["Wheelchair accessible entrance"] },
+              unavailable_attributes: { Offerings: ["Alcohol"] },
+            },
+          },
+        ],
+      },
+    });
+
+    const result = await getBusinessProfileTool.handler(
+      { projectId: "project_1", cid: "123" },
+      toolContext,
+    );
+
+    const out = textContent(result);
+    expect(out).toContain("- description: The best coffee in town.");
+    expect(out).toContain("Wheelchair accessible entrance");
+    expect(out).toContain("Alcohol (no)");
+    expect(out).toContain("Not available from DataForSEO for this endpoint");
+    expect(out).toContain("services/products list");
+    const dataGaps =
+      "dataGaps" in result.structuredContent
+        ? result.structuredContent.dataGaps
+        : undefined;
+    expect(dataGaps?.some((gap) => gap.includes("services/products list"))).toBe(
+      true,
+    );
+  });
+
+  it("looks up the 3 strongest nearby competitors when includeTopCompetitors is set", async () => {
+    vi.useFakeTimers();
+    // Keyed by the keyword each post used (cid:<id>) so parallel competitor
+    // lookups can't race each other's mock results — each candidate gets its
+    // own taskId and its own scripted outcome.
+    const myBusinessInfoTaskPost = vi
+      .fn()
+      .mockImplementation((input: { keyword: string }) =>
+        Promise.resolve(`task-${input.keyword}`),
+      );
+    const outcomeByTaskId: Record<string, unknown> = {
+      "task-cid:target-cid": {
+        status: "completed",
+        result: {
+          items: [
+            {
+              title: "Own Cafe",
+              cid: "target-cid",
+              category: "Coffee shop",
+              latitude: 33.1,
+              longitude: -84.9,
+            },
+          ],
+        },
+      },
+      "task-cid:rival-a": {
+        status: "completed",
+        result: { items: [{ title: "Rival A", cid: "rival-a", rating: { value: 4.2 } }] },
+      },
+      "task-cid:rival-b": { status: "pending", result: null },
+      "task-cid:rival-c": {
+        status: "completed",
+        result: { items: [{ title: "Rival C", cid: "rival-c", rating: { value: 3.9 } }] },
+      },
+    };
+    mocks.fetchBusinessDataTaskResult.mockImplementation(
+      (input: { taskId: string }) =>
+        Promise.resolve(outcomeByTaskId[input.taskId]),
+    );
+    const local = vi.fn().mockResolvedValue([
+      { rank_group: 1, title: "Own Cafe", cid: "target-cid" },
+      { rank_group: 2, title: "Rival A", cid: "rival-a" },
+      { rank_group: 3, title: "Rival B", cid: "rival-b" },
+      { rank_group: 4, title: "Rival C", cid: "rival-c" },
+      { rank_group: 5, title: "Rival D (excluded, only top 3 wanted)", cid: "rival-d" },
+    ]);
+    mocks.createDataforseoClient.mockReturnValue({
+      business: { myBusinessInfoTaskPost },
+      serp: { local },
+    });
+
+    const pending = getBusinessProfileTool.handler(
+      {
+        projectId: "project_1",
+        cid: "target-cid",
+        includeTopCompetitors: true,
+      },
+      toolContext,
+    );
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(local).toHaveBeenCalledWith(
+      expect.objectContaining({
+        keyword: "Coffee shop",
+        locationCoordinate: "33.1,-84.9",
+      }),
+    );
+    // The target's own cid is excluded, and only the top 3 remaining rows
+    // (rival-a, rival-b, rival-c) are looked up — rival-d is never fetched.
+    expect(myBusinessInfoTaskPost).toHaveBeenCalledTimes(4);
+    const competitors =
+      "competitors" in result.structuredContent
+        ? result.structuredContent.competitors
+        : undefined;
+    expect(competitors).toHaveLength(3);
+    expect(competitors?.[0]).toMatchObject({
+      cid: "rival-a",
+      status: "completed",
+      profile: { title: "Rival A" },
+    });
+    expect(competitors?.[1]).toMatchObject({ cid: "rival-b", status: "timeout", profile: null });
+    expect(competitors?.[2]).toMatchObject({
+      cid: "rival-c",
+      status: "completed",
+      profile: { title: "Rival C" },
+    });
+    expect(textContent(result)).toContain('Top 3 nearby competitor(s) for "Coffee shop"');
+  });
+
+  it("skips competitor lookup (empty array, no extra calls) when the profile has no coordinates", async () => {
+    const myBusinessInfoTaskPost = vi.fn().mockResolvedValue("task-6");
+    const local = vi.fn();
+    mocks.createDataforseoClient.mockReturnValue({
+      business: { myBusinessInfoTaskPost },
+      serp: { local },
+    });
+    mocks.fetchBusinessDataTaskResult.mockResolvedValue({
+      status: "completed",
+      result: { items: [{ title: "No Coordinates Cafe", category: "Cafe" }] },
+    });
+
+    const result = await getBusinessProfileTool.handler(
+      { projectId: "project_1", cid: "123", includeTopCompetitors: true },
+      toolContext,
+    );
+
+    expect(local).not.toHaveBeenCalled();
+    expect(
+      "competitors" in result.structuredContent
+        ? result.structuredContent.competitors
+        : undefined,
+    ).toEqual([]);
   });
 });
 
