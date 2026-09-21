@@ -145,8 +145,14 @@ function http(
 export const labsApi = () => new DataforseoLabsApi(API_BASE, http());
 export const keywordsDataApi = () => new KeywordsDataApi(API_BASE, http());
 export const serpApi = () => new SerpApi(API_BASE, http());
+// LEIFKEN (SEO-5): SERP task_post creates billed tasks; like the business and
+// Lighthouse clients, a 5xx must not be replayed.
+export const serpTaskApi = () => new SerpApi(API_BASE, http(undefined, 0));
 export const businessDataApi = (timeoutMs = DATAFORSEO_REQUEST_TIMEOUT_MS) =>
-  new BusinessDataApi(API_BASE, http(undefined, DATAFORSEO_MAX_RETRIES, timeoutMs));
+  new BusinessDataApi(
+    API_BASE,
+    http(undefined, DATAFORSEO_MAX_RETRIES, timeoutMs),
+  );
 // task_post creates a billed task. A 5xx does not prove the provider skipped
 // the charge, so this client must not replay it (same rule as Lighthouse).
 export const businessDataTaskApi = () =>

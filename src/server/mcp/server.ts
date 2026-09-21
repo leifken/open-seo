@@ -71,6 +71,10 @@ import {
   getLocalRankGridTool,
   listBusinessCategoriesTool,
 } from "@/server/mcp/tools/local-seo-tools";
+import {
+  getKeywordVolumeByLocationTool,
+  resolveLocationsTool,
+} from "@/server/mcp/tools/local-market-tools";
 import { researchKeywordsTool } from "@/server/mcp/tools/research-keywords";
 import { saveKeywordsTool } from "@/server/mcp/tools/save-keywords";
 import {
@@ -200,6 +204,9 @@ export function createOpenSeoMcpServer(authProps: McpProps) {
   register(listBusinessCategoriesTool);
   register(getLocalRankGridTool);
   register(getKeywordMetricsTool);
+  // LEIFKEN (SEO-5): local market data by city / Kreis / Bundesland.
+  register(resolveLocationsTool);
+  register(getKeywordVolumeByLocationTool);
   register(getAiVisibilityTool);
   register(exploreAiPromptTool);
   register(getChatGptAnswerTool);

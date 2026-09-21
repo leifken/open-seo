@@ -43,6 +43,14 @@ import {
   type ScopeFilter,
 } from "@/server/lib/dataforseo/researchScopeFilters";
 import { parseResearchTargetOrThrow } from "@/server/lib/domainUtils";
+import { AppError } from "@/server/lib/errors";
+import {
+  countryCodeSchema,
+  describeLocation,
+  locationMeta,
+  placeSchema,
+  resolvePlaces,
+} from "@/server/mcp/tools/location-input";
 import {
   RESEARCH_SCOPE_PARAM_DESCRIPTION,
   researchScopeSchema,
@@ -274,7 +282,17 @@ const getLocalSerpResultsInputSchema = {
     .min(1)
     .max(120)
     .describe("Search query to run on Google Maps or Local Finder."),
-  near: localSerpNearSchema,
+  near: localSerpNearSchema
+    .optional()
+    .describe(
+      "Coordinate (and optional map zoom) the SERP is fetched from. Supply exactly one of near or location.",
+    ),
+  location: placeSchema
+    .optional()
+    .describe(
+      'LEIFKEN: city, Kreis or Bundesland the SERP is fetched for ("Münster", "Kreis Borken", or a location code), instead of a coordinate. Supply exactly one of near or location; the resolved code is in meta.locationCodes.',
+    ),
+  countryCode: countryCodeSchema.optional(),
   searchType: localSearchTypeSchema
     .optional()
     .describe("Which local SERP to fetch. Defaults to maps."),
@@ -911,7 +929,7 @@ export const getLocalSerpResultsTool = {
   config: {
     title: "Get local SERP results",
     description:
-      "Fetches one Google Maps or Local Finder SERP near a coordinate. Returns trimmed provider rows (identity, rank, rating, categories, hours) with rank fields intact; callers decide how to match a target business. Charges credits.",
+      "Fetches one Google Maps or Local Finder SERP near a coordinate (near) or for a city, Kreis or Bundesland (location, by name or code). Returns trimmed provider rows (identity, rank, rating, categories, hours) with rank fields intact; callers decide how to match a target business. Charges credits.",
     inputSchema: getLocalSerpResultsInputSchema,
     outputSchema: {
       results: z.array(looseObjectOutputSchema),
@@ -925,10 +943,29 @@ export const getLocalSerpResultsTool = {
   },
   handler: withMcpProjectAuth(
     async (args: GetLocalSerpResultsArgs, context) => {
+      if ((args.near == null) === (args.location == null)) {
+        throw new AppError(
+          "VALIDATION_ERROR",
+          "Supply exactly one of near (coordinate) or location (place name or code).",
+        );
+      }
+      const [place] = args.location
+        ? await resolvePlaces(
+            [args.location],
+            args.countryCode,
+            context.project,
+          )
+        : [];
       const client = createDataforseoClient(context.billing);
       const rows = await client.serp.local({
         keyword: args.keyword,
-        locationCoordinate: formatLocalSerpCoordinate(args.near),
+        ...(place
+          ? { locationCode: place.locationCode }
+          : {
+              locationCoordinate: args.near
+                ? formatLocalSerpCoordinate(args.near)
+                : undefined,
+            }),
         languageCode: args.languageCode ?? context.project.languageCode,
         searchType: args.searchType ?? "maps",
         device: args.device ?? "mobile",
@@ -939,13 +976,16 @@ export const getLocalSerpResultsTool = {
         pickRowFields(row, LOCAL_SERP_ROW_FIELDS),
       );
 
-      const header = `Fetched ${results.length} local SERP rows for "${args.keyword}".`;
+      const header = `Fetched ${results.length} local SERP rows for "${args.keyword}"${place ? ` in ${describeLocation(place)}` : ""}.`;
       return mcpResponse({
         text:
           results.length === 0
             ? header
             : `${header}\n${formatMcpTable(results, LOCAL_SERP_COLUMNS)}`,
-        meta: buildProjectMeta(context, args.projectId, `/p/${args.projectId}`),
+        meta: {
+          ...buildProjectMeta(context, args.projectId, `/p/${args.projectId}`),
+          ...(place ? locationMeta([place]) : {}),
+        },
         structuredContent: { results },
       });
     },
@@ -1059,7 +1099,7 @@ export const getKeywordMetricsTool = {
   config: {
     title: "Get keyword metrics",
     description:
-      "Hydrate up to 700 known keywords with search volume, keyword difficulty (KD), search intent, CPC, competition, and monthly trends in a single call. Use it to score candidate or known keywords — including Search Console striking-distance queries — by real demand and ranking difficulty. For countries served from Google Ads data (e.g. Iceland), KD and intent are null. Charges credits.",
+      "Hydrate up to 700 known keywords with search volume, keyword difficulty (KD), search intent, CPC, competition, and monthly trends in a single call. Use it to score candidate or known keywords — including Search Console striking-distance queries — by real demand and ranking difficulty. For countries served from Google Ads data (e.g. Iceland), KD and intent are null. Country-level only; for a city, Landkreis or Bundesland use get_keyword_volume_by_location. Charges credits.",
     inputSchema: getKeywordMetricsInputSchema,
     outputSchema: {
       keywords: z.array(looseObjectOutputSchema),

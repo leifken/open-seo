@@ -91,6 +91,11 @@ const SEO4_NEW_TOOL_NAMES = [
   "get_autocomplete_suggestions",
 ] as const;
 
+const SEO5_NEW_TOOL_NAMES = [
+  "resolve_locations",
+  "get_keyword_volume_by_location",
+] as const;
+
 describe("createOpenSeoMcpServer", () => {
   it("registers every tool exactly once (registerTool throws on a duplicate name)", () => {
     expect(() => createOpenSeoMcpServer(props)).not.toThrow();
@@ -118,11 +123,13 @@ describe("createOpenSeoMcpServer", () => {
     for (const name of PRE_SEO4_TOOL_NAMES) {
       expect(registered).toContain(name);
     }
-    for (const name of SEO4_NEW_TOOL_NAMES) {
+    for (const name of [...SEO4_NEW_TOOL_NAMES, ...SEO5_NEW_TOOL_NAMES]) {
       expect(registered).toContain(name);
     }
     expect(registered).toHaveLength(
-      PRE_SEO4_TOOL_NAMES.length + SEO4_NEW_TOOL_NAMES.length,
+      PRE_SEO4_TOOL_NAMES.length +
+        SEO4_NEW_TOOL_NAMES.length +
+        SEO5_NEW_TOOL_NAMES.length,
     );
   });
 });

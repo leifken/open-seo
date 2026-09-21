@@ -365,6 +365,8 @@ export async function fetchRankCheckTaskResult(input: {
 export async function fetchLocalSerp(input: {
   keyword: string;
   locationCoordinate?: string;
+  /** LEIFKEN (SEO-5): city/region location code instead of a coordinate. */
+  locationCode?: number;
   languageCode: string;
   searchType: "maps" | "local_finder";
   device: "desktop" | "mobile";
@@ -380,6 +382,7 @@ export async function fetchLocalSerp(input: {
       new SerpGoogleMapsLiveAdvancedRequestInfo({
         keyword: input.keyword,
         location_coordinate: input.locationCoordinate,
+        location_code: input.locationCode,
         language_code: input.languageCode,
         device: input.device,
         os,
@@ -400,6 +403,7 @@ export async function fetchLocalSerp(input: {
     new SerpGoogleLocalFinderLiveAdvancedRequestInfo({
       keyword: input.keyword,
       location_coordinate: input.locationCoordinate,
+      location_code: input.locationCode,
       language_code: input.languageCode,
       device: input.device,
       os,

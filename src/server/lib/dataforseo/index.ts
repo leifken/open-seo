@@ -58,6 +58,18 @@ export const fetchBusinessListingsCategories: DataforseoSections["fetchBusinessL
 export const fetchUserData: DataforseoSections["fetchUserData"] = async () =>
   (await loadDataforseoSections()).fetchUserData();
 
+/** LEIFKEN (SEO-5): the country's Google geotarget list for the location
+ *  resolver. Free ($0) at DataForSEO, so unmetered like fetchUserData. */
+export const fetchGeoLocationsForCountry: DataforseoSections["fetchGeoLocationsForCountry"] =
+  async (countryIso) =>
+    (await loadDataforseoSections()).fetchGeoLocationsForCountry(countryIso);
+
+/** LEIFKEN (SEO-5): collects one queued Maps SERP task (get_local_rank_grid).
+ *  Free — the task was charged at task_post — so it skips the metered client. */
+export const fetchMapsTaskResult: DataforseoSections["fetchMapsTaskResult"] =
+  async (taskId) =>
+    (await loadDataforseoSections()).fetchMapsTaskResult(taskId);
+
 export type {
   BusinessTaskEndpoint,
   BusinessTaskOutcome,

@@ -5,6 +5,7 @@ import {
   extractMyBusinessInfoProfile,
   fetchBusinessDataTaskResult,
   fetchBusinessListingsCategories,
+  fetchMapsTaskResult,
   isRecord,
   type BusinessTaskEndpoint,
   type BusinessTaskOutcome,
@@ -1003,6 +1004,38 @@ function rankGridZoom(spacingKm: number, latitude: number): number {
   return Math.min(MAX_RANK_GRID_ZOOM, Math.max(MIN_RANK_GRID_ZOOM, zoom));
 }
 
+// LEIFKEN (SEO-5): grid cost per point. Maps bills one SERP (up to 100 rows)
+// per point; depth 20 is one SERP. Live $0.002 (list price, as in
+// shared/rank-tracking.ts); queue high priority $0.0012 (measured 21.09.2026),
+// normal priority $0.0006 (list price). Estimates only — meta.costUsd is real.
+const RANK_GRID_COST_PER_POINT_USD = {
+  live: 0.002,
+  high: 0.0012,
+  normal: 0.0006,
+} as const;
+const MIN_GRID_SIZE = 3;
+const MAX_GRID_SIZE = 7;
+const DEFAULT_SPACING_KM = 2;
+// Queue collection: same window as get_business_profile (10 polls, 5 s apart,
+// ~45 s). High-priority Maps tasks settled in under 5 s when measured.
+const GRID_POLL_ATTEMPTS = 10;
+const GRID_POLL_INTERVAL_MS = 5000;
+const GRID_COLLECT_CONCURRENCY = 10;
+
+const gridTaskSchema = z.object({
+  row: z
+    .number()
+    .int()
+    .min(0)
+    .max(MAX_GRID_SIZE - 1),
+  col: z
+    .number()
+    .int()
+    .min(0)
+    .max(MAX_GRID_SIZE - 1),
+  taskId: z.string().min(1).max(128),
+});
+
 const getLocalRankGridInputSchema = {
   projectId: projectIdSchema,
   keyword: z
@@ -1047,16 +1080,29 @@ const getLocalRankGridInputSchema = {
     })
     .describe("Coordinate the grid is centered on (usually the storefront)."),
   gridSize: z
-    .union([z.literal(3), z.literal(5)])
+    .number()
+    .int()
+    .min(MIN_GRID_SIZE)
+    .max(MAX_GRID_SIZE)
     .optional()
-    .describe("Grid width: 3 (9 searches) or 5 (25 searches). Defaults to 3."),
+    .describe(
+      "Grid width 3-7 (3 = 9 points, 5 = 25, 7 = 49). Odd sizes put a point on the center. Defaults to 3.",
+    ),
   spacingKm: z
     .number()
     .min(0.25)
     .max(10)
     .optional()
     .describe(
-      "Distance between neighbouring grid points, in km. Defaults to 2.",
+      "Distance between neighbouring grid points, in km. Defaults to 2. Use either spacingKm or radiusKm.",
+    ),
+  radiusKm: z
+    .number()
+    .min(0.25)
+    .max(30)
+    .optional()
+    .describe(
+      "Distance from the center to the outermost row/column, in km (e.g. 5 km with gridSize 5 = 2.5 km spacing). Alternative to spacingKm.",
     ),
   device: z
     .enum(["desktop", "mobile"])
@@ -1072,6 +1118,39 @@ const getLocalRankGridInputSchema = {
       "Map zoom every point is searched at. Defaults to a zoom derived from spacingKm and latitude so each point's viewport spans the grid spacing; override only when you need a specific viewport.",
     ),
   languageCode: languageCodeSchema.optional(),
+  mode: z
+    .enum(["queue", "live"])
+    .optional()
+    .describe(
+      'How the searches run. "queue" (default) posts all points as one DataForSEO task batch and collects them — cheaper and resumable; "live" runs one live search per point, 3 at a time.',
+    ),
+  priority: z
+    .enum(["high", "normal"])
+    .optional()
+    .describe(
+      'Queue priority. "high" (default, ~$0.0012 per point) usually settles within seconds; "normal" (~$0.0006) can take minutes, so expect status "processing" and a resume call. Ignored in live mode.',
+    ),
+  estimateOnly: z
+    .boolean()
+    .optional()
+    .describe(
+      "Return the grid geometry and cost estimate without searching (free).",
+    ),
+  maxCostUsd: z
+    .number()
+    .positive()
+    .optional()
+    .describe(
+      "Refuse to run (VALIDATION_ERROR, nothing charged) when the estimate exceeds this many USD.",
+    ),
+  resumeTasks: z
+    .array(gridTaskSchema)
+    .min(1)
+    .max(MAX_GRID_SIZE * MAX_GRID_SIZE)
+    .optional()
+    .describe(
+      'Collect a queued grid that returned status "processing": pass back `tasks` exactly as returned, with the same keyword, target, center, gridSize and spacing. Collecting is free (tasks stay available at DataForSEO for 30 days).',
+    ),
 } as const;
 
 type GetLocalRankGridArgs = z.infer<
@@ -1085,14 +1164,50 @@ type GridPoint = {
   longitude: number;
 };
 
+type GridBusiness = { title: string | null; cid: string | null };
+
 type GridPointResult = GridPoint & {
   rank: number | null;
   // How many businesses the SERP returned there, and who ranked first: a null
   // rank with a full result set means outranked; with a near-empty one it
   // means a sparse SERP. Both absent when the point's search failed.
   resultsCount?: number;
-  topResult?: { title: string | null; cid: string | null } | null;
+  topResult?: GridBusiness | null;
+  /** LEIFKEN (SEO-5): the three businesses ranked first at this point. */
+  top3?: Array<GridBusiness & { rank: number | null }>;
   error?: boolean;
+  /** LEIFKEN (SEO-5): queued task not settled yet — resume with `tasks`. */
+  pending?: boolean;
+};
+
+type GridTask = z.infer<typeof gridTaskSchema>;
+
+type GridStructuredContent = {
+  status: "completed" | "processing" | "estimate";
+  grid: GridPointResult[];
+  summary: {
+    pointsSearched: number;
+    pointsFound: number;
+    averageRank: number | null;
+    top3Count: number;
+    top10Count: number;
+    pointsPending?: number;
+  };
+  matchedBusiness: (GridBusiness & { placeId: string | null }) | null;
+  settings: {
+    gridSize: number;
+    spacingKm: number;
+    radiusKm: number;
+    zoom: number;
+    mode: "queue" | "live";
+    priority: "high" | "normal" | null;
+  };
+  estimate: {
+    points: number;
+    costPerPointUsd: number;
+    estimatedCostUsd: number;
+  };
+  tasks?: GridTask[];
 };
 
 function buildRankGridPoints(
@@ -1159,11 +1274,162 @@ function renderGrid(results: GridPointResult[], gridSize: number): string {
     const cells = results
       .slice(row * gridSize, (row + 1) * gridSize)
       .map((point) =>
-        (point.error ? "x" : (point.rank?.toString() ?? "–")).padStart(2, " "),
+        (point.pending
+          ? "?"
+          : point.error
+            ? "x"
+            : (point.rank?.toString() ?? "–")
+        ).padStart(2, " "),
       );
     lines.push(cells.join(" "));
   }
   return lines.join("\n");
+}
+
+function gridBusiness(item: unknown): GridBusiness {
+  return { title: readString(item, "title"), cid: readString(item, "cid") };
+}
+
+function itemRank(item: unknown): number | null {
+  const rank = readPath(item, "rank_absolute") ?? readPath(item, "rank_group");
+  return typeof rank === "number" ? rank : null;
+}
+
+/** One point's SERP rows → its grid cell. */
+function scoreGridPoint(
+  point: GridPoint,
+  items: unknown[],
+  target: GetLocalRankGridArgs["target"],
+): { result: GridPointResult; match: unknown } {
+  const match = matchGridItem(items, target);
+  const first = items[0];
+  return {
+    match,
+    result: {
+      ...point,
+      rank: match ? itemRank(match) : null,
+      resultsCount: items.length,
+      topResult: first == null ? null : gridBusiness(first),
+      top3: items
+        .slice(0, 3)
+        .map((item) => ({ rank: itemRank(item), ...gridBusiness(item) })),
+    },
+  };
+}
+
+function gridTag(point: { row: number; col: number }): string {
+  return `${point.row}:${point.col}`;
+}
+
+function resolveGridSpacing(args: GetLocalRankGridArgs, gridSize: number) {
+  if (args.spacingKm != null && args.radiusKm != null) {
+    throw new AppError(
+      "VALIDATION_ERROR",
+      "Use either spacingKm or radiusKm, not both.",
+    );
+  }
+  if (args.radiusKm == null) return args.spacingKm ?? DEFAULT_SPACING_KM;
+  return Number((args.radiusKm / ((gridSize - 1) / 2)).toFixed(4));
+}
+
+async function runLiveGrid(
+  client: ReturnType<typeof createDataforseoClient>,
+  points: GridPoint[],
+  args: GetLocalRankGridArgs,
+  search: { zoom: number; languageCode: string },
+): Promise<{ grid: GridPointResult[]; matches: unknown[] }> {
+  let lastError: unknown = null;
+  const matches: unknown[] = [];
+  const searchPoint = async (point: GridPoint): Promise<GridPointResult> => {
+    try {
+      const items = await client.serp.local({
+        keyword: args.keyword,
+        locationCoordinate: formatLocalSerpCoordinate({
+          ...point,
+          zoom: search.zoom,
+        }),
+        languageCode: search.languageCode,
+        searchType: "maps",
+        device: args.device ?? "mobile",
+        depth: RANK_GRID_DEPTH,
+        searchPlaces: false,
+      });
+      const scored = scoreGridPoint(point, items, args.target);
+      if (scored.match) matches.push(scored.match);
+      return scored.result;
+    } catch (error) {
+      if (error instanceof AppError && GRID_ABORT_ERROR_CODES.has(error.code))
+        throw error;
+      lastError = error;
+      return { ...point, rank: null, error: true };
+    }
+  };
+
+  // A few points at a time; an abort-worthy failure rejects its batch and
+  // stops later batches from dispatching (and billing).
+  const grid: GridPointResult[] = [];
+  for (let i = 0; i < points.length; i += RANK_GRID_CONCURRENCY) {
+    const batch = points.slice(i, i + RANK_GRID_CONCURRENCY);
+    grid.push(...(await Promise.all(batch.map(searchPoint))));
+  }
+
+  // Every point failing means a systemic failure (auth, balance, bad market),
+  // not a business that simply doesn't rank — surface it instead of an empty grid.
+  if (grid.every((point) => point.error)) throw lastError;
+  return { grid, matches };
+}
+
+async function collectGridTasks(
+  points: GridPoint[],
+  tasks: GridTask[],
+  target: GetLocalRankGridArgs["target"],
+): Promise<{ grid: GridPointResult[]; matches: unknown[] }> {
+  const taskByTag = new Map(tasks.map((task) => [gridTag(task), task.taskId]));
+  const settled = new Map<string, GridPointResult>();
+  const matches: unknown[] = [];
+
+  for (let attempt = 0; attempt < GRID_POLL_ATTEMPTS; attempt++) {
+    const open = points.filter(
+      (point) => taskByTag.has(gridTag(point)) && !settled.has(gridTag(point)),
+    );
+    if (open.length === 0) break;
+    if (attempt > 0) await wait(GRID_POLL_INTERVAL_MS);
+    for (let i = 0; i < open.length; i += GRID_COLLECT_CONCURRENCY) {
+      await Promise.all(
+        open.slice(i, i + GRID_COLLECT_CONCURRENCY).map(async (point) => {
+          const taskId = taskByTag.get(gridTag(point)) ?? "";
+          try {
+            const outcome = await fetchMapsTaskResult(taskId);
+            if (outcome.status === "pending") return;
+            if (outcome.status === "failed") {
+              settled.set(gridTag(point), {
+                ...point,
+                rank: null,
+                error: true,
+              });
+              return;
+            }
+            const scored = scoreGridPoint(point, outcome.items, target);
+            if (scored.match) matches.push(scored.match);
+            settled.set(gridTag(point), scored.result);
+          } catch {
+            // Collection is free and the task stays collectable; a transient
+            // task_get failure just leaves the point open for the next poll.
+          }
+        }),
+      );
+    }
+  }
+
+  const grid = points.map(
+    (point): GridPointResult =>
+      settled.get(gridTag(point)) ??
+      (taskByTag.has(gridTag(point))
+        ? { ...point, rank: null, pending: true }
+        : // DataForSEO rejected this point's task at post time.
+          { ...point, rank: null, error: true }),
+  );
+  return { grid, matches };
 }
 
 export const getLocalRankGridTool = {
@@ -1171,9 +1437,10 @@ export const getLocalRankGridTool = {
   config: {
     title: "Get local rank grid",
     description:
-      "Runs one Google Maps search per point of a square grid around a coordinate and reports where the target business ranks at each point — plus each point's result count and #1 business — revealing how far its Maps visibility reaches. Cost scales with the grid: gridSize squared SERP calls (3x3 = 9, the sensible default; 5x5 = 25). Charges credits per grid point.",
+      'Runs one Google Maps search per point of a square grid (3x3 to 7x7) around a coordinate and reports where the target business ranks at each point — plus each point\'s result count and top 3 businesses — revealing how far its Maps visibility reaches. Size the area with gridSize and either spacingKm or radiusKm. Default mode "queue" posts all points as one DataForSEO task batch (high priority ~$0.0012 per point: 3x3 ~$0.011, 5x5 ~$0.03, 7x7 ~$0.059) and collects them for up to ~45 s; points still open come back as pending with status "processing" and a `tasks` list to resume for free. mode "live" costs ~$0.002 per point. estimateOnly returns the estimate without searching; maxCostUsd refuses a run above a budget. Charges credits per grid point.',
     inputSchema: getLocalRankGridInputSchema,
     outputSchema: {
+      status: z.enum(["completed", "processing", "estimate"]).optional(),
       grid: z.array(
         z.object({
           row: z.number(),
@@ -1189,7 +1456,17 @@ export const getLocalRankGridTool = {
             })
             .nullable()
             .optional(),
+          top3: z
+            .array(
+              z.object({
+                rank: z.number().nullable(),
+                title: z.string().nullable(),
+                cid: z.string().nullable(),
+              }),
+            )
+            .optional(),
           error: z.boolean().optional(),
+          pending: z.boolean().optional(),
         }),
       ),
       summary: z.object({
@@ -1198,6 +1475,7 @@ export const getLocalRankGridTool = {
         averageRank: z.number().nullable(),
         top3Count: z.number(),
         top10Count: z.number(),
+        pointsPending: z.number().optional(),
       }),
       matchedBusiness: z
         .object({
@@ -1206,6 +1484,24 @@ export const getLocalRankGridTool = {
           placeId: z.string().nullable(),
         })
         .nullable(),
+      settings: z
+        .object({
+          gridSize: z.number(),
+          spacingKm: z.number(),
+          radiusKm: z.number(),
+          zoom: z.number(),
+          mode: z.enum(["queue", "live"]),
+          priority: z.enum(["high", "normal"]).nullable(),
+        })
+        .optional(),
+      estimate: z
+        .object({
+          points: z.number(),
+          costPerPointUsd: z.number(),
+          estimatedCostUsd: z.number(),
+        })
+        .optional(),
+      tasks: z.array(gridTaskSchema).optional(),
       ...optionalMetaOutputSchema,
     },
     annotations: {
@@ -1227,77 +1523,128 @@ export const getLocalRankGridTool = {
     }
 
     const gridSize = args.gridSize ?? 3;
-    const spacingKm = args.spacingKm ?? 2;
+    const spacingKm = resolveGridSpacing(args, gridSize);
     const zoom = args.zoom ?? rankGridZoom(spacingKm, args.center.latitude);
     const points = buildRankGridPoints(args.center, gridSize, spacingKm);
-    const client = createDataforseoClient(context.billing);
     const languageCode = args.languageCode ?? context.project.languageCode;
-
-    let matchedBusiness: {
-      title: string | null;
-      cid: string | null;
-      placeId: string | null;
-    } | null = null;
-    let lastError: unknown = null;
-
-    const searchPoint = async (point: GridPoint): Promise<GridPointResult> => {
-      try {
-        const items = await client.serp.local({
-          keyword: args.keyword,
-          locationCoordinate: formatLocalSerpCoordinate({ ...point, zoom }),
-          languageCode,
-          searchType: "maps",
-          device: args.device ?? "mobile",
-          depth: RANK_GRID_DEPTH,
-          searchPlaces: false,
-        });
-        const match = matchGridItem(items, args.target);
-        if (match && !matchedBusiness) {
-          matchedBusiness = {
-            title: readString(match, "title"),
-            cid: readString(match, "cid"),
-            placeId: readString(match, "place_id"),
-          };
-        }
-        const rank =
-          readPath(match, "rank_absolute") ?? readPath(match, "rank_group");
-        const first = items[0];
-        return {
-          ...point,
-          rank: typeof rank === "number" ? rank : null,
-          resultsCount: items.length,
-          topResult:
-            first == null
-              ? null
-              : {
-                  title: readString(first, "title"),
-                  cid: readString(first, "cid"),
-                },
-        };
-      } catch (error) {
-        if (error instanceof AppError && GRID_ABORT_ERROR_CODES.has(error.code))
-          throw error;
-        lastError = error;
-        return { ...point, rank: null, error: true };
-      }
+    const mode = args.mode ?? "queue";
+    const priority = mode === "queue" ? (args.priority ?? "high") : null;
+    const settings = {
+      gridSize,
+      spacingKm,
+      radiusKm: Number((spacingKm * ((gridSize - 1) / 2)).toFixed(4)),
+      zoom,
+      mode,
+      priority,
     };
+    const costPerPointUsd = RANK_GRID_COST_PER_POINT_USD[priority ?? "live"];
+    // Resuming only collects already-paid tasks.
+    const estimate = {
+      points: points.length,
+      costPerPointUsd: args.resumeTasks ? 0 : costPerPointUsd,
+      estimatedCostUsd: args.resumeTasks
+        ? 0
+        : Number((points.length * costPerPointUsd).toFixed(4)),
+    };
+    const meta = buildProjectMeta(
+      context,
+      args.projectId,
+      `/p/${args.projectId}`,
+    );
+    const settingsText = `${gridSize}x${gridSize}, ${spacingKm} km spacing (radius ${settings.radiusKm} km), zoom ${zoom}, top ${RANK_GRID_DEPTH} checked, ${mode}${priority ? ` (${priority} priority)` : ""}`;
 
-    // A few points at a time; an abort-worthy failure rejects its batch and
-    // stops later batches from dispatching (and billing).
-    const grid: GridPointResult[] = [];
-    for (let i = 0; i < points.length; i += RANK_GRID_CONCURRENCY) {
-      const batch = points.slice(i, i + RANK_GRID_CONCURRENCY);
-      grid.push(...(await Promise.all(batch.map(searchPoint))));
+    if (args.estimateOnly) {
+      return mcpResponse<GridStructuredContent>({
+        text: `Estimate for "${args.keyword}" (${settingsText}): ${estimate.points} points × ~$${estimate.costPerPointUsd} = ~$${estimate.estimatedCostUsd}. Nothing was searched.`,
+        meta,
+        structuredContent: {
+          status: "estimate",
+          grid: points.map((point) => ({ ...point, rank: null })),
+          summary: {
+            pointsSearched: 0,
+            pointsFound: 0,
+            averageRank: null,
+            top3Count: 0,
+            top10Count: 0,
+          },
+          matchedBusiness: null,
+          settings,
+          estimate,
+        },
+      });
+    }
+    if (
+      args.maxCostUsd != null &&
+      estimate.estimatedCostUsd > args.maxCostUsd
+    ) {
+      throw new AppError(
+        "VALIDATION_ERROR",
+        `Estimated cost ~$${estimate.estimatedCostUsd} (${estimate.points} points × ~$${costPerPointUsd}) exceeds maxCostUsd $${args.maxCostUsd}. Nothing was charged; use a smaller gridSize, mode "queue" or priority "normal".`,
+      );
+    }
+    if (args.resumeTasks && args.resumeTasks.length !== points.length) {
+      throw new AppError(
+        "VALIDATION_ERROR",
+        `resumeTasks has ${args.resumeTasks.length} entries but a ${gridSize}x${gridSize} grid has ${points.length} points. Pass back the full tasks list with the same gridSize.`,
+      );
     }
 
-    // Every point failing means a systemic failure (auth, balance, bad market),
-    // not a business that simply doesn't rank — surface it instead of an empty grid.
-    if (grid.every((point) => point.error)) throw lastError;
+    const client = createDataforseoClient(context.billing);
+    let run: { grid: GridPointResult[]; matches: unknown[] };
+    let tasks: GridTask[] | undefined;
+    if (mode === "live" && !args.resumeTasks) {
+      run = await runLiveGrid(client, points, args, { zoom, languageCode });
+    } else {
+      if (args.resumeTasks) {
+        tasks = args.resumeTasks;
+      } else {
+        const posted = await client.serp.mapsTaskPost({
+          keyword: args.keyword,
+          languageCode,
+          device: args.device ?? "mobile",
+          depth: RANK_GRID_DEPTH,
+          priority: priority ?? "high",
+          points: points.map((point) => ({
+            tag: gridTag(point),
+            locationCoordinate: formatLocalSerpCoordinate({ ...point, zoom }),
+          })),
+        });
+        tasks = posted.flatMap((task) => {
+          const [row, col] = task.tag.split(":").map(Number);
+          return row == null || col == null || Number.isNaN(row + col)
+            ? []
+            : [{ row, col, taskId: task.taskId }];
+        });
+        if (tasks.length === 0) {
+          throw new AppError(
+            "INTERNAL_ERROR",
+            "DataForSEO accepted none of the grid's Maps tasks.",
+          );
+        }
+      }
+      run = await collectGridTasks(points, tasks, args.target);
+      if (run.grid.every((point) => point.error)) {
+        throw new AppError(
+          "INTERNAL_ERROR",
+          "Every grid point's Maps task failed at DataForSEO.",
+        );
+      }
+    }
 
+    const { grid } = run;
+    const firstMatch = run.matches[0];
+    const matchedBusiness =
+      firstMatch == null
+        ? null
+        : {
+            ...gridBusiness(firstMatch),
+            placeId: readString(firstMatch, "place_id"),
+          };
+    const pendingCount = grid.filter((point) => point.pending).length;
     const found = grid.filter((point) => point.rank != null);
     const ranks = found.map((point) => point.rank ?? 0);
     const summary = {
-      pointsSearched: grid.length,
+      pointsSearched: grid.filter((point) => !point.pending).length,
       pointsFound: found.length,
       averageRank: ranks.length
         ? Number(
@@ -1308,21 +1655,37 @@ export const getLocalRankGridTool = {
         : null,
       top3Count: ranks.filter((rank) => rank <= 3).length,
       top10Count: ranks.filter((rank) => rank <= 10).length,
+      ...(pendingCount > 0 ? { pointsPending: pendingCount } : {}),
     };
+    const status =
+      pendingCount > 0 ? ("processing" as const) : ("completed" as const);
 
     const text = [
-      `Local rank grid for "${args.keyword}" (${gridSize}x${gridSize}, ${spacingKm} km spacing, zoom ${zoom}, top ${RANK_GRID_DEPTH} checked).`,
-      `Rank per point, north at the top ("–" = not among the results returned there; check that point's resultsCount and topResult before reading it as outranked, "x" = search failed but may still be charged):`,
+      `Local rank grid for "${args.keyword}" (${settingsText}).`,
+      `Rank per point, north at the top ("–" = not among the results returned there; check that point's resultsCount and top3 before reading it as outranked, "x" = search failed but may still be charged, "?" = queued task not finished yet):`,
       renderGrid(grid, gridSize),
       `- ranked at ${summary.pointsFound} of ${summary.pointsSearched} points`,
       `- average rank where found: ${summary.averageRank ?? "—"}`,
       `- top 3 at ${summary.top3Count} points, top 10 at ${summary.top10Count} points`,
+      ...(pendingCount > 0
+        ? [
+            `- ${pendingCount} point(s) still processing at DataForSEO: call get_local_rank_grid again with the same arguments plus resumeTasks = structuredContent.tasks to collect them at no extra cost.`,
+          ]
+        : []),
     ].join("\n");
 
-    return mcpResponse({
+    return mcpResponse<GridStructuredContent>({
       text,
-      meta: buildProjectMeta(context, args.projectId, `/p/${args.projectId}`),
-      structuredContent: { grid, summary, matchedBusiness },
+      meta,
+      structuredContent: {
+        status,
+        grid,
+        summary,
+        matchedBusiness,
+        settings,
+        estimate,
+        ...(tasks ? { tasks } : {}),
+      },
     });
   }),
 };

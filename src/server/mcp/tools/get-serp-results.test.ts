@@ -5,6 +5,11 @@ import { makeToolContext } from "./tool-test-support";
 const mocks = vi.hoisted(() => ({
   createDataforseoClient: vi.fn(),
   getProjectForOrganization: vi.fn(),
+  resolveGeoLocations: vi.fn(),
+}));
+
+vi.mock("@/server/lib/geo-location-resolver", () => ({
+  resolveGeoLocations: mocks.resolveGeoLocations,
 }));
 
 vi.mock("cloudflare:workers", () => ({ env: {} }));
@@ -160,6 +165,7 @@ describe("get_serp_results", () => {
           rank_group: 1,
           title: "Agentur XY",
           domain: "example.com",
+          cid: "7490381589319248868",
           rating: { value: 4.8, votes_count: 23 },
         },
         {
@@ -209,6 +215,7 @@ describe("get_serp_results", () => {
       {
         name: "Agentur XY",
         domain: "example.com",
+        cid: "7490381589319248868",
         rating: 4.8,
         ratingCount: 23,
         rank: 1,
@@ -268,5 +275,37 @@ describe("get_serp_results", () => {
       2,
       expect.objectContaining({ keyword: "b", depth: 40 }),
     );
+  });
+
+  it("searches from a named place's location code and reports it in meta", async () => {
+    mocks.resolveGeoLocations.mockResolvedValue([
+      {
+        input: "Münster",
+        locationCode: 1004707,
+        locationName: "Munster,North Rhine-Westphalia,Germany",
+        locationType: "City",
+      },
+    ]);
+    const live = vi.fn().mockResolvedValue({ items: [], partial: false });
+    mocks.createDataforseoClient.mockReturnValue({ serp: { live } });
+
+    const result = await getSerpResultsTool.handler(
+      {
+        projectId: "project_1",
+        queries: [{ keyword: "steuerberater", location: "Münster" }],
+      },
+      toolContext,
+    );
+
+    expect(mocks.resolveGeoLocations).toHaveBeenCalledWith(["Münster"], "de");
+    expect(live).toHaveBeenCalledWith(
+      expect.objectContaining({ locationCode: 1004707, languageCode: "de" }),
+    );
+    expect(result.structuredContent.meta).toMatchObject({
+      locationCodes: [1004707],
+    });
+    expect(result.structuredContent.results[0]).toMatchObject({
+      location: { locationCode: 1004707, locationType: "City" },
+    });
   });
 });

@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   createDataforseoClient: vi.fn(),
   fetchBusinessDataTaskResult: vi.fn(),
   fetchBusinessListingsCategories: vi.fn(),
+  fetchMapsTaskResult: vi.fn(),
   getProjectForOrganization: vi.fn(),
   getCached: vi.fn(),
   setCached: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock("@/server/lib/dataforseo", async () => {
     isRecord: envelope.isRecord,
     fetchBusinessDataTaskResult: mocks.fetchBusinessDataTaskResult,
     fetchBusinessListingsCategories: mocks.fetchBusinessListingsCategories,
+    fetchMapsTaskResult: mocks.fetchMapsTaskResult,
   };
 });
 
@@ -513,6 +515,7 @@ describe("get_local_rank_grid", () => {
     await getLocalRankGridTool.handler(
       {
         projectId: "project_1",
+        mode: "live",
         keyword: "coffee",
         target: { cid: "123" },
         center: { latitude: 40, longitude: -74 },
@@ -561,6 +564,7 @@ describe("get_local_rank_grid", () => {
     const result = await getLocalRankGridTool.handler(
       {
         projectId: "project_1",
+        mode: "live",
         keyword: "coffee",
         target: { cid: "123" },
         center: { latitude: 40, longitude: -74 },
@@ -589,6 +593,7 @@ describe("get_local_rank_grid", () => {
     const result = await getLocalRankGridTool.handler(
       {
         projectId: "project_1",
+        mode: "live",
         keyword: "coffee",
         target: { cid: "123" },
         center: { latitude: 40, longitude: -74 },
@@ -614,6 +619,7 @@ describe("get_local_rank_grid", () => {
       getLocalRankGridTool.handler(
         {
           projectId: "project_1",
+          mode: "live",
           keyword: "coffee",
           target: { cid: "123" },
           center: { latitude: 40, longitude: -74 },
@@ -634,6 +640,7 @@ describe("get_local_rank_grid", () => {
     const result = await getLocalRankGridTool.handler(
       {
         projectId: "project_1",
+        mode: "live",
         keyword: "coffee",
         target: { name: "acme cafe" },
         center: { latitude: 40, longitude: -74 },
@@ -660,6 +667,7 @@ describe("get_local_rank_grid", () => {
     const result = await getLocalRankGridTool.handler(
       {
         projectId: "project_1",
+        mode: "live",
         keyword: "coffee",
         target: { cid: "123" },
         center: { latitude: 40, longitude: -74 },
@@ -682,6 +690,7 @@ describe("get_local_rank_grid", () => {
       getLocalRankGridTool.handler(
         {
           projectId: "project_1",
+          mode: "live",
           keyword: "coffee",
           target: { cid: "123" },
           center: { latitude: 40, longitude: -74 },
@@ -689,6 +698,140 @@ describe("get_local_rank_grid", () => {
         toolContext,
       ),
     ).rejects.toThrow("upstream blew up");
+  });
+});
+
+describe("get_local_rank_grid (queue, SEO-5)", () => {
+  // Shape of a real Maps task_get item (DataForSEO, 21.09.2026), trimmed to
+  // the fields the grid reads.
+  const mapsItems = [
+    { rank_absolute: 1, title: "Steuerberater Schulze Wenning", cid: "749" },
+    { rank_absolute: 2, title: "Gesigora & Partner", cid: "146" },
+    { rank_absolute: 3, title: "LEIFKEN AI", cid: "123", place_id: "p1" },
+    { rank_absolute: 4, title: "Other", cid: "555" },
+  ];
+  const postAll = () =>
+    vi.fn(
+      (input: { points: Array<{ tag: string; locationCoordinate: string }> }) =>
+        Promise.resolve(
+          input.points.map((point) => ({
+            tag: point.tag,
+            taskId: `t-${point.tag}`,
+          })),
+        ),
+    );
+  const baseArgs = {
+    projectId: "project_1",
+    keyword: "steuerberater",
+    target: { cid: "123" },
+    center: { latitude: 51.96, longitude: 7.63 },
+  };
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("posts every point as one high-priority batch and reports rank and top 3 per point", async () => {
+    const mapsTaskPost = postAll();
+    const local = vi.fn();
+    mocks.createDataforseoClient.mockReturnValue({
+      serp: { mapsTaskPost, local },
+    });
+    mocks.fetchMapsTaskResult.mockResolvedValue({
+      status: "completed",
+      items: mapsItems,
+    });
+
+    const result = await getLocalRankGridTool.handler(
+      { ...baseArgs, gridSize: 5, radiusKm: 5 },
+      toolContext,
+    );
+
+    expect(local).not.toHaveBeenCalled();
+    expect(mapsTaskPost).toHaveBeenCalledTimes(1);
+    expect(mapsTaskPost).toHaveBeenCalledWith(
+      expect.objectContaining({ priority: "high", depth: 20 }),
+    );
+    expect(mapsTaskPost.mock.calls[0]?.[0].points).toHaveLength(25);
+    expect(result.structuredContent).toMatchObject({
+      status: "completed",
+      settings: { gridSize: 5, spacingKm: 2.5, radiusKm: 5, mode: "queue" },
+      estimate: { points: 25, estimatedCostUsd: 0.03 },
+      summary: { pointsSearched: 25, pointsFound: 25, averageRank: 3 },
+      matchedBusiness: { cid: "123", placeId: "p1" },
+    });
+    expect(result.structuredContent.grid[12]?.top3).toEqual([
+      { rank: 1, title: "Steuerberater Schulze Wenning", cid: "749" },
+      { rank: 2, title: "Gesigora & Partner", cid: "146" },
+      { rank: 3, title: "LEIFKEN AI", cid: "123" },
+    ]);
+    expect(result.structuredContent.tasks).toHaveLength(25);
+  });
+
+  it("returns pending points with resumable tasks, and a resume collects them without posting again", async () => {
+    vi.useFakeTimers();
+    const mapsTaskPost = postAll();
+    mocks.createDataforseoClient.mockReturnValue({ serp: { mapsTaskPost } });
+    mocks.fetchMapsTaskResult.mockImplementation((taskId: string) =>
+      Promise.resolve(
+        taskId === "t-0:0"
+          ? { status: "pending" }
+          : { status: "completed", items: mapsItems },
+      ),
+    );
+
+    const pending = getLocalRankGridTool.handler(baseArgs, toolContext);
+    await vi.runAllTimersAsync();
+    const first = await pending;
+
+    expect(first.structuredContent).toMatchObject({
+      status: "processing",
+      summary: { pointsSearched: 8, pointsPending: 1 },
+    });
+    expect(first.structuredContent.grid[0]).toMatchObject({ pending: true });
+    expect(textContent(first)).toContain("resumeTasks");
+
+    mocks.fetchMapsTaskResult.mockResolvedValue({
+      status: "completed",
+      items: mapsItems,
+    });
+    const resumed = await getLocalRankGridTool.handler(
+      { ...baseArgs, resumeTasks: first.structuredContent.tasks },
+      toolContext,
+    );
+
+    expect(mapsTaskPost).toHaveBeenCalledTimes(1);
+    expect(resumed.structuredContent).toMatchObject({
+      status: "completed",
+      estimate: { estimatedCostUsd: 0 },
+      summary: { pointsFound: 9 },
+    });
+  });
+
+  it("estimates without searching and refuses a run above maxCostUsd", async () => {
+    const mapsTaskPost = postAll();
+    mocks.createDataforseoClient.mockReturnValue({ serp: { mapsTaskPost } });
+
+    const estimate = await getLocalRankGridTool.handler(
+      { ...baseArgs, gridSize: 7, estimateOnly: true },
+      toolContext,
+    );
+    expect(estimate.structuredContent).toMatchObject({
+      status: "estimate",
+      estimate: {
+        points: 49,
+        costPerPointUsd: 0.0012,
+        estimatedCostUsd: 0.0588,
+      },
+    });
+
+    await expect(
+      getLocalRankGridTool.handler(
+        { ...baseArgs, gridSize: 7, mode: "live", maxCostUsd: 0.05 },
+        toolContext,
+      ),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(mapsTaskPost).not.toHaveBeenCalled();
   });
 });
 

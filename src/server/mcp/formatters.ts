@@ -6,6 +6,15 @@ type McpResponseMeta = {
   runId?: string;
   creditsCharged?: number;
   creditsRemaining?: number;
+  /** LEIFKEN (SEO-5): DataForSEO location codes a location-scoped call used. */
+  locationCodes?: number[];
+  /** LEIFKEN (SEO-5): how each requested place was resolved. */
+  locations?: Array<{
+    input: string;
+    locationCode: number;
+    locationName: string;
+    locationType: string;
+  }>;
 };
 
 // The generic overload preserves each tool's concrete structuredContent shape

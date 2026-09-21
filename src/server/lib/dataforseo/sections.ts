@@ -19,6 +19,8 @@ export {
 
 export { fetchUserData } from "@/server/lib/dataforseo/appendix";
 
+export { fetchGeoLocationsForCountry } from "@/server/lib/dataforseo/geo-locations";
+
 export {
   fetchBacklinksHistory,
   fetchBacklinksRows,
@@ -54,6 +56,11 @@ export {
   fetchRankCheckTaskResult,
   postRankCheckTasks,
 } from "@/server/lib/dataforseo/serp";
+
+export {
+  fetchMapsTaskResult,
+  postMapsTasks,
+} from "@/server/lib/dataforseo/maps-tasks";
 
 export { fetchLighthouseResult } from "@/server/lib/dataforseo/lighthouse";
 

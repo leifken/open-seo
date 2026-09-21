@@ -137,6 +137,9 @@ export function createDataforseoClient(customer: BillingCustomerContext) {
         "rank_tracking",
       ),
       local: meter(customer, (s) => s.fetchLocalSerp, "local_seo"),
+      // LEIFKEN (SEO-5): queued Maps SERPs for get_local_rank_grid; charged at
+      // post, collected unmetered through fetchMapsTaskResult (index.ts).
+      mapsTaskPost: meter(customer, (s) => s.postMapsTasks, "local_seo"),
       autocomplete: meter(customer, (s) => s.fetchAutocomplete),
     },
     labs: {

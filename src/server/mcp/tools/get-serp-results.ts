@@ -12,6 +12,13 @@ import {
   locationCodeSchema,
   projectIdSchema,
 } from "@/server/mcp/schemas";
+import type { ResolvedGeoLocation } from "@/server/lib/geo-location-resolver";
+import {
+  countryCodeSchema,
+  locationMeta,
+  placeSchema,
+  resolvePlaces,
+} from "@/server/mcp/tools/location-input";
 
 type SerpItem = {
   type?: string | null;
@@ -143,6 +150,7 @@ const localPackItemSchema = z
     rank_group: z.number().nullable().optional(),
     title: z.string().nullable().optional(),
     domain: z.string().nullable().optional(),
+    cid: z.string().nullable().optional(),
     rating: z
       .object({
         value: z.number().nullable().optional(),
@@ -157,6 +165,8 @@ const localPackItemSchema = z
 type LocalPackEntry = {
   name: string | null;
   domain: string | null;
+  /** LEIFKEN (SEO-5): Google CID, to match the business across tools. */
+  cid: string | null;
   rating: number | null;
   ratingCount: number | null;
   rank: number | null;
@@ -171,6 +181,7 @@ function extractLocalPack(items: SerpLiveItem[]): LocalPackEntry[] {
       return {
         name: parsed.data.title ?? null,
         domain: parsed.data.domain ?? null,
+        cid: parsed.data.cid ?? null,
         rating: parsed.data.rating?.value ?? null,
         ratingCount: parsed.data.rating?.votes_count ?? null,
         rank: parsed.data.rank_group ?? null,
@@ -189,6 +200,16 @@ const SERP_ITEM_COLUMNS: McpTableColumn<SerpItem>[] = [
 const querySchema = z.object({
   keyword: z.string().min(1).describe("Search query to fetch the SERP for."),
   locationCode: locationCodeSchema.optional(),
+  location: placeSchema
+    .optional()
+    .describe(
+      'LEIFKEN: city, Kreis or Bundesland to search from ("Münster", "Kreis Coesfeld", or a location code) instead of the whole country. Takes precedence over locationCode; the language then defaults to the project\'s. The resolved code is in the result and in meta.locationCodes.',
+    ),
+  countryCode: countryCodeSchema
+    .optional()
+    .describe(
+      "Country the location name belongs to (ISO alpha-2). Defaults to the project's country.",
+    ),
   languageCode: languageCodeSchema.optional(),
   depth: z
     .number()
@@ -219,7 +240,7 @@ export const getSerpResultsTool = {
   config: {
     title: "Get Google SERP results",
     description:
-      "Fetch live Google organic search results for 1-10 keywords. Use this to inspect who ranks for a query, verify competitors, compare SERPs across keywords, or gather source URLs before content planning. Charges credits per keyword (~30-60 each). Does not save results to OpenSEO. Per-keyword errors don't fail the batch.",
+      "Fetch live Google organic search results for 1-10 keywords. Use this to inspect who ranks for a query, verify competitors, compare SERPs across keywords, or gather source URLs before content planning. Charges credits per keyword (~30-60 each). Does not save results to OpenSEO. Per-keyword errors don't fail the batch. Local search: pass location (a city, Kreis or Bundesland name, or a location code) to get the SERP as seen from there, local pack included (localPack, with cid).",
     inputSchema,
     outputSchema: {
       results: z.array(
@@ -275,6 +296,7 @@ export const getSerpResultsTool = {
                 z.object({
                   name: z.string().nullable(),
                   domain: z.string().nullable(),
+                  cid: z.string().nullable().optional(),
                   rating: z.number().nullable(),
                   ratingCount: z.number().nullable(),
                   rank: z.number().nullable(),
@@ -301,14 +323,26 @@ export const getSerpResultsTool = {
   },
   handler: withMcpProjectAuth(async (args: Args, context) => {
     const client = createDataforseoClient(context.billing);
+    const usedLocations: ResolvedGeoLocation[] = [];
     const results = await Promise.all(
       args.queries.map(async (q) => {
         try {
           const depth = q.depth ? Math.ceil(q.depth / 10) * 10 : undefined;
+          // LEIFKEN (SEO-5): a named place resolves to its own location code
+          // before any paid call; an unknown name fails only this query.
+          const [place] = q.location
+            ? await resolvePlaces([q.location], q.countryCode, context.project)
+            : [];
+          if (place) usedLocations.push(place);
           const serp = await client.serp.live({
             keyword: q.keyword,
             depth: depth ?? 20,
-            ...resolveMarket(q, context.project),
+            ...(place
+              ? {
+                  locationCode: place.locationCode,
+                  languageCode: q.languageCode ?? context.project.languageCode,
+                }
+              : resolveMarket(q, context.project)),
           });
 
           // Partial with nothing retrieved at all is a real failure — same
@@ -340,6 +374,15 @@ export const getSerpResultsTool = {
           return {
             keyword: q.keyword,
             ok: true as const,
+            ...(place
+              ? {
+                  location: {
+                    locationCode: place.locationCode,
+                    locationName: place.locationName,
+                    locationType: place.locationType,
+                  },
+                }
+              : {}),
             ...(serp.partial
               ? { teilweise: true, grund: serp.partialReason }
               : {}),
@@ -365,7 +408,9 @@ export const getSerpResultsTool = {
           if (!r.ok) {
             return `"${r.keyword}": FAILED — ${r.error}`;
           }
-          const partialNote = r.teilweise ? ` (partial: ${r.grund})` : "";
+          const partialNote =
+            (r.teilweise ? ` (partial: ${r.grund})` : "") +
+            (r.location ? ` in ${r.location.locationName}` : "");
           if (r.items.length === 0) {
             return `"${r.keyword}" (0 results)${partialNote}`;
           }
@@ -376,11 +421,14 @@ export const getSerpResultsTool = {
 
     return mcpResponse({
       text,
-      meta: buildProjectMeta(
-        context,
-        args.projectId,
-        `/p/${args.projectId}/keywords`,
-      ),
+      meta: {
+        ...buildProjectMeta(
+          context,
+          args.projectId,
+          `/p/${args.projectId}/keywords`,
+        ),
+        ...(usedLocations.length > 0 ? locationMeta(usedLocations) : {}),
+      },
       structuredContent: { results },
       // Same rule as research_keywords: every query failing is a call
       // failure, not a 200 full of "FAILED" text; a partial failure with at
