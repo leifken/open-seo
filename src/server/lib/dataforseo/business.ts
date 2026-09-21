@@ -3,6 +3,7 @@ import {
   BusinessDataBusinessListingsSearchLiveRequestInfo,
   BusinessDataGoogleExtendedReviewsTaskPostRequestInfo,
   BusinessDataGoogleMyBusinessInfoLiveRequestInfo,
+  BusinessDataGoogleMyBusinessInfoTaskPostRequestInfo,
   BusinessDataGoogleMyBusinessUpdatesTaskPostRequestInfo,
   BusinessDataGoogleQuestionsAndAnswersLiveRequestInfo,
   BusinessDataGoogleReviewsTaskPostRequestInfo,
@@ -16,6 +17,7 @@ import {
 import {
   assertOk,
   buildTaskBilling,
+  extractMyBusinessInfoProfile,
   isNoResultsTask,
   isRecord,
   isTaskInProgress,
@@ -168,15 +170,10 @@ export async function fetchMyBusinessInfo(
   }
   // 40501 = billed empty result: a business Google has no profile for.
   const task = assertOk(response, { treatNoResultsAsEmpty: true });
-  const entry = task.result?.[0];
-  const item = entry?.items?.[0];
-  if (!isRecord(item)) {
-    return { data: null, billing: buildTaskBilling(task) };
-  }
-  // check_url (the Google Maps link DataForSEO verified against) lives on the
-  // result entry, not the item — merge it so callers get one complete record.
-  if (item.check_url == null) item.check_url = entry?.check_url;
-  return { data: item, billing: buildTaskBilling(task) };
+  return {
+    data: extractMyBusinessInfoProfile(task.result?.[0] ?? null),
+    billing: buildTaskBilling(task),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -209,7 +206,8 @@ function postedTaskId<T extends DataforseoTaskLike & { id?: string }>(
 export type BusinessTaskEndpoint =
   | "reviews"
   | "extended_reviews"
-  | "my_business_updates";
+  | "my_business_updates"
+  | "my_business_info";
 
 type BusinessIdentifierInput = {
   keyword?: string;
@@ -258,6 +256,34 @@ export async function postGoogleReviewsTask(
   );
 }
 
+/**
+ * LEIFKEN (RankMeister SEO-4, production incident 21.09.2026): the live
+ * my_business_info endpoint occasionally needs more than
+ * MY_BUSINESS_INFO_TIMEOUT_MS/25s to resolve a real, existing profile — the
+ * old fetchMyBusinessInfo() then threw UPSTREAM_UNAVAILABLE for a profile
+ * that plainly exists (confirmed for "LEIFKEN AI" the same day). Task-queue
+ * collection has no such wall-clock ceiling: task_post returns immediately,
+ * and get_business_profile polls task_get for as long as it decides to (see
+ * local-seo-tools.ts), so a slow-to-resolve lookup just takes another poll
+ * instead of failing. High priority keeps the common case (an exact cid/
+ * placeId, or an unambiguous business name) fast — DataForSEO usually settles
+ * those within the first poll.
+ */
+export async function postMyBusinessInfoTask(
+  input: { keyword: string } & BusinessLocationInput,
+): Promise<DataforseoApiResponse<string>> {
+  return postedTaskId(
+    await businessDataTaskApi().googleMyBusinessInfoTaskPost([
+      new BusinessDataGoogleMyBusinessInfoTaskPostRequestInfo({
+        keyword: input.keyword,
+        ...locationParams(input),
+        language_code: input.languageCode,
+        priority: TASK_PRIORITY_HIGH,
+      }),
+    ]),
+  );
+}
+
 export async function postMyBusinessUpdatesTask(
   input: { keyword: string; depth: number } & BusinessLocationInput,
 ): Promise<DataforseoApiResponse<string>> {
@@ -295,7 +321,9 @@ export async function fetchBusinessDataTaskResult(input: {
       ? await api.googleReviewsTaskGet(input.taskId)
       : input.endpoint === "extended_reviews"
         ? await api.googleExtendedReviewsTaskGet(input.taskId)
-        : await api.googleMyBusinessUpdatesTaskGet(input.taskId);
+        : input.endpoint === "my_business_info"
+          ? await api.googleMyBusinessInfoTaskGet(input.taskId)
+          : await api.googleMyBusinessUpdatesTaskGet(input.taskId);
 
   const task = response?.tasks?.[0];
   if (!response || response.status_code !== 20000 || !task) {

@@ -3,11 +3,40 @@ import { z } from "zod";
 import {
   assertOk,
   DataforseoChargedTaskError,
+  extractMyBusinessInfoProfile,
   parseTaskItems,
 } from "@/server/lib/dataforseo/envelope";
 import { AppError } from "@/server/lib/errors";
 
 const itemSchema = z.object({ keyword: z.string().optional() }).passthrough();
+
+describe("extractMyBusinessInfoProfile", () => {
+  it("returns null for a confirmed empty result (no entry, or an entry with no items)", () => {
+    expect(extractMyBusinessInfoProfile(null)).toBeNull();
+    expect(extractMyBusinessInfoProfile({ items: [] })).toBeNull();
+    expect(extractMyBusinessInfoProfile({ items: null })).toBeNull();
+  });
+
+  it("merges the entry's check_url onto the profile item when the item has none", () => {
+    const profile = extractMyBusinessInfoProfile({
+      check_url: "https://www.google.com/maps/place/?q=place_id:abc",
+      items: [{ title: "LEIFKEN AI", cid: "123" }],
+    });
+    expect(profile).toEqual({
+      title: "LEIFKEN AI",
+      cid: "123",
+      check_url: "https://www.google.com/maps/place/?q=place_id:abc",
+    });
+  });
+
+  it("keeps the item's own check_url when it already has one", () => {
+    const profile = extractMyBusinessInfoProfile({
+      check_url: "https://entry-level-url",
+      items: [{ title: "LEIFKEN AI", check_url: "https://item-level-url" }],
+    });
+    expect(profile?.check_url).toBe("https://item-level-url");
+  });
+});
 
 describe("parseTaskItems", () => {
   it("returns [] when the result items are null", () => {

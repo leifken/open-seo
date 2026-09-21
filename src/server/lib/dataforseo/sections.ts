@@ -13,6 +13,7 @@ export {
   fetchMyBusinessInfo,
   fetchQuestionsAnswers,
   postGoogleReviewsTask,
+  postMyBusinessInfoTask,
   postMyBusinessUpdatesTask,
 } from "@/server/lib/dataforseo/business";
 

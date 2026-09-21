@@ -121,6 +121,8 @@ describe("DataForSEO research tool output schemas", () => {
     );
 
     const result = await schema.safeParseAsync({
+      status: "completed",
+      taskId: "task-1",
       profile: new ProviderRow("example.com", 1),
     });
 

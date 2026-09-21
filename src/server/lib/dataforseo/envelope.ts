@@ -229,6 +229,27 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+/**
+ * Both the live and task_get my_business_info responses shape their result
+ * entry the same way: `items[0]` is the profile, `check_url` (the Google Maps
+ * link DataForSEO verified against) lives on the entry itself rather than the
+ * item. Shared (via this SDK-free leaf module, so it stays reachable without
+ * the lazy dataforseo import boundary) by business.ts's live fetchMyBusinessInfo
+ * and the task-queue path in local-seo-tools.ts's get_business_profile, so
+ * both return one complete record instead of duplicating the merge.
+ */
+export function extractMyBusinessInfoProfile(
+  entry: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  const items = entry?.items;
+  // Array.isArray narrows to `any[]`, so `first` is typed explicitly to keep
+  // that any from leaking into the isRecord narrowing below.
+  const first: unknown = Array.isArray(items) ? items[0] : undefined;
+  if (!isRecord(first)) return null;
+  if (first.check_url == null) first.check_url = entry?.check_url;
+  return first;
+}
+
 /** Reads `task.result[0].total_count` for paginated list endpoints. */
 export function parseTaskTotalCount(task: DataforseoTaskLike): number | null {
   const first = task.result?.[0];

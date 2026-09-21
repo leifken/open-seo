@@ -2,6 +2,7 @@
 import { z } from "zod";
 import {
   createDataforseoClient,
+  extractMyBusinessInfoProfile,
   fetchBusinessDataTaskResult,
   fetchBusinessListingsCategories,
   type BusinessTaskEndpoint,
@@ -79,6 +80,15 @@ const businessLocationInputSchema = {
 const TASK_POLL_ATTEMPTS = 6;
 const TASK_POLL_INTERVAL_MS = 4000;
 
+// LEIFKEN (production incident 21.09.2026): my_business_info occasionally
+// needs longer than reviews/updates to resolve a real, existing profile — see
+// postMyBusinessInfoTask in business.ts. get_business_profile gets its own,
+// longer poll window (9 waits * 5s ≈ 45s) instead of sharing the shorter one
+// above; a lookup that still hasn't resolved after that is reported as an
+// honest timeout (see getBusinessProfileTool), never as "not found".
+const PROFILE_TASK_POLL_ATTEMPTS = 10;
+const PROFILE_TASK_POLL_INTERVAL_MS = 5000;
+
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -86,10 +96,13 @@ function wait(ms: number) {
 async function pollBusinessTask(
   input: { endpoint: BusinessTaskEndpoint; taskId: string },
   publicTaskId: string,
+  options: { attempts?: number; intervalMs?: number } = {},
 ): Promise<BusinessTaskOutcome> {
+  const attempts = options.attempts ?? TASK_POLL_ATTEMPTS;
+  const intervalMs = options.intervalMs ?? TASK_POLL_INTERVAL_MS;
   try {
-    for (let attempt = 0; attempt < TASK_POLL_ATTEMPTS; attempt++) {
-      if (attempt > 0) await wait(TASK_POLL_INTERVAL_MS);
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      if (attempt > 0) await wait(intervalMs);
       const outcome = await fetchBusinessDataTaskResult(input);
       if (outcome.status === "completed") return outcome;
     }
@@ -125,6 +138,14 @@ const getBusinessProfileInputSchema = {
   projectId: projectIdSchema,
   ...businessIdentifierInputSchema,
   ...businessLocationInputSchema,
+  taskId: z
+    .string()
+    .min(1)
+    .max(128)
+    .optional()
+    .describe(
+      'Resume a previous call that returned status "timeout". Pass back the taskId exactly as returned — resuming charges no extra credits and does not need the identifier fields again.',
+    ),
 } as const;
 
 type GetBusinessProfileArgs = z.infer<
@@ -218,9 +239,12 @@ export const getBusinessProfileTool = {
   config: {
     title: "Get business profile",
     description:
-      "Reads one Google Business Profile: categories, rating and review count, rating breakdown, address, phone, website, claimed status, opening hours, and photo count. Use it to audit your own profile or to compare a competitor's. Charges credits.",
+      "Reads one Google Business Profile: categories, rating and review count, rating breakdown, address, phone, website, claimed status, opening hours, and photo count. Use it to audit your own profile or to compare a competitor's. Runs over DataForSEO's task queue (not the live endpoint), polling for up to ~45s — a cid or placeId (from get_local_serp_results) resolves fastest and most reliably; an ambiguous business name can take longer or fail to match. A lookup that is still unresolved after the poll window returns status \"timeout\" (isError, code zeitueberschreitung) with a taskId to resume for free — never reported as \"not found\", which only status \"completed\" with profile: null means. Charges credits.",
     inputSchema: getBusinessProfileInputSchema,
     outputSchema: {
+      status: z.enum(["completed", "timeout"]),
+      taskId: z.string(),
+      errorCode: z.literal("zeitueberschreitung").optional(),
       profile: looseObjectOutputSchema.nullable(),
       ...optionalMetaOutputSchema,
     },
@@ -231,19 +255,52 @@ export const getBusinessProfileTool = {
     },
   },
   handler: withMcpProjectAuth(async (args: GetBusinessProfileArgs, context) => {
-    const identifier = resolveBusinessIdentifier(args);
-    const client = createDataforseoClient(context.billing);
-    const profile = await client.business.myBusinessInfo({
-      keyword: businessIdentifierKeyword(identifier),
-      ...resolveBusinessLocation(args, context.project),
-    });
+    let taskId: string;
+    if (args.taskId) {
+      taskId = args.taskId;
+    } else {
+      const identifier = resolveBusinessIdentifier(args);
+      const client = createDataforseoClient(context.billing);
+      taskId = await client.business.myBusinessInfoTaskPost({
+        keyword: businessIdentifierKeyword(identifier),
+        ...resolveBusinessLocation(args, context.project),
+      });
+    }
 
+    const outcome = await pollBusinessTask(
+      { endpoint: "my_business_info", taskId },
+      taskId,
+      {
+        attempts: PROFILE_TASK_POLL_ATTEMPTS,
+        intervalMs: PROFILE_TASK_POLL_INTERVAL_MS,
+      },
+    );
+
+    if (outcome.status === "pending") {
+      const waitedSeconds = Math.round(
+        ((PROFILE_TASK_POLL_ATTEMPTS - 1) * PROFILE_TASK_POLL_INTERVAL_MS) /
+          1000,
+      );
+      return mcpResponse({
+        text: `DataForSEO did not resolve this Google Business Profile lookup within ~${waitedSeconds}s. This is a timeout, not a confirmed "not found" — call get_business_profile again with taskId "${taskId}" to keep waiting at no extra cost, or narrow the search with a cid/placeId from get_local_serp_results.`,
+        meta: buildProjectMeta(context, args.projectId, `/p/${args.projectId}`),
+        isError: true,
+        structuredContent: {
+          status: "timeout",
+          errorCode: "zeitueberschreitung",
+          taskId,
+          profile: null,
+        },
+      });
+    }
+
+    const profile = extractMyBusinessInfoProfile(outcome.result);
     return mcpResponse({
       text: profile
         ? `Google Business Profile:\n${formatProfileText(profile)}`
-        : "No Google Business Profile matched that identifier. Try a cid or placeId from get_local_serp_results.",
+        : "No Google Business Profile matched that identifier (confirmed empty result, not a timeout). Try a cid or placeId from get_local_serp_results.",
       meta: buildProjectMeta(context, args.projectId, `/p/${args.projectId}`),
-      structuredContent: { profile },
+      structuredContent: { status: "completed", taskId, profile },
     });
   }),
 };

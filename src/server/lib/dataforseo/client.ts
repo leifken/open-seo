@@ -74,6 +74,8 @@ export function createDataforseoClient(customer: BillingCustomerContext) {
         (s) => s.fetchQuestionsAnswers,
         "local_seo",
       ),
+      // LEIFKEN: kept for now (still tested), but no longer called by
+      // get_business_profile — see myBusinessInfoTaskPost below.
       myBusinessInfo: meter(
         customer,
         (s) => s.fetchMyBusinessInfo,
@@ -84,6 +86,11 @@ export function createDataforseoClient(customer: BillingCustomerContext) {
       reviewsTaskPost: meter(
         customer,
         (s) => s.postGoogleReviewsTask,
+        "local_seo",
+      ),
+      myBusinessInfoTaskPost: meter(
+        customer,
+        (s) => s.postMyBusinessInfoTask,
         "local_seo",
       ),
       updatesTaskPost: meter(

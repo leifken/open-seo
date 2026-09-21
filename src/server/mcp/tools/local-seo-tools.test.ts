@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- covers every tool in the also max-lines-disabled local-seo-tools.ts */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@/server/lib/errors";
 import {
@@ -7,6 +8,7 @@ import {
   listBusinessCategoriesTool,
 } from "./local-seo-tools";
 import { makeToolContext, textContent } from "./tool-test-support";
+import type * as envelopeModule from "@/server/lib/dataforseo/envelope";
 
 const mocks = vi.hoisted(() => ({
   createDataforseoClient: vi.fn(),
@@ -19,11 +21,19 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("cloudflare:workers", () => ({ env: {} }));
 
-vi.mock("@/server/lib/dataforseo", () => ({
-  createDataforseoClient: mocks.createDataforseoClient,
-  fetchBusinessDataTaskResult: mocks.fetchBusinessDataTaskResult,
-  fetchBusinessListingsCategories: mocks.fetchBusinessListingsCategories,
-}));
+vi.mock("@/server/lib/dataforseo", async () => {
+  // extractMyBusinessInfoProfile is pure, SDK-free logic (lives in
+  // envelope.ts) — use the real implementation instead of mocking it away.
+  const envelope = await vi.importActual<typeof envelopeModule>(
+    "@/server/lib/dataforseo/envelope",
+  );
+  return {
+    createDataforseoClient: mocks.createDataforseoClient,
+    extractMyBusinessInfoProfile: envelope.extractMyBusinessInfoProfile,
+    fetchBusinessDataTaskResult: mocks.fetchBusinessDataTaskResult,
+    fetchBusinessListingsCategories: mocks.fetchBusinessListingsCategories,
+  };
+});
 
 vi.mock("@/server/lib/r2-cache", () => ({
   buildCacheKey: (prefix: string) => Promise.resolve(`${prefix}:key`),
@@ -51,6 +61,10 @@ beforeEach(() => {
 });
 
 describe("get_business_profile", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("rejects anything other than exactly one business identifier", async () => {
     await expect(
       getBusinessProfileTool.handler(
@@ -64,15 +78,24 @@ describe("get_business_profile", () => {
     ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
   });
 
-  it("passes a cid as a prefixed keyword with a metre-radius coordinate", async () => {
-    const myBusinessInfo = vi.fn().mockResolvedValue({
-      title: "Acme Cafe",
-      category: "Coffee shop",
-      rating: { value: 4.6, votes_count: 210 },
-      is_claimed: true,
-    });
+  it("posts a task with a cid as a prefixed keyword with a metre-radius coordinate, then collects it", async () => {
+    const myBusinessInfoTaskPost = vi.fn().mockResolvedValue("task-1");
     mocks.createDataforseoClient.mockReturnValue({
-      business: { myBusinessInfo },
+      business: { myBusinessInfoTaskPost },
+    });
+    mocks.fetchBusinessDataTaskResult.mockResolvedValue({
+      status: "completed",
+      result: {
+        check_url: "https://google.com/maps/...",
+        items: [
+          {
+            title: "Acme Cafe",
+            category: "Coffee shop",
+            rating: { value: 4.6, votes_count: 210 },
+            is_claimed: true,
+          },
+        ],
+      },
     });
 
     const result = await getBusinessProfileTool.handler(
@@ -84,11 +107,19 @@ describe("get_business_profile", () => {
       toolContext,
     );
 
-    expect(myBusinessInfo).toHaveBeenCalledWith({
+    expect(myBusinessInfoTaskPost).toHaveBeenCalledWith({
       keyword: "cid:123",
       locationCoordinate: "33.1234568,-84.9876543,5000",
       locationCode: undefined,
       languageCode: "en",
+    });
+    expect(mocks.fetchBusinessDataTaskResult).toHaveBeenCalledWith({
+      endpoint: "my_business_info",
+      taskId: "task-1",
+    });
+    expect(result.structuredContent).toMatchObject({
+      status: "completed",
+      taskId: "task-1",
     });
     const out = textContent(result);
     expect(out).toContain("- title: Acme Cafe");
@@ -96,10 +127,14 @@ describe("get_business_profile", () => {
     expect(out).toContain("- claimed: yes");
   });
 
-  it("falls back to the project market when no coordinate is given", async () => {
-    const myBusinessInfo = vi.fn().mockResolvedValue(null);
+  it("falls back to the project market when no coordinate is given, and reports a confirmed empty result as not found", async () => {
+    const myBusinessInfoTaskPost = vi.fn().mockResolvedValue("task-2");
     mocks.createDataforseoClient.mockReturnValue({
-      business: { myBusinessInfo },
+      business: { myBusinessInfoTaskPost },
+    });
+    mocks.fetchBusinessDataTaskResult.mockResolvedValue({
+      status: "completed",
+      result: null,
     });
 
     const result = await getBusinessProfileTool.handler(
@@ -107,13 +142,76 @@ describe("get_business_profile", () => {
       toolContext,
     );
 
-    expect(myBusinessInfo).toHaveBeenCalledWith({
+    expect(myBusinessInfoTaskPost).toHaveBeenCalledWith({
       keyword: "Acme Cafe",
       locationCoordinate: undefined,
       locationCode: 2840,
       languageCode: "en",
     });
-    expect(result.structuredContent.profile).toBeNull();
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({
+      status: "completed",
+      profile: null,
+    });
+    expect(textContent(result)).toContain("confirmed empty result, not a timeout");
+  });
+
+  it("reports a genuine timeout as isError with code zeitueberschreitung, never as not found", async () => {
+    vi.useFakeTimers();
+    const myBusinessInfoTaskPost = vi.fn().mockResolvedValue("task-3");
+    mocks.createDataforseoClient.mockReturnValue({
+      business: { myBusinessInfoTaskPost },
+    });
+    mocks.fetchBusinessDataTaskResult.mockResolvedValue({
+      status: "pending",
+      result: null,
+    });
+
+    const pending = getBusinessProfileTool.handler(
+      { projectId: "project_1", businessName: "LEIFKEN AI" },
+      toolContext,
+    );
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    // 10 poll attempts (9 waits) — long enough that a real, existing profile
+    // (production incident 21.09.2026: "LEIFKEN AI") is not misreported.
+    expect(mocks.fetchBusinessDataTaskResult).toHaveBeenCalledTimes(10);
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      status: "timeout",
+      errorCode: "zeitueberschreitung",
+      taskId: "task-3",
+      profile: null,
+    });
+    expect(textContent(result)).toContain("not a confirmed \"not found\"");
+    expect(textContent(result)).toContain('taskId "task-3"');
+  });
+
+  it("resumes from a taskId without posting a new task", async () => {
+    const myBusinessInfoTaskPost = vi.fn();
+    mocks.createDataforseoClient.mockReturnValue({
+      business: { myBusinessInfoTaskPost },
+    });
+    mocks.fetchBusinessDataTaskResult.mockResolvedValue({
+      status: "completed",
+      result: { items: [{ title: "LEIFKEN AI" }] },
+    });
+
+    const result = await getBusinessProfileTool.handler(
+      { projectId: "project_1", taskId: "task-3" },
+      toolContext,
+    );
+
+    expect(myBusinessInfoTaskPost).not.toHaveBeenCalled();
+    expect(mocks.fetchBusinessDataTaskResult).toHaveBeenCalledWith({
+      endpoint: "my_business_info",
+      taskId: "task-3",
+    });
+    expect(result.structuredContent).toMatchObject({
+      status: "completed",
+      profile: { title: "LEIFKEN AI" },
+    });
   });
 });
 
