@@ -6,6 +6,10 @@ import { sha256Hex } from "@/server/lib/audit/ids";
 import { normalizeUrl } from "@/server/lib/audit/url-utils";
 
 const CRAWL_USER_AGENT = "OpenSEO-Audit/1.0";
+// Apache MultiViews answers 406 when Accept lacks a wildcard (real case
+// kinderkleidermarkt-nottuln.de, 24.09.2026): browsers always send `*/*`.
+export const CRAWL_ACCEPT =
+  "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
 const MAX_HTML_BYTES = 1024 * 1024;
 
 /**
@@ -72,7 +76,7 @@ export async function crawlPage(
     const response = await fetch(url, {
       headers: {
         "User-Agent": CRAWL_USER_AGENT,
-        Accept: "text/html,application/xhtml+xml",
+        Accept: CRAWL_ACCEPT,
       },
       redirect: "manual",
       signal: AbortSignal.timeout(15_000),
