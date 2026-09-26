@@ -4,14 +4,15 @@
 # Vorbild: ol-fundstelle/scripts/deploy.sh, bewusst schlanker.
 #
 # Ablauf:
-#   1. Lokaler HEAD = origin/node-port (Coolify zieht immer den Stand von GitHub).
-#   2. Coolify-App lesend prüfen: keine eigene Variable SOURCE_COMMIT, Auto Deploy aus.
+#   1. Lokaler HEAD = Kopf von node-port auf GitHub (gh api; Coolify zieht genau den).
+#   2. Coolify-App lesend prüfen: keine eigene Variable SOURCE_COMMIT, Quelle ist
+#      Zweig node-port bei Commit HEAD. Jeder API-Fehler bricht ab.
 #   3. Warten, bis „Image bauen“ für genau diesen Commit auf node-port grün ist
 #      (image.yml baut erst nach grüner Prüfstrecke, pruefen.yml).
 #   4. Deploy-Sperre /run/rankmeister-deploy.lock auf dem Server (wie Motor und Kontor).
 #   5. Deploy-Ampel: kein anderer Build auf der Coolify-Instanz.
 #   6. Sicherung der Datenbank openseo direkt vor dem Deploy.
-#   7. Letzte Prüfung: origin/node-port unverändert, Image weiterhin grün.
+#   7. Letzte Prüfung: Kopf von node-port unverändert, Image weiterhin grün.
 #   8. Coolify-Deploy anstoßen und auf „finished“ warten.
 #   9. Laufender Container trägt ghcr.io/leifken/open-seo:sha-<commit> und ist
 #      „healthy“ (bis 5 Minuten, der Container startet mit Migrationen und Vite).
@@ -23,6 +24,10 @@
 # Der Coolify-Token liegt in olcrm/.secrets/coolify-api-token (wie beim Motor).
 # Er wird nie ausgegeben und steht auch nicht in der Prozessliste: curl bekommt
 # ihn über stdin (-K -).
+#
+# Schreibweise: vor einem Nicht-ASCII-Zeichen immer ${VAR}, nie $VAR. Die Bash 3.2
+# von macOS liest unter UTF-8 sonst die Bytes von „ oder “ als Teil des Namens und
+# bricht mit set -u ab (Prüfung 26.09.2026). pruefen.yml und die Tests wachen darüber.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -53,7 +58,7 @@ sperrePfadPruefen() {
   case "$SPERRE" in
     /run/?*) [[ "$SPERRE" != *".."* ]] && return 0 ;;
   esac
-  echo "✗ Sperrpfad „$SPERRE“ liegt nicht unter /run/. Aus Sicherheit wird nichts entfernt." >&2
+  echo "✗ Sperrpfad „${SPERRE}“ liegt nicht unter /run/. Aus Sicherheit wird nichts entfernt." >&2
   exit 1
 }
 
@@ -103,6 +108,12 @@ coolify() {
     | curl -s -f --max-time 20 -K - -H "Accept: application/json" "${COOLIFY}/api/v1/$1"
 }
 
+# Kopf von node-port auf GitHub, genau das zieht Coolify. Über die API statt
+# git fetch: ein gescheiterter fetch ließe sonst still einen alten Stand gelten.
+kopfLesen() {
+  gh api "repos/${GH_REPO}/branches/${ZWEIG}" --jq '.commit.sha' 2>/dev/null || true
+}
+
 # Ist „Image bauen“ für genau diesen Commit auf node-port grün? 0 = ja, 1 = läuft/fehlt, 2 = rot.
 # Nur Läufe auf node-port zählen: Arbeitszweige bauen zur Probe, legen aber kein Image ab.
 imageFertig() {
@@ -122,12 +133,11 @@ command -v gh >/dev/null || { echo "✗ gh (GitHub CLI) fehlt. Ohne sie ist nich
 [[ -r "$TOKEN_DATEI" ]] || { echo "✗ Coolify-Token fehlt ($TOKEN_DATEI). Deploy abgebrochen." >&2; exit 1; }
 TOKEN="$(cat "$TOKEN_DATEI")"
 
-git fetch -q origin "$ZWEIG" 2>/dev/null || true
-SOLL="$(git rev-parse "origin/$ZWEIG" 2>/dev/null || echo '')"
+SOLL="$(kopfLesen)"
 LOKAL="$(git rev-parse HEAD)"
-[[ "$SOLL" =~ ^[0-9a-f]{40}$ ]] || { echo "✗ origin/$ZWEIG nicht lesbar. Deploy abgebrochen." >&2; exit 1; }
+[[ "$SOLL" =~ ^[0-9a-f]{40}$ ]] || { echo "✗ Kopf von ${ZWEIG} auf GitHub nicht lesbar (gh api). Deploy abgebrochen." >&2; exit 1; }
 if [[ "$LOKAL" != "$SOLL" ]]; then
-  echo "✗ Lokaler HEAD ($(kurz "$LOKAL")) ≠ origin/$ZWEIG ($(kurz "$SOLL"))." >&2
+  echo "✗ Lokaler HEAD ($(kurz "$LOKAL")) ≠ ${ZWEIG} auf GitHub ($(kurz "$SOLL"))." >&2
   echo "  Coolify deployt den Stand von GitHub. Erst node-port auschecken und angleichen (pushen oder pullen), dann deployen." >&2
   exit 1
 fi
@@ -154,23 +164,21 @@ if [[ -n "$STOPP" ]]; then
 fi
 echo "✓ Keine App-Variable SOURCE_COMMIT in Coolify."
 
-APP="$(coolify "applications/${APP_UUID}" || true)"
-AUTO="$(printf '%s' "$APP" | python3 -c '
+# Coolify muss den Kopf von node-port ziehen: Zweig node-port, Commit HEAD. Ein
+# fest eingetragener Commit oder ein anderer Zweig deployt still etwas anderes.
+APP="$(coolify "applications/${APP_UUID}")" \
+  || { echo "✗ Einstellungen der Coolify-App nicht lesbar. Ohne diese Prüfung kein Deploy." >&2; exit 1; }
+QUELLE="$(printf '%s' "$APP" | python3 -c '
 import sys, json
-try:
-    d = json.load(sys.stdin)
-except Exception:
-    sys.exit(0)
+d = json.load(sys.stdin)
 d = d.get("data", d) if isinstance(d, dict) else {}
-for k, v in (d.items() if isinstance(d, dict) else []):
-    if "auto" in k.lower() and "deploy" in k.lower() and v is True:
-        print(k)
-' || true)"
-if [[ -n "$AUTO" ]]; then
-  echo "✗ Coolify-App hat „Auto Deploy“ an ($AUTO). Ein Push nach $ZWEIG würde ohne Prüfung deployen." >&2
-  echo "  In Coolify unter Configuration, Advanced ausschalten, dann erneut:  bash scripts/deploy.sh" >&2
+print(str(d.get("git_branch")) + " " + str(d.get("git_commit_sha")))
+')" || { echo "✗ Antwort der Coolify-API nicht auswertbar. Kein Deploy." >&2; exit 1; }
+if [[ "$QUELLE" != "${ZWEIG} HEAD" ]]; then
+  echo "✗ Coolify-App zieht „${QUELLE}“ (Zweig, Commit), erwartet „${ZWEIG} HEAD“. Erst in Coolify richten." >&2
   exit 1
 fi
+echo "✓ Coolify zieht ${ZWEIG} bei HEAD."
 
 # ── 3 · Warten auf das grüne Image ────────────────────────────────────────────
 echo "→ Warte auf das Image für $(kurz "$SOLL") (GitHub Actions, bis 30 Min.) …"
@@ -185,7 +193,11 @@ done
 [[ -n "$IMG_OK" ]] || { echo "✗ Kein fertiges Image nach 30 Min. (Stand: ${IMAGE_LAUF:-unbekannt}). Nicht deployt." >&2; exit 1; }
 
 # ── 4 · Sperre, auch bei Strg-C in einer Wartestrecke wieder freigeben ───────
-trap sperreFreigeben INT TERM EXIT
+# INT und TERM geben die Sperre frei UND beenden das Skript. Ein Trap ohne exit
+# ließe es nach dem Signal weiterlaufen und ohne Sperre deployen (Prüfung 26.09.).
+trap 'sperreFreigeben; exit 130' INT
+trap 'sperreFreigeben; exit 143' TERM
+trap sperreFreigeben EXIT
 sperreNehmen
 
 # ── 5 · Deploy-Ampel ──────────────────────────────────────────────────────────
@@ -200,15 +212,28 @@ fi
 # Der Container spielt beim Start Migrationen ein. Der Dump liegt neben den
 # nächtlichen Sicherungen und wird mit ihnen nach 14 Tagen aufgeräumt.
 echo "→ Sicherung der Datenbank openseo vor dem Deploy …"
-if fern "set -e
-  C=\$(docker ps --format '{{.Names}}' | grep '^postgres-${APP_UUID}-' | head -1)
-  test -n \"\$C\"
-  O=/var/backups/postgres/postgres-${APP_UUID}
-  D=\$O/openseo_\$(date +%Y%m%d_%H%M%S)_vor-deploy.dump
-  mkdir -p \"\$O\"
-  docker exec \"\$C\" pg_dump -U openseo -d openseo -Fc > \"\$D\"
-  test \$(stat -c %s \"\$D\") -ge 1000 || { rm -f \"\$D\"; exit 1; }
-  echo \"\$D\""; then
+# Wie backup-olseo.sh: pg_dump schreibt im Container (-f), docker cp holt die
+# Datei. Bei jedem Fehler werden Teilstücke im Container und auf dem Host entfernt.
+if fern "APP_UUID=${APP_UUID} bash -s" <<'SICHERUNG'
+set -euo pipefail
+C=$(docker ps --format '{{.Names}}' | grep "^postgres-${APP_UUID}-" | head -1)
+test -n "$C"
+O=/var/backups/postgres/postgres-${APP_UUID}
+D=$O/openseo_$(date +%Y%m%d_%H%M%S)_vor-deploy.dump
+FERTIG=""
+aufraeumen() {
+  docker exec "$C" rm -f /tmp/vor-deploy.dump >/dev/null 2>&1 || true
+  [ -n "$FERTIG" ] || rm -f "$D"
+}
+trap aufraeumen EXIT
+mkdir -p "$O"
+docker exec "$C" pg_dump -U openseo -d openseo -Fc -f /tmp/vor-deploy.dump
+docker cp "$C:/tmp/vor-deploy.dump" "$D" >/dev/null
+[ "$(stat -c %s "$D")" -ge 1000 ]
+FERTIG=1
+echo "$D"
+SICHERUNG
+then
   echo "  ✓ gesichert"
 else
   echo "✗ Sicherung vor dem Deploy gescheitert. Kein Deploy." >&2
@@ -220,8 +245,11 @@ fi
 # bewegt, fehlt vielleicht das Image; dann wird nichts angefasst.
 anstossenPruefen() {
   local sha="$1" jetzt
-  git fetch -q origin "$ZWEIG" 2>/dev/null || true
-  jetzt="$(git rev-parse "origin/$ZWEIG" 2>/dev/null || echo '')"
+  jetzt="$(kopfLesen)"
+  if [[ ! "$jetzt" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "✗ Kopf von ${ZWEIG} auf GitHub nicht lesbar (gh api). Ohne diese Prüfung kein Deploy." >&2
+    return 1
+  fi
   if [[ "$jetzt" != "$sha" ]]; then
     echo "✗ origin/$ZWEIG hat sich seit dem Start bewegt: $(kurz "$sha") → $(kurz "${jetzt:-?}"). Kein Deploy." >&2
     echo "  Neu starten, dann deployt es den jetzigen Stand:  bash scripts/deploy.sh" >&2
@@ -278,7 +306,7 @@ for _ in $(seq 1 "$CONTAINER_VERSUCHE"); do
     elif [[ "$HEALTH" == "healthy" ]]; then
       GESUND=1; echo "  ✓ ${NAME#/} · sha-$(kurz "$SOLL") · healthy"; break
     else
-      BEFUND="Healthcheck „$HEALTH“"
+      BEFUND="Healthcheck „${HEALTH}“"
     fi
   fi
   sleep 10

@@ -25,6 +25,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 const SKRIPT = path.resolve(__dirname, "../../scripts/deploy.sh");
 // Jeder Fall startet das Skript echt; auf langsamen CI-Rechnern großzügig.
 const ZEIT = 30_000;
+// Auf macOS mit der System-Bash 3.2 und deutscher UTF-8-Umgebung, genau wie
+// Oliver das Skript startet: dort bricht „$VAR“ vor einem Nicht-ASCII-Zeichen
+// mit set -u ab (Prüfung 26.09.2026). Linux-Rechner haben de_DE oft nicht.
+const BASH = process.platform === "darwin" ? "/bin/bash" : "bash";
+const LOKALE = process.platform === "darwin" ? "de_DE.UTF-8" : "C.UTF-8";
 const SOLL = "a".repeat(40);
 const ANDERS = "b".repeat(40);
 const UUID = "yp79q9een0ycr9vhkfo03zta";
@@ -48,20 +53,27 @@ naechste() {
 const ATTRAPPEN: Record<string, string> = {
   git: `case "$*" in
   "rev-parse HEAD") naechste git-head ;;
-  "rev-parse origin/node-port") naechste git-origin ;;
-  *) exit 0 ;;
+  *) echo "unerwarteter git-Aufruf: $*" >&2; exit 99 ;;
 esac`,
-  gh: `naechste image`,
+  gh: `case "$*" in
+  *repos/leifken/open-seo/branches/node-port*) naechste kopf ;;
+  *) naechste image ;;
+esac`,
   sleep: `exit 0`,
-  ampel: `exit "$(naechste ampel)"`,
+  // Mit Datei „signal“ schickt die Ampel dem Skript mitten im Lauf INT oder TERM.
+  ampel: `[ -f "$S/signal" ] && kill -"$(cat "$S/signal")" "$PPID"
+exit "$(naechste ampel)"`,
   ssh: `CMD="\${*: -1}"
 case "$CMD" in
+  *"bash -s"*)
+    cat > "$S/sicherung.sh"
+    [ -f "$S/sicherung-rot" ] && exit 1
+    echo "/var/backups/postgres/x_vor-deploy.dump" ;;
   *"mkdir '/run/rankmeister-deploy.lock'"*)
     [ -f "$S/ssh-weg" ] && exit 255
     mkdir "$S/sperre" 2>/dev/null ;;
   *"> '/run/rankmeister-deploy.lock/info'"*) exit 0 ;;
   *"cat '/run/rankmeister-deploy.lock/info'"*) echo "anderer Deploy" ;;
-  *pg_dump*) [ -f "$S/sicherung-rot" ] && exit 1; echo "/var/backups/postgres/x_vor-deploy.dump" ;;
   *"stat -c"*) echo 3 ;;
   *"rm -rf '/run/rankmeister-deploy.lock'"*) rm -rf "$S/sperre" ;;
   *"docker ps --filter name=open-seo-"*) naechste container ;;
@@ -71,7 +83,7 @@ esac`,
 case " $* " in *" -K - "*) cat > "$S/curl-stdin.$$" ;; esac
 case "$URL" in
   */envs) cat "$S/envs.json" ;;
-  */applications/${UUID}) echo '{"name":"ol-seo"}' ;;
+  */applications/${UUID}) [ -f "$S/app.json" ] || exit 22; cat "$S/app.json" ;;
   *"/deploy?uuid=${UUID}&force=false") echo '{"deployments":[{"deployment_uuid":"dep42"}]}' ;;
   */deployments/dep42) echo "{\\"status\\":\\"$(naechste coolify)\\"}" ;;
   https://seo.example/api/health) naechste health ;;
@@ -96,10 +108,12 @@ function stelle(muster: string): number {
 
 function deploy(...args: string[]) {
   const bin = path.join(dir, "bin");
-  const r = spawnSync("bash", [SKRIPT, ...args], {
+  const r = spawnSync(BASH, [SKRIPT, ...args], {
     encoding: "utf8",
     env: {
       ...process.env,
+      LANG: LOKALE,
+      LC_ALL: LOKALE,
       PATH: `${bin}:${process.env.PATH ?? ""}`,
       STUB_DIR: dir,
       DEPLOY_TOKEN_DATEI: path.join(dir, "token"),
@@ -130,7 +144,11 @@ beforeEach(() => {
     ]),
   );
   drehbuch("git-head", [SOLL]);
-  drehbuch("git-origin", [SOLL]);
+  drehbuch("kopf", [SOLL]);
+  writeFileSync(
+    path.join(dir, "app.json"),
+    JSON.stringify({ git_branch: "node-port", git_commit_sha: "HEAD" }),
+  );
   drehbuch("image", [
     "in_progress - https://lauf/1",
     "completed success https://lauf/1",
@@ -153,7 +171,7 @@ describe("scripts/deploy.sh · Gutlauf", { timeout: ZEIT }, () => {
       "gh\t",
       "mkdir '/run/rankmeister-deploy.lock'",
       "ampel\t--warten 900 hetzner",
-      "pg_dump",
+      "bash -s",
       `deploy?uuid=${UUID}&force=false`,
       "deployments/dep42",
       "docker ps --filter name=open-seo-",
@@ -163,11 +181,20 @@ describe("scripts/deploy.sh · Gutlauf", { timeout: ZEIT }, () => {
     reihe.forEach((i) => expect(i).toBeGreaterThan(-1));
     expect(reihe.toSorted((a, b) => a - b)).toEqual(reihe);
     expect(existsSync(path.join(dir, "sperre"))).toBe(false);
+
+    // Sicherung wie backup-olseo.sh: im Container schreiben, per docker cp holen,
+    // bei Fehler Teilstücke entfernen.
+    const sicherung = readFileSync(path.join(dir, "sicherung.sh"), "utf8");
+    expect(sicherung).toContain(
+      "pg_dump -U openseo -d openseo -Fc -f /tmp/vor-deploy.dump",
+    );
+    expect(sicherung).toContain('docker cp "$C:/tmp/vor-deploy.dump" "$D"');
+    expect(sicherung).toContain("trap aufraeumen EXIT");
   });
 
   it("fragt nur Image-Läufe auf node-port ab (Arbeitszweige legen kein Image ab)", () => {
     deploy();
-    const gh = aufrufe().find((z) => z.startsWith("gh\t")) ?? "";
+    const gh = aufrufe().find((z) => z.includes("actions/workflows")) ?? "";
     expect(gh).toContain(`head_sha=${SOLL}`);
     expect(gh).toContain("branch=node-port");
     expect(gh).toContain("event=push");
@@ -199,13 +226,65 @@ describe("scripts/deploy.sh · Gutlauf", { timeout: ZEIT }, () => {
 describe("scripts/deploy.sh · Abbrüche", { timeout: ZEIT }, () => {
   const nichtAngestossen = () => expect(stelle("deploy?uuid=")).toBe(-1);
 
-  it("lokaler Stand ungleich origin/node-port", () => {
+  it("lokaler Stand ungleich node-port auf GitHub", () => {
     drehbuch("git-head", [ANDERS]);
     const r = deploy();
     expect(r.code).toBe(1);
-    expect(r.ausgabe).toContain("≠ origin/node-port");
+    expect(r.ausgabe).toContain("≠ node-port auf GitHub");
     nichtAngestossen();
   });
+
+  it("Kopf von node-port nicht lesbar: Abbruch vor allem anderen", () => {
+    drehbuch("kopf", [""]);
+    const r = deploy();
+    expect(r.code).toBe(1);
+    expect(r.ausgabe).toContain("Kopf von node-port auf GitHub nicht lesbar");
+    expect(stelle("coolify.example")).toBe(-1);
+    nichtAngestossen();
+  });
+
+  it("Kopf vor dem Anstoßen nicht lesbar: kein Deploy, Sperre frei", () => {
+    drehbuch("kopf", [SOLL, ""]);
+    const r = deploy();
+    expect(r.code).toBe(1);
+    expect(r.ausgabe).toContain("Ohne diese Prüfung kein Deploy");
+    expect(existsSync(path.join(dir, "sperre"))).toBe(false);
+    nichtAngestossen();
+  });
+
+  it("Coolify-App zieht nicht node-port bei HEAD", () => {
+    writeFileSync(
+      path.join(dir, "app.json"),
+      JSON.stringify({ git_branch: "main", git_commit_sha: "HEAD" }),
+    );
+    const r = deploy();
+    expect(r.code).toBe(1);
+    expect(r.ausgabe).toContain("erwartet „node-port HEAD“");
+    nichtAngestossen();
+  });
+
+  it("Coolify-App nicht lesbar: Abbruch statt Weiterlaufen", () => {
+    rmSync(path.join(dir, "app.json"));
+    const r = deploy();
+    expect(r.code).toBe(1);
+    expect(r.ausgabe).toContain("Einstellungen der Coolify-App nicht lesbar");
+    nichtAngestossen();
+  });
+
+  it.each([
+    ["TERM", 143],
+    ["INT", 130],
+  ])(
+    "Signal %s in der Wartestrecke: Sperre frei und Ende, kein Deploy",
+    (signal, code) => {
+      writeFileSync(path.join(dir, "signal"), signal);
+      const r = deploy();
+      expect(r.code).toBe(code);
+      expect(existsSync(path.join(dir, "sperre"))).toBe(false);
+      expect(stelle("bash -s")).toBe(-1);
+      nichtAngestossen();
+    },
+  );
 
   it("eigene Coolify-Variable SOURCE_COMMIT", () => {
     writeFileSync(
@@ -215,7 +294,7 @@ describe("scripts/deploy.sh · Abbrüche", { timeout: ZEIT }, () => {
     const r = deploy();
     expect(r.code).toBe(1);
     expect(r.ausgabe).toContain("SOURCE_COMMIT (Preview)");
-    expect(stelle("gh\t")).toBe(-1);
+    expect(stelle("actions/workflows")).toBe(-1);
     nichtAngestossen();
   });
 
@@ -264,7 +343,7 @@ describe("scripts/deploy.sh · Abbrüche", { timeout: ZEIT }, () => {
   });
 
   it("node-port hat sich während des Wartens bewegt: nichts wird angestoßen", () => {
-    drehbuch("git-origin", [SOLL, ANDERS]);
+    drehbuch("kopf", [SOLL, ANDERS]);
     const r = deploy();
     expect(r.code).toBe(1);
     expect(r.ausgabe).toContain("hat sich seit dem Start bewegt");
@@ -295,6 +374,33 @@ describe("scripts/deploy.sh · Abbrüche", { timeout: ZEIT }, () => {
     expect(existsSync(path.join(dir, "sperre"))).toBe(false);
   });
 
+  it("Label revision weicht ab", () => {
+    drehbuch("container", [
+      `/open-seo-${UUID}-1|ghcr.io/leifken/open-seo:sha-${SOLL}|${ANDERS}|healthy`,
+    ]);
+    const r = deploy();
+    expect(r.code).toBe(1);
+    expect(r.ausgabe).toContain(`Label revision ${ANDERS}`);
+  });
+
+  it("zwei laufende App-Container", () => {
+    writeFileSync(
+      path.join(dir, "container"),
+      `${HEALTHY}\n${HEALTHY.replace("-1|", "-2|")}\n`,
+    );
+    // Drehbuch liefert je Aufruf eine Zeile; hier soll ein Aufruf beide liefern.
+    writeFileSync(
+      path.join(dir, "bin", "ssh"),
+      readFileSync(path.join(dir, "bin", "ssh"), "utf8").replace(
+        "naechste container ;;",
+        'cat "$S/container" ;;',
+      ),
+    );
+    const r = deploy();
+    expect(r.code).toBe(1);
+    expect(r.ausgabe).toContain("2 laufende App-Container (erwartet 1)");
+  });
+
   it("Container bleibt unhealthy", () => {
     drehbuch("container", [
       STARTING,
@@ -315,9 +421,14 @@ describe("scripts/deploy.sh · Abbrüche", { timeout: ZEIT }, () => {
 
 describe("scripts/deploy.sh · Sperre lösen", { timeout: ZEIT }, () => {
   it("entfernt nur Pfade unter /run/", () => {
-    const r = spawnSync("bash", [SKRIPT, "--sperre-loesen"], {
+    const r = spawnSync(BASH, [SKRIPT, "--sperre-loesen"], {
       encoding: "utf8",
-      env: { ...process.env, DEPLOY_SPERRE: "/tmp/kein-run-pfad" },
+      env: {
+        ...process.env,
+        LANG: LOKALE,
+        LC_ALL: LOKALE,
+        DEPLOY_SPERRE: "/tmp/kein-run-pfad",
+      },
     });
     expect(r.status).toBe(1);
     expect(r.stderr).toContain("liegt nicht unter /run/");
@@ -328,5 +439,16 @@ describe("scripts/deploy.sh · Sperre lösen", { timeout: ZEIT }, () => {
     const r = deploy("--sperre-loesen");
     expect(r.code).toBe(0);
     expect(existsSync(path.join(dir, "sperre"))).toBe(false);
+  });
+});
+
+describe("scripts/deploy.sh · Schreibweise", () => {
+  it("kein $VAR direkt vor einem Nicht-ASCII-Zeichen (Bash 3.2 unter UTF-8)", () => {
+    const text = readFileSync(SKRIPT, "utf8");
+    const treffer = text
+      .split("\n")
+      .map((z, i) => `${i + 1}: ${z}`)
+      .filter((z) => /\$[A-Za-z_][A-Za-z0-9_]*[\u0080-\uFFFF]/.test(z));
+    expect(treffer).toEqual([]);
   });
 });

@@ -66,6 +66,16 @@ jobs:
       - name: Shellcheck der Skripte
         run: shellcheck --severity=warning --exclude=SC1111 scripts/*.sh docker-entrypoint.node.sh
 
+      # Die Bash 3.2 von macOS liest unter UTF-8 die Bytes von „ oder “ direkt nach
+      # $VAR als Teil des Namens und bricht mit set -u ab. Vor Nicht-ASCII daher
+      # immer ${VAR} (Prüfung SEO-7, 26.09.2026).
+      - name: Kein $VAR direkt vor Nicht-ASCII in Skripten
+        run: |
+          if LC_ALL=C grep -nP '\$[A-Za-z_][A-Za-z0-9_]*[\x80-\xFF]' scripts/*.sh docker-entrypoint.node.sh; then
+            echo "::error::Vor einem Nicht-ASCII-Zeichen \${VAR} statt \$VAR schreiben (Bash 3.2 auf macOS)."
+            exit 1
+          fi
+
       # Wie in ci.yml: bricht ab, wenn ein gesperrtes Paket wieder in den
       # Start-Graph des Workers gerät (vite-plugin-lean-worker-bundle.ts).
       - name: Worker-Build (Bundle-Wächter)
