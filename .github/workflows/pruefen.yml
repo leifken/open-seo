@@ -1,0 +1,84 @@
+# LEIFKEN · Prüfstrecke für den Live-Zweig node-port (Auftrag SEO-7, 26.09.2026).
+# image.yml ruft diesen Workflow auf und baut das Image nur, wenn er grün ist:
+# rote Prüfung heißt kein Image, kein Deploy (Vorbild: ol-fundstelle, pruefen.yml).
+#
+# Warum eine eigene Datei statt ci.yml: ci.yml kommt vom Upstream und bleibt
+# unverändert (Fork-Regel, ENTSCHEIDUNGEN.md 31.08.2026). Ein Aufruf über
+# workflow_run schied aus: GitHub startet workflow_run nur aus Dateien auf dem
+# Standardzweig, und der ist hier main (Upstream-Spiegel, ohne image.yml).
+#
+# Übernommen aus ci.yml, was im Fork grün läuft: Typen (App und badseo),
+# Plugin-Skills synchron, Tests, Worker-Build mit Bundle-Wächter, Website web/.
+# Nicht übernommen, weil im Fork seit dem Node-Port rot (offene Schuld, siehe
+# ol-seo/BETRIEB.md): prettier --check, knip, oxlint. Dazu kommen der Node-Build,
+# den das Image enthält, und shellcheck für die Betriebsskripte.
+name: Prüfen
+
+on:
+  pull_request:
+    branches: [node-port]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Pull Requests: ein neuer Stand bricht den alten Lauf ab. Aufruf aus image.yml:
+  # eigene Gruppe je Lauf, nie abbrechen, sonst fehlt zu einem Commit das Image.
+  group: pruefen-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  pruefen:
+    name: Typen, Tests, Builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Abhängigkeiten
+        run: pnpm install --frozen-lockfile
+
+      - name: Typen
+        run: |
+          pnpm exec tsc --noEmit
+          pnpm exec tsc --noEmit -p badseo/tsconfig.json
+
+      - name: Plugin-Skills synchron
+        run: |
+          pnpm sync-plugin-skills
+          test -z "$(git status --porcelain -- plugins/openseo/skills)"
+
+      # Enthält die Tests des Deploy-Skripts (src/node-runtime/deploy-skript.test.ts).
+      - name: Tests
+        run: pnpm run test:ci
+
+      # Ein Tippfehler in einem Betriebsskript fällt sonst erst beim Deploy auf.
+      - name: Shellcheck der Skripte
+        run: shellcheck --severity=warning scripts/*.sh docker-entrypoint.node.sh
+
+      # Wie in ci.yml: bricht ab, wenn ein gesperrtes Paket wieder in den
+      # Start-Graph des Workers gerät (vite-plugin-lean-worker-bundle.ts).
+      - name: Worker-Build (Bundle-Wächter)
+        run: pnpm vite build
+
+      # Genau der Build, den Dockerfile.node ins Image backt.
+      - name: Node-Build
+        run: pnpm exec vite build --config vite.config.node.ts
+
+      - name: Website installieren
+        run: pnpm --dir web install --frozen-lockfile
+
+      - name: Website Typen
+        run: pnpm --dir web run types:check
+
+      - name: Website bauen
+        run: pnpm --dir web run build

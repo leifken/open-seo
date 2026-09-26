@@ -3,11 +3,15 @@
 # fertige Image (compose.node.yaml: image: …:sha-${SOURCE_COMMIT}), inklusive Vite-Build.
 # Grund: Builds auf dem Server haben Prozesse wegen Speichermangels beendet
 # (Zentrale, ENTSCHEIDUNGEN.md, 21.09.2026). Rückfall: siehe docs/deploy-ohne-server-build.md.
+# SEO-7 (26.09.2026): Das Image entsteht nur, wenn die Prüfstrecke grün ist (Job
+# „pruefen“, .github/workflows/pruefen.yml). Rote Prüfung heißt kein Image, kein
+# Deploy. Arbeitszweige rankmeister/** laufen dieselbe Strecke und bauen das Image
+# zur Probe, legen es aber nicht in GHCR ab. Ausrollen: scripts/deploy.sh.
 name: Image bauen
 
 on:
   push:
-    branches: [node-port, builds-ghcr]
+    branches: [node-port, builds-ghcr, "rankmeister/**"]
   workflow_dispatch:
 
 permissions:
@@ -20,9 +24,16 @@ concurrency:
 
 env:
   IMAGE: ghcr.io/leifken/open-seo
+  # Nur node-port und builds-ghcr legen das Image in GHCR ab (Coolify zieht es).
+  ABLEGEN: ${{ github.ref == 'refs/heads/node-port' || github.ref == 'refs/heads/builds-ghcr' }}
 
 jobs:
+  pruefen:
+    if: github.repository == 'leifken/open-seo'
+    uses: ./.github/workflows/pruefen.yml
+
   image:
+    needs: pruefen
     if: github.repository == 'leifken/open-seo'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -32,6 +43,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
+        if: env.ABLEGEN == 'true'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -51,7 +63,7 @@ jobs:
           context: .
           file: Dockerfile.node
           platforms: linux/amd64
-          push: true
+          push: ${{ env.ABLEGEN == 'true' }}
           provenance: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
