@@ -62,8 +62,9 @@ jobs:
         run: pnpm run test:ci
 
       # Ein Tippfehler in einem Betriebsskript fällt sonst erst beim Deploy auf.
+      # SC1111: deutsche Anführungszeichen in Meldungen sind gewollt.
       - name: Shellcheck der Skripte
-        run: shellcheck --severity=warning scripts/*.sh docker-entrypoint.node.sh
+        run: shellcheck --severity=warning --exclude=SC1111 scripts/*.sh docker-entrypoint.node.sh
 
       # Wie in ci.yml: bricht ab, wenn ein gesperrtes Paket wieder in den
       # Start-Graph des Workers gerät (vite-plugin-lean-worker-bundle.ts).
