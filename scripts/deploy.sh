@@ -249,7 +249,7 @@ d=json.load(sys.stdin); d=d[0] if isinstance(d,list) else d
 print(d.get('status') or '')" 2>/dev/null || true)"
   case "$STATUS" in
     finished) FERTIG=1; echo "  ✓ Coolify: finished"; break ;;
-    failed|cancelled*|error) echo "✗ Coolify-Deploy: $STATUS. Rückweg: ol-seo/BETRIEB.md, Abschnitt 1." >&2; exit 1 ;;
+    failed|cancelled*|error) echo "✗ Coolify-Deploy: $STATUS. Rückweg: ol-seo/BETRIEB.md, Abschnitt 1a." >&2; exit 1 ;;
     *) sleep 10 ;;
   esac
 done
@@ -285,7 +285,7 @@ for _ in $(seq 1 "$CONTAINER_VERSUCHE"); do
 done
 if [[ -z "$GESUND" ]]; then
   echo "✗ Nach 5 Min.: $BEFUND." >&2
-  echo "  Der Container entspricht NICHT dem Stand $(kurz "$SOLL") oder ist nicht gesund. Rückweg: ol-seo/BETRIEB.md, Abschnitt 1." >&2
+  echo "  Der Container entspricht NICHT dem Stand $(kurz "$SOLL") oder ist nicht gesund. Rückweg: ol-seo/BETRIEB.md, Abschnitt 1a." >&2
   exit 1
 fi
 
