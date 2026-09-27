@@ -14,6 +14,9 @@ services:
     # push, deploy. See docs/deploy-ohne-server-build.md.
     image: ghcr.io/leifken/open-seo:sha-${SOURCE_COMMIT}
     restart: unless-stopped
+    # SRV-8 (27.09.2026): Speicherlimit aus 480 Stichproben der Nacht 26./27.09. (Spitze 275 MiB),
+    # Untergrenze 768 MiB wegen Crawls und der Vorgeschichte mit dem Verbindungsleck (_standards/server/BETRIEB.md, Abschnitt 8).
+    mem_limit: 768m
     depends_on:
       postgres:
         condition: service_healthy
