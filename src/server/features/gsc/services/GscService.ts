@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { account } from "@/db/schema";
+import { account, member } from "@/db/schema";
 import { GSC_OAUTH_PROVIDER_ID } from "@/shared/gsc";
 import { AppError } from "@/server/lib/errors";
 import {
@@ -45,6 +45,21 @@ type GscSiteListResult = {
   }>;
 };
 
+export type GscOrganizationSiteListResult = {
+  accounts: Array<{
+    userId: string;
+    accountId: string;
+    email: string | null;
+    requiresReconnect: boolean;
+    sites: GscSite[];
+  }>;
+};
+
+type GscGrant = {
+  userId: string;
+  accountId: string;
+};
+
 /** Thrown when a project has no connected GSC property. */
 async function getConnection(projectId: string): Promise<GscConnection | null> {
   return GscConnectionRepository.getByProjectId(projectId);
@@ -78,6 +93,21 @@ async function listGrantsForUser(userId: string) {
     );
 }
 
+async function listGrantsForOrganization(
+  organizationId: string,
+): Promise<GscGrant[]> {
+  return db
+    .select({ userId: account.userId, accountId: account.accountId })
+    .from(account)
+    .innerJoin(member, eq(member.userId, account.userId))
+    .where(
+      and(
+        eq(member.organizationId, organizationId),
+        eq(account.providerId, GSC_OAUTH_PROVIDER_ID),
+      ),
+    );
+}
+
 /** Expected ways a stored grant fails to reach Search Console: no token could be
  *  minted (refresh token revoked or expired), or Google rejected the call
  *  (401/403). These surface a reconnect prompt without fault logging. */
@@ -89,14 +119,13 @@ export function isExpectedGrantFailure(error: unknown): boolean {
   );
 }
 
-async function listSitesForUserWithGrantStatus(
-  userId: string,
-): Promise<GscSiteListResult> {
-  const grants = await listGrantsForUser(userId);
+async function listSitesForGrants(
+  grants: GscGrant[],
+): Promise<GscOrganizationSiteListResult> {
   const accounts = await Promise.all(
     grants.map(async (grant) => {
       const client = createGscClient({
-        userId,
+        userId: grant.userId,
         gscAccountId: grant.accountId,
       });
 
@@ -109,6 +138,7 @@ async function listSitesForUserWithGrantStatus(
           email = null;
         }
         return {
+          userId: grant.userId,
           accountId: grant.accountId,
           email,
           requiresReconnect: false,
@@ -123,6 +153,7 @@ async function listSitesForUserWithGrantStatus(
           );
         }
         return {
+          userId: grant.userId,
           accountId: grant.accountId,
           email: null,
           requiresReconnect: true,
@@ -132,6 +163,34 @@ async function listSitesForUserWithGrantStatus(
     }),
   );
   return { accounts };
+}
+
+async function listSitesForUserWithGrantStatus(
+  userId: string,
+): Promise<GscSiteListResult> {
+  const result = await listSitesForGrants(
+    (await listGrantsForUser(userId)).map((grant) => ({
+      userId,
+      accountId: grant.accountId,
+    })),
+  );
+  return {
+    accounts: result.accounts.map((grant) => ({
+      accountId: grant.accountId,
+      email: grant.email,
+      requiresReconnect: grant.requiresReconnect,
+      sites: grant.sites,
+    })),
+  };
+}
+
+/** Lists every Search Console grant owned by a member of the organization.
+ *  The owning user id stays internal so a selected property can be persisted
+ *  against the same grant that proved it was visible. */
+async function listSitesForOrganizationWithGrantStatus(
+  organizationId: string,
+): Promise<GscOrganizationSiteListResult> {
+  return listSitesForGrants(await listGrantsForOrganization(organizationId));
 }
 
 /** Map a verified property to a project. Rejects unverified properties and
@@ -306,6 +365,7 @@ export const GscService = {
   getConnection,
   userHasGrant,
   listSitesForUserWithGrantStatus,
+  listSitesForOrganizationWithGrantStatus,
   setSite,
   disconnect,
   getPerformance,

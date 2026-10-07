@@ -78,8 +78,11 @@ import {
 import { researchKeywordsTool } from "@/server/mcp/tools/research-keywords";
 import { saveKeywordsTool } from "@/server/mcp/tools/save-keywords";
 import {
+  connectSearchConsolePropertyTool,
+  getSearchConsoleConnectionTool,
   getSearchConsolePerformanceTool,
   inspectUrlsTool,
+  listSearchConsolePropertiesTool,
 } from "@/server/mcp/tools/search-console-tools";
 import {
   getAuditIssuesTool,
@@ -215,6 +218,9 @@ export function createOpenSeoMcpServer(authProps: McpProps) {
   register(getHistoricalRankOverviewTool);
   register(getKeywordsForSiteTool);
   register(getAutocompleteSuggestionsTool);
+  register(listSearchConsolePropertiesTool);
+  register(connectSearchConsolePropertyTool);
+  register(getSearchConsoleConnectionTool);
   register(getSearchConsolePerformanceTool);
   register(inspectUrlsTool);
   register(getGoogleAnalyticsOrganicLandingPagesTool);

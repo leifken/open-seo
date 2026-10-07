@@ -9,7 +9,10 @@ import { projectIdSchema } from "@/server/mcp/schemas";
 import { buildDashboardUrl } from "@/server/mcp/urls";
 import { hasSelfHostedGoogleOAuthConfig } from "@/server/features/google/oauth-config";
 import { isHostedServerAuthMode } from "@/server/lib/runtime-env";
-import { GscService } from "@/server/features/gsc/services/GscService";
+import {
+  GscService,
+  type GscOrganizationSiteListResult,
+} from "@/server/features/gsc/services/GscService";
 import {
   GSC_DATE_RANGES,
   GSC_DEFAULT_ROW_LIMIT,
@@ -24,6 +27,7 @@ import {
   GscNotConnectedError,
   GscTokenError,
 } from "@/server/lib/gscErrors";
+import { AppError } from "@/server/lib/errors";
 import { GSC_SELF_HOSTED_SETUP_DOCS_URL } from "@/shared/gsc";
 
 const TEXT_SUMMARY_ROWS = 15;
@@ -114,6 +118,459 @@ function describeGscError(error: unknown): string {
   }
   return error instanceof Error ? error.message : String(error);
 }
+
+const SITE_UNVERIFIED_PERMISSION = "siteUnverifiedUser";
+
+type AvailableProperty = {
+  siteUrl: string;
+  permissionLevel: string;
+  verified: boolean;
+  userId: string;
+  accountId: string;
+};
+
+function availableProperties(
+  result: GscOrganizationSiteListResult,
+): AvailableProperty[] {
+  const unique = new Map<string, AvailableProperty>();
+  for (const account of result.accounts) {
+    if (account.requiresReconnect) continue;
+    for (const site of account.sites) {
+      const property = {
+        ...site,
+        verified: site.permissionLevel !== SITE_UNVERIFIED_PERMISSION,
+        userId: account.userId,
+        accountId: account.accountId,
+      };
+      const existing = unique.get(site.siteUrl);
+      if (!existing || (!existing.verified && property.verified)) {
+        unique.set(site.siteUrl, property);
+      }
+    }
+  }
+  return [...unique.values()];
+}
+
+function hasGoogleGrant(result: GscOrganizationSiteListResult): boolean {
+  return result.accounts.some((account) => !account.requiresReconnect);
+}
+
+function parseSiteDomain(siteUrl: string): {
+  domain: string;
+  isDomainProperty: boolean;
+  url?: URL;
+} | null {
+  if (siteUrl.startsWith("sc-domain:")) {
+    const value = siteUrl.slice("sc-domain:".length).trim();
+    if (!value) return null;
+    try {
+      const parsed = new URL(`https://${value}`);
+      if (
+        parsed.username ||
+        parsed.password ||
+        parsed.port ||
+        parsed.pathname !== "/" ||
+        parsed.search ||
+        parsed.hash
+      ) {
+        return null;
+      }
+      return {
+        domain: parsed.hostname.toLowerCase().replace(/\.$/, ""),
+        isDomainProperty: true,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  try {
+    const parsed = new URL(siteUrl);
+    if (
+      (parsed.protocol !== "https:" && parsed.protocol !== "http:") ||
+      parsed.username ||
+      parsed.password ||
+      !parsed.hostname
+    ) {
+      return null;
+    }
+    return {
+      domain: parsed.hostname.toLowerCase().replace(/\.$/, ""),
+      isDomainProperty: false,
+      url: parsed,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function comparableDomain(domain: string): string {
+  return domain
+    .toLowerCase()
+    .replace(/\.$/, "")
+    .replace(/^www\./, "");
+}
+
+function propertyMatchesProjectDomain(
+  siteUrl: string,
+  projectDomain: string,
+): boolean {
+  const property = parseSiteDomain(siteUrl);
+  return (
+    property !== null &&
+    comparableDomain(property.domain) === comparableDomain(projectDomain)
+  );
+}
+
+function automaticMatchScore(
+  siteUrl: string,
+  projectDomain: string,
+): number | null {
+  const property = parseSiteDomain(siteUrl);
+  if (
+    !property ||
+    comparableDomain(property.domain) !== comparableDomain(projectDomain)
+  ) {
+    return null;
+  }
+  if (property.isDomainProperty) return 0;
+
+  const url = property.url;
+  if (!url || url.pathname !== "/" || url.search || url.hash || url.port) {
+    return null;
+  }
+  const schemeScore = url.protocol === "https:" ? 1 : 3;
+  return schemeScore + (property.domain.startsWith("www.") ? 1 : 0);
+}
+
+function seenDomains(properties: AvailableProperty[]): string[] {
+  return [
+    ...new Set(
+      properties.flatMap((property) => {
+        const parsed = parseSiteDomain(property.siteUrl);
+        return parsed ? [parsed.domain] : [];
+      }),
+    ),
+  ];
+}
+
+function isUnknownProject(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    (error.code === "NOT_FOUND" || error.code === "FORBIDDEN")
+  );
+}
+
+function unknownProjectResponse(projectId: string) {
+  return mcpResponse({
+    text: `Project ${projectId} is not available in this organization.`,
+    meta: { projectId },
+    structuredContent: {
+      ok: false,
+      status: "projekt_unbekannt" as const,
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// list_search_console_properties
+// ---------------------------------------------------------------------------
+
+export const listSearchConsolePropertiesTool = {
+  name: "list_search_console_properties",
+  config: {
+    title: "List Google Search Console properties",
+    description:
+      "List every Google Search Console property visible through this organization's connected Google grants, including its permission level and whether access is verified. Read-only; uses no credits.",
+    inputSchema: {},
+    outputSchema: {
+      ok: z.boolean(),
+      status: z.enum(["verfuegbar", "keine_google_freigabe"]),
+      properties: z.array(
+        z.object({
+          siteUrl: z.string(),
+          permissionLevel: z.string(),
+          verified: z.boolean(),
+        }),
+      ),
+      ...optionalMetaOutputSchema,
+    },
+    annotations: {
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+    },
+  },
+  handler: async (
+    _args: Record<string, never>,
+    context: { auth: ProjectAuthContext["auth"] },
+  ) => {
+    const siteList = await GscService.listSitesForOrganizationWithGrantStatus(
+      context.auth.organizationId,
+    );
+    if (!hasGoogleGrant(siteList)) {
+      return mcpResponse({
+        text: "No usable Google Search Console grant is connected to this organization.",
+        structuredContent: {
+          ok: false,
+          status: "keine_google_freigabe" as const,
+          properties: [],
+        },
+      });
+    }
+
+    const properties = availableProperties(siteList).map(
+      ({ siteUrl, permissionLevel, verified }) => ({
+        siteUrl,
+        permissionLevel,
+        verified,
+      }),
+    );
+    const text =
+      properties.length === 0
+        ? "The connected Google grant currently sees no Search Console properties."
+        : properties
+            .map(
+              (property) =>
+                `${property.siteUrl} · ${property.permissionLevel} · ${property.verified ? "verified" : "unverified"}`,
+            )
+            .join("\n");
+    return mcpResponse({
+      text,
+      structuredContent: {
+        ok: true,
+        status: "verfuegbar" as const,
+        properties,
+      },
+    });
+  },
+};
+
+// ---------------------------------------------------------------------------
+// connect_search_console_property
+// ---------------------------------------------------------------------------
+
+const connectPropertyInputSchema = {
+  projectId: projectIdSchema,
+  siteUrl: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Exact siteUrl returned by list_search_console_properties. Omit it to choose the best verified property matching the project's domain.",
+    ),
+} as const;
+
+type ConnectPropertyArgs = z.infer<
+  z.ZodObject<typeof connectPropertyInputSchema>
+>;
+
+const connectPropertyHandler = withMcpProjectAuth(
+  async (args: ConnectPropertyArgs, context) => {
+    const meta = buildProjectMeta(context, args.projectId);
+    const siteList = await GscService.listSitesForOrganizationWithGrantStatus(
+      context.auth.organizationId,
+    );
+    if (!hasGoogleGrant(siteList)) {
+      return mcpResponse({
+        text: "No usable Google Search Console grant is connected to this organization.",
+        meta,
+        structuredContent: {
+          ok: false,
+          status: "keine_google_freigabe" as const,
+        },
+      });
+    }
+
+    const properties = availableProperties(siteList);
+    const projectDomain = context.project.domain;
+    let match: AvailableProperty | undefined;
+    if (projectDomain) {
+      if (args.siteUrl) {
+        match = properties.find(
+          (property) =>
+            property.verified &&
+            property.siteUrl === args.siteUrl &&
+            propertyMatchesProjectDomain(property.siteUrl, projectDomain),
+        );
+      } else {
+        match = properties
+          .filter((property) => property.verified)
+          .map((property) => ({
+            property,
+            score: automaticMatchScore(property.siteUrl, projectDomain),
+          }))
+          .filter(
+            (
+              candidate,
+            ): candidate is { property: AvailableProperty; score: number } =>
+              candidate.score !== null,
+          )
+          .toSorted((left, right) => left.score - right.score)[0]?.property;
+      }
+    }
+
+    if (!match) {
+      const domains = seenDomains(properties);
+      return mcpResponse({
+        text: `No verified Search Console property matches this project's domain.${domains.length > 0 ? ` Seen domains: ${domains.join(", ")}.` : ""}`,
+        meta,
+        structuredContent: {
+          ok: false,
+          status: "keine_passende_property" as const,
+          seenDomains: domains,
+        },
+      });
+    }
+
+    let connection: Awaited<ReturnType<typeof GscService.setSite>>;
+    try {
+      connection = await GscService.setSite({
+        projectId: args.projectId,
+        organizationId: context.auth.organizationId,
+        siteUrl: match.siteUrl,
+        accountId: match.accountId,
+        userId: match.userId,
+      });
+    } catch (error) {
+      // The grant or property can disappear between sites.list and the write.
+      // Treat that as a non-match, not as an unknown project.
+      if (
+        error instanceof AppError &&
+        (error.code === "NOT_FOUND" || error.code === "FORBIDDEN")
+      ) {
+        return mcpResponse({
+          text: "The selected Search Console property is no longer available with verified access.",
+          meta,
+          structuredContent: {
+            ok: false,
+            status: "keine_passende_property" as const,
+            seenDomains: seenDomains(properties),
+          },
+        });
+      }
+      throw error;
+    }
+    return mcpResponse({
+      text: `Connected ${connection.siteUrl} with ${match.permissionLevel} permission.`,
+      meta,
+      structuredContent: {
+        ok: true,
+        status: "verbunden" as const,
+        siteUrl: connection.siteUrl,
+        permissionLevel: match.permissionLevel,
+      },
+    });
+  },
+);
+
+export const connectSearchConsolePropertyTool = {
+  name: "connect_search_console_property",
+  config: {
+    title: "Connect a Search Console property",
+    description:
+      "Connect a verified Search Console property to a project. With siteUrl, only that exact visible property is considered. Without it, selection prefers sc-domain:<project-domain>, then the project's root URL (HTTPS before HTTP, with or without www). A property whose domain differs from the project is never connected. Uses no credits.",
+    inputSchema: connectPropertyInputSchema,
+    outputSchema: {
+      ok: z.boolean(),
+      status: z.enum([
+        "verbunden",
+        "keine_passende_property",
+        "keine_google_freigabe",
+        "projekt_unbekannt",
+      ]),
+      siteUrl: z.string().optional(),
+      permissionLevel: z.string().optional(),
+      seenDomains: z.array(z.string()).optional(),
+      ...optionalMetaOutputSchema,
+    },
+    annotations: {
+      readOnlyHint: false,
+      openWorldHint: false,
+      destructiveHint: false,
+    },
+  },
+  handler: async (
+    args: ConnectPropertyArgs,
+    context: Parameters<typeof connectPropertyHandler>[1],
+  ) => {
+    try {
+      return await connectPropertyHandler(args, context);
+    } catch (error) {
+      if (isUnknownProject(error)) {
+        return unknownProjectResponse(args.projectId);
+      }
+      throw error;
+    }
+  },
+};
+
+// ---------------------------------------------------------------------------
+// get_search_console_connection
+// ---------------------------------------------------------------------------
+
+const connectionInputSchema = { projectId: projectIdSchema } as const;
+type ConnectionArgs = z.infer<z.ZodObject<typeof connectionInputSchema>>;
+
+const getConnectionHandler = withMcpProjectAuth(
+  async (args: ConnectionArgs, context) => {
+    const connection = await GscService.getConnection(args.projectId);
+    const meta = buildProjectMeta(context, args.projectId);
+    return mcpResponse({
+      text: connection
+        ? `Connected to ${connection.siteUrl} since ${connection.createdAt}${connection.connectedAccountEmail ? ` via ${connection.connectedAccountEmail}` : ""}.`
+        : "No Search Console property is connected to this project.",
+      meta,
+      structuredContent: {
+        ok: true,
+        status: connection
+          ? ("verbunden" as const)
+          : ("nicht_verbunden" as const),
+        connected: Boolean(connection),
+        siteUrl: connection?.siteUrl ?? null,
+        connectedAt: connection?.createdAt ?? null,
+        connectedAccountEmail: connection?.connectedAccountEmail ?? null,
+      },
+    });
+  },
+);
+
+export const getSearchConsoleConnectionTool = {
+  name: "get_search_console_connection",
+  config: {
+    title: "Get a project's Search Console connection",
+    description:
+      "Report whether a project is connected to Search Console, including the exact property, connection time, and connected Google account address. Read-only; uses no credits.",
+    inputSchema: connectionInputSchema,
+    outputSchema: {
+      ok: z.boolean(),
+      status: z.enum(["verbunden", "nicht_verbunden", "projekt_unbekannt"]),
+      connected: z.boolean().optional(),
+      siteUrl: z.string().nullable().optional(),
+      connectedAt: z.string().nullable().optional(),
+      connectedAccountEmail: z.string().nullable().optional(),
+      ...optionalMetaOutputSchema,
+    },
+    annotations: {
+      readOnlyHint: true,
+      openWorldHint: false,
+      destructiveHint: false,
+    },
+  },
+  handler: async (
+    args: ConnectionArgs,
+    context: Parameters<typeof getConnectionHandler>[1],
+  ) => {
+    try {
+      return await getConnectionHandler(args, context);
+    } catch (error) {
+      if (isUnknownProject(error)) {
+        return unknownProjectResponse(args.projectId);
+      }
+      throw error;
+    }
+  },
+};
 
 // ---------------------------------------------------------------------------
 // get_search_console_performance

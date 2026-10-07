@@ -96,6 +96,12 @@ const SEO5_NEW_TOOL_NAMES = [
   "get_keyword_volume_by_location",
 ] as const;
 
+const FS153_NEW_TOOL_NAMES = [
+  "list_search_console_properties",
+  "connect_search_console_property",
+  "get_search_console_connection",
+] as const;
+
 describe("createOpenSeoMcpServer", () => {
   it("registers every tool exactly once (registerTool throws on a duplicate name)", () => {
     expect(() => createOpenSeoMcpServer(props)).not.toThrow();
@@ -123,13 +129,18 @@ describe("createOpenSeoMcpServer", () => {
     for (const name of PRE_SEO4_TOOL_NAMES) {
       expect(registered).toContain(name);
     }
-    for (const name of [...SEO4_NEW_TOOL_NAMES, ...SEO5_NEW_TOOL_NAMES]) {
+    for (const name of [
+      ...SEO4_NEW_TOOL_NAMES,
+      ...SEO5_NEW_TOOL_NAMES,
+      ...FS153_NEW_TOOL_NAMES,
+    ]) {
       expect(registered).toContain(name);
     }
     expect(registered).toHaveLength(
       PRE_SEO4_TOOL_NAMES.length +
         SEO4_NEW_TOOL_NAMES.length +
-        SEO5_NEW_TOOL_NAMES.length,
+        SEO5_NEW_TOOL_NAMES.length +
+        FS153_NEW_TOOL_NAMES.length,
     );
   });
 });

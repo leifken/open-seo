@@ -33,7 +33,12 @@ async function upsert(input: {
         organizationId: input.organizationId,
         connectedByUserId: input.connectedByUserId,
         gscAccountId: input.gscAccountId,
-        connectedAccountEmail: sql`coalesce(${input.connectedAccountEmail}, ${gscConnections.connectedAccountEmail})`,
+        connectedAccountEmail: sql`case
+          when ${gscConnections.connectedByUserId} = ${input.connectedByUserId}
+            and ${gscConnections.gscAccountId} = ${input.gscAccountId}
+          then coalesce(${input.connectedAccountEmail}, ${gscConnections.connectedAccountEmail})
+          else ${input.connectedAccountEmail}
+        end`,
         updatedAt: sql`(current_timestamp)`,
       },
     })

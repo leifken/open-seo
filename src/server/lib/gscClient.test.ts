@@ -25,15 +25,29 @@ describe("gscClient", () => {
   });
 
   it("lists sites with a bearer token", async () => {
+    // Real `sites.list` response envelope and SiteEntry fields, per Google:
+    // https://developers.google.com/webmaster-tools/v1/sites/list#response
     mocks.fetch.mockResolvedValue(
       jsonResponse({
-        siteEntry: [{ siteUrl: "https://x/", permissionLevel: "siteOwner" }],
+        siteEntry: [
+          { siteUrl: "sc-domain:example.com", permissionLevel: "siteOwner" },
+          {
+            siteUrl: "https://www.example.com/",
+            permissionLevel: "siteUnverifiedUser",
+          },
+        ],
       }),
     );
     const { createGscClient } = await import("./gscClient");
     const sites = await createGscClient({ userId: "u1" }).listSites();
 
-    expect(sites).toHaveLength(1);
+    expect(sites).toEqual([
+      { siteUrl: "sc-domain:example.com", permissionLevel: "siteOwner" },
+      {
+        siteUrl: "https://www.example.com/",
+        permissionLevel: "siteUnverifiedUser",
+      },
+    ]);
     const [url, init] = mocks.fetch.mock.calls[0];
     expect(url).toBe("https://www.googleapis.com/webmasters/v3/sites");
     expect(init?.headers).toMatchObject({ Authorization: "Bearer tok_123" });
