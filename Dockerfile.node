@@ -13,6 +13,8 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@10.30.1 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# Upstream 0.1.13 patcht eine Abhängigkeit; pnpm braucht die Datei schon beim Install.
+COPY patches ./patches
 # better-sqlite3 (audit scratchpad) needs its native build step; the
 # workspace's onlyBuiltDependencies allowlists it.
 RUN pnpm install --frozen-lockfile
