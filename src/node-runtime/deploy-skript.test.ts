@@ -33,7 +33,7 @@ const BASH = process.platform === "darwin" ? "/bin/bash" : "bash";
 const LOKALE = process.platform === "darwin" ? "de_DE.UTF-8" : "C.UTF-8";
 const SOLL = "a".repeat(40);
 const ANDERS = "b".repeat(40);
-const UUID = "yp79q9een0ycr9vhkfo03zta";
+const UUID = "d1h94pq0jwidmef6mzzkjl6t";
 const TOKEN = "TESTTOKEN-nie-ausgeben-4711";
 const HEALTHY = `/open-seo-${UUID}-1|ghcr.io/leifken/open-seo:sha-${SOLL}|${SOLL}|healthy`;
 const STARTING = `/open-seo-${UUID}-1|ghcr.io/leifken/open-seo:sha-${SOLL}|${SOLL}|starting`;

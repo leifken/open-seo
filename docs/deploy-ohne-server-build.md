@@ -48,4 +48,4 @@ schadet dabei nicht (der Workflow läuft weiter mit). Alternativ `git revert <Co
   Coolify ändert, ändert ihn auch als GitHub-Variable, sonst baut der Server wieder.
 - Es gibt kein `scripts/deploy.sh`. Der Update-Knopf unter `/system` prüft jetzt vor dem
   Coolify-Aufruf, ob der Image-Lauf für den Branch-Kopf grün ist (öffentliche GitHub-API).
-  Per Hand: Deploy-Ampel, dann `deploy?uuid=yp79q9een0ycr9vhkfo03zta`.
+  Per Hand: Deploy-Ampel, dann `deploy?uuid=d1h94pq0jwidmef6mzzkjl6t`.

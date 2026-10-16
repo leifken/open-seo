@@ -31,7 +31,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SERVER="${DEPLOY_SERVER:-root@178.104.233.171}"
+SERVER="${DEPLOY_SERVER:-root@2.31.24.208}"
 SSH_KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/hetzner}"
 SPERRE="${DEPLOY_SPERRE:-/run/rankmeister-deploy.lock}"
 SPERRE_MAX_MIN="${DEPLOY_SPERRE_MAX_MIN:-120}"
@@ -39,7 +39,7 @@ TOKEN_DATEI="${DEPLOY_TOKEN_DATEI:-/Users/olli/Development/olcrm/.secrets/coolif
 AMPEL="${DEPLOY_AMPEL:-/Users/olli/Development/_standards/server/deploy-ampel.sh}"
 COOLIFY="${DEPLOY_COOLIFY_URL:-https://coolify.leifken.ai}"
 HEALTH_URL="${DEPLOY_HEALTH_URL:-https://seo.leifken.ai/api/health}"
-APP_UUID="yp79q9een0ycr9vhkfo03zta"
+APP_UUID="d1h94pq0jwidmef6mzzkjl6t"
 ZWEIG="node-port"
 GH_REPO="leifken/open-seo"
 IMAGE_REPO="ghcr.io/leifken/open-seo"
