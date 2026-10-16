@@ -13,7 +13,7 @@ import {
 } from "drizzle-orm";
 import { db } from "@/db";
 import { rankCheckRuns, rankSnapshots } from "@/db/schema";
-import { toSqliteTimestamp } from "@/server/features/rank-tracking/rankTrackingTimestamps";
+import { toRankTrackingTimestamp } from "@/server/features/rank-tracking/rankTrackingTimestamps";
 
 function completedRunIdsForConfig(configId: string) {
   return db
@@ -28,7 +28,7 @@ function completedRunIdsForConfig(configId: string) {
 }
 
 function cutoffTimestamp(sinceDays: number): string {
-  return toSqliteTimestamp(
+  return toRankTrackingTimestamp(
     new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000),
   );
 }
@@ -65,7 +65,8 @@ export async function getKeywordHistory(
  * by runId (not checkedAt — snapshots in a run don't share an exact insert
  * time); the run's startedAt is the x-axis timestamp. The buckets are disjoint
  * and cover every tracked keyword: a position past 20, or null (not found in
- * the tracked depth), falls into "not ranking" (derived from `total`).
+ * the tracked depth), falls into "not ranking" (derived from `total`), and a
+ * keyword whose check failed has no row, so it is `keywordsTotal - total`.
  */
 export async function getConfigTrend(
   configId: string,
@@ -76,6 +77,7 @@ export async function getConfigTrend(
     .select({
       runId: rankSnapshots.runId,
       checkedAt: rankCheckRuns.startedAt,
+      keywordsTotal: rankCheckRuns.keywordsTotal,
       total: count(),
       top3: sql<number>`sum(case when ${rankSnapshots.position} between 1 and 3 then 1 else 0 end)`,
       top4to10: sql<number>`sum(case when ${rankSnapshots.position} between 4 and 10 then 1 else 0 end)`,
@@ -89,10 +91,16 @@ export async function getConfigTrend(
         eq(rankCheckRuns.status, "completed"),
         eq(rankCheckRuns.isSubsetRun, false),
         eq(rankSnapshots.device, device),
-        gte(rankSnapshots.checkedAt, cutoffTimestamp(sinceDays)),
+        // Filter on the run, not the snapshot: a run that spans the cutoff
+        // must keep all its rows, or they would count as not checked.
+        gte(rankCheckRuns.startedAt, cutoffTimestamp(sinceDays)),
       ),
     )
-    .groupBy(rankSnapshots.runId, rankCheckRuns.startedAt)
+    .groupBy(
+      rankSnapshots.runId,
+      rankCheckRuns.startedAt,
+      rankCheckRuns.keywordsTotal,
+    )
     .orderBy(asc(rankCheckRuns.startedAt));
 }
 

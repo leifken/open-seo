@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { Button } from "@/client/components/ui/button";
 // LEIFKEN self-host addition (not upstream): system status + guided updates.
 // Talks to the Node-runtime endpoints in scripts/serve-node.mjs
 // (/api/leifken/update-status, /api/leifken/update-deploy).
@@ -36,9 +38,13 @@ function SystemPage() {
     setDeploying(true);
     try {
       const res = await fetch("/api/leifken/update-deploy", { method: "POST" });
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      const body = z
+        .object({ error: z.string().optional() })
+        .parse(await res.json().catch(() => ({})));
       if (!res.ok) {
-        toast.error(body.error ?? `Installation fehlgeschlagen (${res.status})`);
+        toast.error(
+          body.error ?? `Installation fehlgeschlagen (${res.status})`,
+        );
         return;
       }
       toast.success(
@@ -62,9 +68,9 @@ function SystemPage() {
         </p>
       </div>
 
-      <div className="card border border-base-300 bg-base-100">
-        <div className="card-body space-y-4">
-          <h2 className="card-title text-base">Update-Prüfung</h2>
+      <div className="rounded-xl border border-border bg-card">
+        <div className="space-y-4 p-6">
+          <h2 className="text-base font-semibold">Update-Prüfung</h2>
 
           {statusQuery.isLoading ? (
             <p className="text-sm text-base-content/60">Prüfe auf Updates...</p>
@@ -77,12 +83,18 @@ function SystemPage() {
               <div className="grid gap-3 sm:grid-cols-3">
                 <StatusTile
                   label="Installierter Stand"
-                  value={s.runningCommit ? s.runningCommit.slice(0, 7) : "unbekannt"}
+                  value={
+                    s.runningCommit ? s.runningCommit.slice(0, 7) : "unbekannt"
+                  }
                   tone="neutral"
                 />
                 <StatusTile
                   label="Bereit zur Installation"
-                  value={s.branchAheadBy > 0 ? `${s.branchAheadBy} Update(s)` : "Aktuell"}
+                  value={
+                    s.branchAheadBy > 0
+                      ? `${s.branchAheadBy} Update(s)`
+                      : "Aktuell"
+                  }
                   tone={s.branchAheadBy > 0 ? "warning" : "success"}
                 />
                 <StatusTile
@@ -108,14 +120,15 @@ function SystemPage() {
                       <li key={c.sha}>{c.message.split("\n")[0]}</li>
                     ))}
                   </ul>
-                  <button
+                  <Button
                     type="button"
-                    className="btn btn-primary"
                     disabled={deploying || !s.deployConfigured}
                     onClick={() => void startDeploy()}
                   >
-                    {deploying ? "Wird gestartet..." : "Update jetzt installieren"}
-                  </button>
+                    {deploying
+                      ? "Wird gestartet..."
+                      : "Update jetzt installieren"}
+                  </Button>
                   {!s.deployConfigured ? (
                     <p className="text-xs text-warning">
                       Installations-Schlüssel ist nicht hinterlegt
@@ -149,13 +162,15 @@ function SystemPage() {
             </>
           )}
 
-          <button
+          <Button
             type="button"
-            className="btn btn-ghost btn-sm w-fit"
+            variant="ghost"
+            size="sm"
+            className="w-fit"
             onClick={() => void statusQuery.refetch()}
           >
             Erneut prüfen
-          </button>
+          </Button>
         </div>
       </div>
     </div>

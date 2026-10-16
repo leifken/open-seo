@@ -1,19 +1,5 @@
 import { z } from "zod";
-import {
-  BusinessDataBusinessListingsSearchLiveRequestInfo,
-  BusinessDataGoogleExtendedReviewsTaskPostRequestInfo,
-  BusinessDataGoogleMyBusinessInfoLiveRequestInfo,
-  BusinessDataGoogleMyBusinessInfoTaskPostRequestInfo,
-  BusinessDataGoogleMyBusinessUpdatesTaskPostRequestInfo,
-  BusinessDataGoogleQuestionsAndAnswersLiveRequestInfo,
-  BusinessDataGoogleReviewsTaskPostRequestInfo,
-  type BusinessDataBusinessListingsSearchLiveItem,
-} from "dataforseo-client";
-import {
-  businessDataApi,
-  businessDataTaskApi,
-  MY_BUSINESS_INFO_TIMEOUT_MS,
-} from "@/server/lib/dataforseo/core";
+import { dataforseoGet, dataforseoPost } from "@/server/lib/dataforseo/core";
 import {
   assertOk,
   buildTaskBilling,
@@ -22,12 +8,20 @@ import {
   isRecord,
   isTaskInProgress,
   type DataforseoApiResponse,
+  type DataforseoItemsTask,
   type DataforseoResponseLike,
   type DataforseoTaskLike,
+  failedResponseError,
 } from "@/server/lib/dataforseo/envelope";
 import { AppError } from "@/server/lib/errors";
 
-type BusinessListingItem = BusinessDataBusinessListingsSearchLiveItem;
+// Consumers pick fields generically (pickRowFields), so listing rows stay an
+// untyped record.
+type BusinessListingItem = Record<string, unknown>;
+
+// task_post creates a billed task. A 5xx does not prove the provider skipped
+// the charge, so those posts must never be replayed.
+const NO_RETRY = { maxServerErrorRetries: 0 } as const;
 
 /**
  * Location + language for the Google business_data endpoints. They accept
@@ -56,8 +50,10 @@ export async function fetchBusinessListingsSearch(input: {
   limit: number;
   offset?: number;
 }): Promise<DataforseoApiResponse<BusinessListingItem[]>> {
-  const response = await businessDataApi().businessListingsSearchLive([
-    new BusinessDataBusinessListingsSearchLiveRequestInfo({
+  const response = await dataforseoPost<
+    DataforseoItemsTask<BusinessListingItem>
+  >("/v3/business_data/business_listings/search/live", [
+    {
       categories: input.categories,
       title: input.title,
       location_coordinate: input.locationCoordinate,
@@ -66,7 +62,7 @@ export async function fetchBusinessListingsSearch(input: {
       order_by: input.orderBy,
       limit: input.limit,
       offset: input.offset,
-    }),
+    },
   ]);
   // "No Search Results" (40501) is a valid empty result for obscure
   // businesses/keywords — DataForSEO still charges for it, so treat it as an
@@ -109,14 +105,17 @@ export async function fetchQuestionsAnswers(input: {
   languageCode: string;
   depth: number;
 }): Promise<DataforseoApiResponse<Record<string, unknown>[]>> {
-  const response = await businessDataApi().googleQuestionsAndAnswersLive([
-    new BusinessDataGoogleQuestionsAndAnswersLiveRequestInfo({
-      keyword: input.keyword,
-      location_coordinate: input.locationCoordinate,
-      language_code: input.languageCode,
-      depth: input.depth,
-    }),
-  ]);
+  const response = await dataforseoPost(
+    "/v3/business_data/google/questions_and_answers/live",
+    [
+      {
+        keyword: input.keyword,
+        location_coordinate: input.locationCoordinate,
+        language_code: input.languageCode,
+        depth: input.depth,
+      },
+    ],
+  );
   // "No Search Results" (40501) is a valid empty result for obscure
   // businesses/keywords — DataForSEO still charges for it, so treat it as an
   // empty success instead of surfacing a charged-task error to the user.
@@ -127,43 +126,27 @@ export async function fetchQuestionsAnswers(input: {
   };
 }
 
-/** True for the abort DataForSEO's own AbortSignal.timeout() raises — a
- *  DOMException named "TimeoutError" per the fetch spec (some runtimes still
- *  name it "AbortError"). Distinct from every other failure so the caller can
- *  tell "we don't know" apart from a confirmed empty result. */
-function isRequestTimeout(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    (error.name === "TimeoutError" || error.name === "AbortError")
-  );
-}
-
 export async function fetchMyBusinessInfo(
   input: { keyword: string } & BusinessLocationInput,
 ): Promise<DataforseoApiResponse<Record<string, unknown> | null>> {
-  // Bounded, endpoint-specific timeout — see MY_BUSINESS_INFO_TIMEOUT_MS.
   let response;
   try {
-    response = await businessDataApi(
-      MY_BUSINESS_INFO_TIMEOUT_MS,
-    ).googleMyBusinessInfoLive([
-      new BusinessDataGoogleMyBusinessInfoLiveRequestInfo({
-        keyword: input.keyword,
-        ...locationParams(input),
-        language_code: input.languageCode,
-      }),
-    ]);
+    response = await dataforseoPost<DataforseoItemsTask<unknown>>(
+      "/v3/business_data/google/my_business_info/live",
+      [
+        {
+          keyword: input.keyword,
+          ...locationParams(input),
+          language_code: input.languageCode,
+        },
+      ],
+      { signal: AbortSignal.timeout(25_000) },
+    );
   } catch (error) {
-    if (isRequestTimeout(error)) {
-      // DataForSEO's crawl kept running after we stopped waiting; we never
-      // received a response, so we have no cost/path to report and cannot
-      // tell whether the profile exists. Whether DataForSEO still billed the
-      // task server-side is unknown from our side — an aborted HTTP request
-      // does not cancel work already in flight upstream. Documented honestly
-      // in BETRIEB.md rather than guessed at here.
+    if (error instanceof Error && error.name === "DataForSEOTimeoutError") {
       throw new AppError(
         "UPSTREAM_UNAVAILABLE",
-        `DataForSEO did not confirm within ${MY_BUSINESS_INFO_TIMEOUT_MS / 1000}s whether this Google Business Profile exists. This is inconclusive, not a confirmed "not found" — try again, or narrow the search with a cid/placeId from get_local_serp_results.`,
+        "DataForSEO did not confirm within 25s whether this profile exists. This is inconclusive, not a confirmed not found; use get_business_profile's task queue.",
       );
     }
     throw error;
@@ -227,60 +210,59 @@ export async function postGoogleReviewsTask(
 ): Promise<DataforseoApiResponse<string>> {
   if (input.includeOtherSources) {
     return postedTaskId(
-      await businessDataTaskApi().googleExtendedReviewsTaskPost([
-        new BusinessDataGoogleExtendedReviewsTaskPostRequestInfo({
+      await dataforseoPost<DataforseoTaskLike & { id?: string }>(
+        "/v3/business_data/google/extended_reviews/task_post",
+        [
+          {
+            keyword: input.keyword,
+            cid: input.cid,
+            place_id: input.placeId,
+            ...locationParams(input),
+            language_code: input.languageCode,
+            depth: input.depth,
+            priority: TASK_PRIORITY_HIGH,
+          },
+        ],
+        NO_RETRY,
+      ),
+    );
+  }
+  return postedTaskId(
+    await dataforseoPost<DataforseoTaskLike & { id?: string }>(
+      "/v3/business_data/google/reviews/task_post",
+      [
+        {
           keyword: input.keyword,
           cid: input.cid,
           place_id: input.placeId,
           ...locationParams(input),
           language_code: input.languageCode,
           depth: input.depth,
+          sort_by: input.sortBy,
           priority: TASK_PRIORITY_HIGH,
-        }),
-      ]),
-    );
-  }
-  return postedTaskId(
-    await businessDataTaskApi().googleReviewsTaskPost([
-      new BusinessDataGoogleReviewsTaskPostRequestInfo({
-        keyword: input.keyword,
-        cid: input.cid,
-        place_id: input.placeId,
-        ...locationParams(input),
-        language_code: input.languageCode,
-        depth: input.depth,
-        sort_by: input.sortBy,
-        priority: TASK_PRIORITY_HIGH,
-      }),
-    ]),
+        },
+      ],
+      NO_RETRY,
+    ),
   );
 }
 
-/**
- * LEIFKEN (RankMeister SEO-4, production incident 21.09.2026): the live
- * my_business_info endpoint occasionally needs more than
- * MY_BUSINESS_INFO_TIMEOUT_MS/25s to resolve a real, existing profile — the
- * old fetchMyBusinessInfo() then threw UPSTREAM_UNAVAILABLE for a profile
- * that plainly exists (confirmed for "LEIFKEN AI" the same day). Task-queue
- * collection has no such wall-clock ceiling: task_post returns immediately,
- * and get_business_profile polls task_get for as long as it decides to (see
- * local-seo-tools.ts), so a slow-to-resolve lookup just takes another poll
- * instead of failing. High priority keeps the common case (an exact cid/
- * placeId, or an unambiguous business name) fast — DataForSEO usually settles
- * those within the first poll.
- */
 export async function postMyBusinessInfoTask(
   input: { keyword: string } & BusinessLocationInput,
 ): Promise<DataforseoApiResponse<string>> {
   return postedTaskId(
-    await businessDataTaskApi().googleMyBusinessInfoTaskPost([
-      new BusinessDataGoogleMyBusinessInfoTaskPostRequestInfo({
-        keyword: input.keyword,
-        ...locationParams(input),
-        language_code: input.languageCode,
-        priority: TASK_PRIORITY_HIGH,
-      }),
-    ]),
+    await dataforseoPost<DataforseoTaskLike & { id?: string }>(
+      "/v3/business_data/google/my_business_info/task_post",
+      [
+        {
+          keyword: input.keyword,
+          ...locationParams(input),
+          language_code: input.languageCode,
+          priority: TASK_PRIORITY_HIGH,
+        },
+      ],
+      NO_RETRY,
+    ),
   );
 }
 
@@ -288,15 +270,19 @@ export async function postMyBusinessUpdatesTask(
   input: { keyword: string; depth: number } & BusinessLocationInput,
 ): Promise<DataforseoApiResponse<string>> {
   return postedTaskId(
-    await businessDataTaskApi().googleMyBusinessUpdatesTaskPost([
-      new BusinessDataGoogleMyBusinessUpdatesTaskPostRequestInfo({
-        keyword: input.keyword,
-        ...locationParams(input),
-        language_code: input.languageCode,
-        depth: input.depth,
-        priority: TASK_PRIORITY_HIGH,
-      }),
-    ]),
+    await dataforseoPost<DataforseoTaskLike & { id?: string }>(
+      "/v3/business_data/google/my_business_updates/task_post",
+      [
+        {
+          keyword: input.keyword,
+          ...locationParams(input),
+          language_code: input.languageCode,
+          depth: input.depth,
+          priority: TASK_PRIORITY_HIGH,
+        },
+      ],
+      NO_RETRY,
+    ),
   );
 }
 
@@ -315,22 +301,13 @@ export async function fetchBusinessDataTaskResult(input: {
   endpoint: BusinessTaskEndpoint;
   taskId: string;
 }): Promise<BusinessTaskOutcome> {
-  const api = businessDataApi();
-  const response =
-    input.endpoint === "reviews"
-      ? await api.googleReviewsTaskGet(input.taskId)
-      : input.endpoint === "extended_reviews"
-        ? await api.googleExtendedReviewsTaskGet(input.taskId)
-        : input.endpoint === "my_business_info"
-          ? await api.googleMyBusinessInfoTaskGet(input.taskId)
-          : await api.googleMyBusinessUpdatesTaskGet(input.taskId);
+  const response = await dataforseoGet(
+    `/v3/business_data/google/${input.endpoint}/task_get/${encodeURIComponent(input.taskId)}`,
+  );
 
   const task = response?.tasks?.[0];
   if (!response || response.status_code !== 20000 || !task) {
-    throw new AppError(
-      "INTERNAL_ERROR",
-      response?.status_message || "DataForSEO task_get failed",
-    );
+    throw failedResponseError(response, "DataForSEO task_get failed");
   }
 
   if (isTaskInProgress(task)) return { status: "pending", result: null };
@@ -366,7 +343,9 @@ type BusinessCategoryRow = {
 export async function fetchBusinessListingsCategories(): Promise<
   DataforseoApiResponse<BusinessCategoryRow[]>
 > {
-  const response = await businessDataApi().businessListingsCategories();
+  const response = await dataforseoGet(
+    "/v3/business_data/business_listings/categories",
+  );
   const task = assertOk(response);
   // This endpoint puts rows directly on `result` rather than `result[0].items`.
   const rows = (task.result ?? []).flatMap((entry) => {

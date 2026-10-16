@@ -1,4 +1,6 @@
+import { DashboardFirstAuditService } from "@/server/features/dashboard/services/DashboardFirstAuditService";
 import { createServerFn } from "@tanstack/react-start";
+import { requireOrgPermission } from "@/server/auth/org-gate";
 import { ProjectService } from "@/server/features/projects/services/ProjectService";
 import {
   requireAuthenticatedContext,
@@ -8,8 +10,6 @@ import {
   archiveProjectSchema,
   createProjectSchema,
   restoreProjectSchema,
-  setProjectDomainSchema,
-  setProjectMarketSchema,
   updateProjectSchema,
 } from "@/types/schemas/projects";
 import { z } from "zod";
@@ -25,37 +25,46 @@ export const getProjects = createServerFn({ method: "POST" })
 export const createProject = createServerFn({ method: "POST" })
   .middleware(requireAuthenticatedContext)
   .validator(createProjectSchema)
-  .handler(async ({ data, context }) =>
-    ProjectService.createProject(context.organizationId, data),
-  );
+  .handler(async ({ data, context }) => {
+    requireOrgPermission(context, { project: ["create"] });
+    const project = await ProjectService.createProject(
+      context.organizationId,
+      data,
+    );
+    const initialAudit = await DashboardFirstAuditService.start(
+      project.id,
+      project.domain,
+      { ...context, projectId: project.id },
+    );
+    return { ...project, initialAudit };
+  });
 
 export const updateProject = createServerFn({ method: "POST" })
   .middleware(requireProjectContext)
   .validator(updateProjectSchema)
-  .handler(async ({ data, context }) =>
-    ProjectService.updateProject(context.organizationId, data),
-  );
-
-export const setProjectDomain = createServerFn({ method: "POST" })
-  .middleware(requireProjectContext)
-  .validator(setProjectDomainSchema)
-  .handler(async ({ data, context }) =>
-    ProjectService.setProjectDomain(context.organizationId, data),
-  );
-
-export const setProjectMarket = createServerFn({ method: "POST" })
-  .middleware(requireProjectContext)
-  .validator(setProjectMarketSchema)
-  .handler(async ({ data, context }) =>
-    ProjectService.setProjectMarket(context.organizationId, data),
-  );
+  .handler(async ({ data, context }) => {
+    const project = await ProjectService.updateProject(
+      context.organizationId,
+      data,
+    );
+    const initialAudit =
+      project.domain !== context.project.domain
+        ? await DashboardFirstAuditService.start(
+            project.id,
+            project.domain,
+            context,
+          )
+        : null;
+    return { ...project, initialAudit };
+  });
 
 export const archiveProject = createServerFn({ method: "POST" })
   .middleware(requireProjectContext)
   .validator(archiveProjectSchema)
-  .handler(async ({ data, context }) =>
-    ProjectService.archiveProject(context.organizationId, data),
-  );
+  .handler(async ({ data, context }) => {
+    requireOrgPermission(context, { project: ["delete"] });
+    return ProjectService.archiveProject(context.organizationId, data);
+  });
 
 export const getArchivedProjects = createServerFn({ method: "POST" })
   .middleware(requireAuthenticatedContext)
@@ -66,9 +75,10 @@ export const getArchivedProjects = createServerFn({ method: "POST" })
 export const restoreProject = createServerFn({ method: "POST" })
   .middleware(requireAuthenticatedContext)
   .validator(restoreProjectSchema)
-  .handler(async ({ data, context }) =>
-    ProjectService.restoreProject(context.organizationId, data),
-  );
+  .handler(async ({ data, context }) => {
+    requireOrgPermission(context, { project: ["delete"] });
+    return ProjectService.restoreProject(context.organizationId, data);
+  });
 
 export const getProjectAccess = createServerFn({ method: "POST" })
   .middleware(requireAuthenticatedContext)

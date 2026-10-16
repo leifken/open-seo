@@ -30,8 +30,7 @@ export const removeRankTrackingKeywordsTool = {
     description:
       "Stop tracking keywords by their trackingKeywordId. Uses no credits and preserves historical snapshots. Missing, stale, foreign, and repeated IDs are ignored; `removed` is the number actually deleted from this tracker.",
     inputSchema,
-    outputSchema: z
-      .object({
+    outputSchema: z.looseObject({
         trackerId: z.string(),
         requested: z.number(),
         removed: z.number(),

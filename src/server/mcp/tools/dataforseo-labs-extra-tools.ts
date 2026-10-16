@@ -1,3 +1,4 @@
+import { sort } from "remeda";
 /* eslint-disable max-lines -- four related, genuinely thin DataForSEO Labs/SERP wrappers, same grouping style as dataforseo-research-tools.ts */
 import { z } from "zod";
 import { createDataforseoClient } from "@/server/lib/dataforseo";
@@ -302,7 +303,7 @@ export const getHistoricalRankOverviewTool = {
       });
       // DataForSEO returns oldest-first already, but be explicit about it
       // rather than relying on provider order for a trend readout.
-      const sorted = months.toSorted((a, b) => {
+      const sorted = sort(months, (a, b) => {
         const aKey = (a.year ?? 0) * 12 + (a.month ?? 0);
         const bKey = (b.year ?? 0) * 12 + (b.month ?? 0);
         return aKey - bKey;

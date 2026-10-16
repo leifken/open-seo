@@ -1,9 +1,5 @@
 import { z } from "zod";
-import {
-  AiOptimizationChatGptLlmScraperLiveAdvancedRequestInfo,
-  SerpGoogleAiModeLiveAdvancedRequestInfo,
-} from "dataforseo-client";
-import { aiOptimizationApi, serpApi } from "@/server/lib/dataforseo/core";
+import { dataforseoPost } from "@/server/lib/dataforseo/core";
 import { createDataforseoBillingClassifier } from "@/server/lib/dataforseoBillingClassification";
 import { AppError } from "@/server/lib/errors";
 import {
@@ -93,16 +89,18 @@ export async function fetchChatGptScrape(input: {
   languageCode?: string;
   forceWebSearch?: boolean;
 }): Promise<DataforseoApiResponse<ChatGptScrapeResult>> {
-  const response = await aiOptimizationApi(
-    classifyAiSearchError,
-  ).chatGptLlmScraperLiveAdvanced([
-    new AiOptimizationChatGptLlmScraperLiveAdvancedRequestInfo({
-      keyword: input.keyword,
-      location_code: input.locationCode,
-      language_code: input.languageCode,
-      force_web_search: input.forceWebSearch,
-    }),
-  ]);
+  const response = await dataforseoPost(
+    "/v3/ai_optimization/chat_gpt/llm_scraper/live/advanced",
+    [
+      {
+        keyword: input.keyword,
+        location_code: input.locationCode,
+        language_code: input.languageCode,
+        force_web_search: input.forceWebSearch,
+      },
+    ],
+    { classify: classifyAiSearchError },
+  );
   const task = assertOk(response, {
     classify: classifyAiSearchError,
     classifyPath: "/v3/ai_optimization/chat_gpt/llm_scraper/live/advanced",
@@ -156,14 +154,17 @@ export async function fetchGoogleAiModeScrape(input: {
   languageCode?: string;
   device?: "desktop" | "mobile";
 }): Promise<DataforseoApiResponse<GoogleAiModeScrapeResult>> {
-  const response = await serpApi().googleAiModeLiveAdvanced([
-    new SerpGoogleAiModeLiveAdvancedRequestInfo({
-      keyword: input.keyword,
-      location_code: input.locationCode,
-      language_code: input.languageCode,
-      device: input.device,
-    }),
-  ]);
+  const response = await dataforseoPost(
+    "/v3/serp/google/ai_mode/live/advanced",
+    [
+      {
+        keyword: input.keyword,
+        location_code: input.locationCode,
+        language_code: input.languageCode,
+        device: input.device,
+      },
+    ],
+  );
   // "No Search Results" (40501) — AI Mode has no answer for some keywords or
   // is unavailable in that market; a valid empty result, still billed.
   const task = assertOk(response, { treatNoResultsAsEmpty: true });

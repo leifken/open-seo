@@ -1,240 +1,45 @@
-import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, Check } from "lucide-react";
-import { captureClientEvent } from "@/client/lib/posthog";
+import { Link } from "@tanstack/react-router";
+import { Link2, Settings } from "lucide-react";
+import { EmptyState } from "@/client/components/EmptyState";
+import { Button } from "@/client/components/ui/button";
 import {
-  computeNextStep,
-  isStepDone,
-  STEP_ORDER,
-} from "@/client/features/dashboard/dashboardSteps";
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/client/components/ui/tabs";
+import { DashboardKeywords } from "./DashboardKeywords";
+import { DashboardBacklinks } from "./DashboardBacklinks";
+import { DashboardNewQueries } from "./DashboardNewQueries";
+import { DashboardLinkActivity } from "./DashboardLinkActivity";
+import { dashboardSiteTabSchema } from "@/types/schemas/dashboard";
+import type { z } from "zod";
+import { Fragment } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { sort } from "remeda";
+import { DashboardOnboarding } from "./DashboardOnboarding";
 import {
   AuditHealthCard,
-  BacklinkPulseCard,
   GscCard,
 } from "@/client/features/dashboard/DashboardCards";
 import { Ga4Card } from "@/client/features/dashboard/Ga4Card";
-import { McpConnectCard } from "@/client/features/dashboard/McpConnectCard";
 import { WorkspaceMergeBanner } from "@/client/features/dashboard/WorkspaceMergeBanner";
-import { getStandardErrorMessage } from "@/client/lib/error-messages";
-import type { DashboardActivation } from "@/server/features/dashboard/services/DashboardService";
+import { QueryError } from "@/client/components/QueryState";
 import {
   getDashboardActivation,
   getDashboardOverview,
-  markDashboardCompetitorClicked,
-  refreshDashboardBacklinkSnapshot,
 } from "@/serverFunctions/dashboard";
-import { setProjectDomain } from "@/serverFunctions/projects";
-import type { DashboardHeroStep } from "@/types/schemas/dashboard";
+import { Skeleton } from "@/client/components/ui/skeleton";
 
-const HERO_COPY: Record<
-  DashboardHeroStep,
-  { title: string; body: string; cta: string }
-> = {
-  domain: {
-    title: "What site are you working on?",
-    body: "Set your project's domain and every card on this page starts working for it — backlinks and audits.",
-    cta: "Save",
-  },
-  mcp: {
-    title: "Connect your AI agent",
-    body: "OpenSEO is built to be used from agents like Claude. Connect once, then ask it to use OpenSEO to help build your SEO strategy.",
-    cta: "Show me how",
-  },
-  gsc: {
-    title: "Connect Search Console",
-    body: "Your real queries and clicks, straight from Google.",
-    cta: "Connect",
-  },
-  competitor: {
-    title: "Size up a competitor",
-    body: "Paste a competitor's domain to see what they rank for and who links to them.",
-    cta: "Open domain lookup",
-  },
-};
-
-function scrollToCard(id: string) {
-  document.getElementById(id)?.scrollIntoView({
-    behavior: "smooth",
-    block: "center",
-  });
-}
-
-// Users paste full URLs; store the bare host like settings expects.
-function normalizeDomainInput(value: string): string {
-  return value
-    .trim()
-    .replace(/^https?:\/\//i, "")
-    .replace(/\/.*$/, "");
-}
-
-function OnboardingChecklist({
+export function DashboardPage({
   projectId,
-  activation,
+  tab = "overview",
+  onTabChange,
 }: {
   projectId: string;
-  activation: DashboardActivation;
+  tab?: z.infer<typeof dashboardSiteTabSchema>;
+  onTabChange: (tab: z.infer<typeof dashboardSiteTabSchema>) => void;
 }) {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const [domainInput, setDomainInput] = useState("");
-  // null = follow the first actionable step; set once the user pages with ‹ ›.
-  const [viewedIndex, setViewedIndex] = useState<number | null>(null);
-  const invalidateActivation = () =>
-    void queryClient.invalidateQueries({
-      queryKey: ["dashboardActivation", projectId],
-    });
-
-  const competitorClickMutation = useMutation({
-    mutationFn: () => markDashboardCompetitorClicked({ data: { projectId } }),
-    onSuccess: invalidateActivation,
-  });
-  const domainMutation = useMutation({
-    mutationFn: (domain: string) =>
-      setProjectDomain({ data: { projectId, domain } }),
-    onSuccess: () => {
-      invalidateActivation();
-      void queryClient.invalidateQueries({
-        queryKey: ["dashboardOverview", projectId],
-      });
-      void queryClient.invalidateQueries({ queryKey: ["projects"] });
-    },
-    onError: (error) =>
-      toast.error(
-        getStandardErrorMessage(error, "Couldn't save the domain. Try again."),
-      ),
-  });
-
-  // Hidden once every step is done.
-  const nextStep = computeNextStep(activation);
-  if (!nextStep) return null;
-
-  const index = viewedIndex ?? STEP_ORDER.indexOf(nextStep);
-  const step = STEP_ORDER[index];
-  const copy = HERO_COPY[step];
-  const done = isStepDone(activation, step);
-
-  const page = (delta: number) =>
-    setViewedIndex(Math.min(Math.max(index + delta, 0), STEP_ORDER.length - 1));
-
-  const onSubmitDomain = () => {
-    const domain = normalizeDomainInput(domainInput);
-    if (!domain) return;
-    captureClientEvent("dashboard:next_move_click", { step: "domain" });
-    domainMutation.mutate(domain);
-  };
-
-  // Only the gsc/competitor steps use the fallback CTA button — domain
-  // renders an inline form and mcp renders a Link.
-  const onCta = () => {
-    captureClientEvent("dashboard:next_move_click", { step });
-    if (step === "gsc") {
-      scrollToCard("connect-gsc");
-    } else if (step === "competitor") {
-      competitorClickMutation.mutate();
-      void navigate({ to: "/p/$projectId/domain", params: { projectId } });
-    }
-  };
-
-  return (
-    <div className="rounded-xl border border-primary/25 bg-primary/5 shadow-sm">
-      <div className="flex items-center justify-between gap-4 px-5 pt-4">
-        <p className="text-xs font-medium uppercase tracking-wide text-primary">
-          Onboarding checklist
-        </p>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            className={`btn btn-ghost btn-xs btn-square ${
-              index === 0 ? "invisible" : ""
-            }`}
-            aria-label="Previous step"
-            disabled={index === 0}
-            onClick={() => page(-1)}
-          >
-            <ChevronLeft className="size-4" />
-          </button>
-          <span className="text-xs tabular-nums text-base-content/60">
-            {index + 1} / {STEP_ORDER.length}
-          </span>
-          <button
-            type="button"
-            className={`btn btn-ghost btn-xs btn-square ${
-              index === STEP_ORDER.length - 1 ? "invisible" : ""
-            }`}
-            aria-label="Next step"
-            disabled={index === STEP_ORDER.length - 1}
-            onClick={() => page(1)}
-          >
-            <ChevronRight className="size-4" />
-          </button>
-        </div>
-      </div>
-      <div className="flex flex-row flex-wrap items-center justify-between gap-4 p-5 pt-2">
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold">{copy.title}</h2>
-          <p className="mt-1 max-w-xl text-sm text-base-content/70">
-            {copy.body}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-3">
-          {done ? (
-            <span className="inline-flex items-center gap-1.5 text-sm font-medium text-success">
-              <Check className="size-4" />
-              Done
-            </span>
-          ) : step === "domain" ? (
-            <form
-              className="join"
-              onSubmit={(event) => {
-                event.preventDefault();
-                onSubmitDomain();
-              }}
-            >
-              <input
-                type="text"
-                className="input input-bordered join-item w-52"
-                placeholder="acme.com"
-                value={domainInput}
-                onChange={(event) => setDomainInput(event.target.value)}
-                aria-label="Your site's domain"
-              />
-              <button
-                type="submit"
-                className="btn btn-primary join-item"
-                disabled={
-                  domainMutation.isPending ||
-                  normalizeDomainInput(domainInput) === ""
-                }
-              >
-                {copy.cta}
-              </button>
-            </form>
-          ) : step === "mcp" ? (
-            <Link
-              to="/ai"
-              className="link link-primary text-sm font-medium"
-              onClick={() =>
-                captureClientEvent("dashboard:next_move_click", { step })
-              }
-            >
-              {copy.cta} →
-            </Link>
-          ) : (
-            <button type="button" className="btn btn-primary" onClick={onCta}>
-              {copy.cta}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export function DashboardPage({ projectId }: { projectId: string }) {
-  const queryClient = useQueryClient();
-
   const activationQuery = useQuery({
     queryKey: ["dashboardActivation", projectId],
     queryFn: () => getDashboardActivation({ data: { projectId } }),
@@ -242,56 +47,40 @@ export function DashboardPage({ projectId }: { projectId: string }) {
   const overviewQuery = useQuery({
     queryKey: ["dashboardOverview", projectId],
     queryFn: () => getDashboardOverview({ data: { projectId } }),
+    refetchInterval: (query) =>
+      query.state.data?.audit?.status === "running" ? 3000 : false,
   });
 
   const activation = activationQuery.data;
   const overview = overviewQuery.data;
 
-  // Visit-triggered backlink snapshot: fire once per page view when the
-  // overview reports a missing or stale snapshot for a project with a domain.
-  // The server re-checks freshness, so a stray double-fire costs nothing.
-  const refreshMutation = useMutation({
-    mutationFn: () => refreshDashboardBacklinkSnapshot({ data: { projectId } }),
-    onSuccess: () =>
-      void queryClient.invalidateQueries({
-        queryKey: ["dashboardOverview", projectId],
-      }),
-  });
-  const refreshFiredRef = useRef(false);
-  const needsSnapshot =
-    activation?.domain != null &&
-    overview !== undefined &&
-    (overview.backlinks === null || overview.backlinks.stale);
-  useEffect(() => {
-    if (!needsSnapshot || refreshFiredRef.current) return;
-    refreshFiredRef.current = true;
-    refreshMutation.mutate();
-  }, [needsSnapshot, refreshMutation]);
-
-  if (activationQuery.isError) {
+  if (activationQuery.isError && !activation) {
     return (
       <div className="px-4 py-4 md:px-6 md:py-6">
-        <div className="alert alert-error">
-          {getStandardErrorMessage(activationQuery.error)}
-        </div>
+        <QueryError
+          error={activationQuery.error}
+          fallback="Failed to load dashboard"
+          onRetry={() => void activationQuery.refetch()}
+          isRetrying={activationQuery.isFetching}
+        />
       </div>
     );
   }
 
   // Wait for the overview too: rendering cards from `overview === undefined`
   // flashes their empty states (and reshuffles the data-first sort) once the
-  // real data lands. An overview error falls through so the page still loads.
+  // real data lands. An overview error falls through so the page still loads,
+  // with the error in place of the audit card.
   if (!activation || overviewQuery.isPending) {
     return (
-      <div
-        className="mx-auto flex max-w-5xl flex-col gap-5 px-4 py-4 md:px-6 md:py-6"
-        aria-busy
-      >
-        <div className="skeleton h-8 w-52" />
-        <div className="skeleton h-36" />
-        <div className="grid gap-5 lg:grid-cols-2">
-          <div className="skeleton h-44" />
-          <div className="skeleton h-44" />
+      <div className="px-4 py-4 md:px-6 md:py-6" aria-busy>
+        <div className="mx-auto flex max-w-7xl flex-col gap-5">
+          <Skeleton className="h-8 w-52" />
+          <Skeleton className="h-36" />
+          <div className="grid gap-5 lg:grid-cols-2">
+            <Skeleton className="h-44" />
+            <Skeleton className="h-44" />
+          </div>
         </div>
       </div>
     );
@@ -301,83 +90,195 @@ export function DashboardPage({ projectId }: { projectId: string }) {
   const gscConnected = activation.gsc.connected;
   const ga4Connected = activation.ga4.connected;
 
+  // Search Console always renders: connected shows the report, otherwise the
+  // connect pitch. It sits ahead of the optional GA4 pitch.
+  const cards = [
+    {
+      key: "newQueries",
+      hasData: gscConnected,
+      node: (
+        <DashboardNewQueries
+          projectId={projectId}
+          connected={gscConnected}
+          siteUrl={activation.gsc.siteUrl}
+        />
+      ),
+    },
+    {
+      key: "gsc",
+      hasData: gscConnected,
+      node: (
+        <GscCard
+          projectId={projectId}
+          connected={gscConnected}
+          siteUrl={activation.gsc.siteUrl}
+        />
+      ),
+    },
+    ...(ga4Connected || !activation.ga4.cardDismissedAt
+      ? [
+          {
+            key: "ga4",
+            hasData: ga4Connected,
+            node: <Ga4Card projectId={projectId} connected={ga4Connected} />,
+          },
+        ]
+      : []),
+    ...(overview
+      ? [
+          {
+            key: "audit",
+            hasData: overview.audit != null,
+            node: (
+              <AuditHealthCard
+                projectId={projectId}
+                audit={overview.audit}
+                domain={activation.domain}
+              />
+            ),
+          },
+        ]
+      : []),
+    ...(showBacklinks
+      ? [
+          {
+            key: "backlinks",
+            hasData: true,
+            node: (
+              <DashboardLinkActivity
+                projectId={projectId}
+                domain={activation.domain!}
+              />
+            ),
+          },
+        ]
+      : []),
+  ];
+
   return (
     <div className="px-4 py-4 pb-24 md:px-6 md:py-6 md:pb-8">
-      <div className="mx-auto flex max-w-5xl flex-col gap-5">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
+      <div className="mx-auto flex max-w-7xl flex-col gap-5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Your website
+            </p>
+            <h1 className="text-2xl font-semibold">
+              {activation.domain || "Dashboard"}
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Search visibility, links and site health in one place.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            nativeButton={false}
+            render={<Link to="/p/$projectId/settings" params={{ projectId }} />}
+          >
+            <Settings />
+            Project settings
+          </Button>
+        </div>
 
         <WorkspaceMergeBanner />
 
-        <OnboardingChecklist projectId={projectId} activation={activation} />
+        {activationQuery.isError ? (
+          <QueryError
+            error={activationQuery.error}
+            fallback="Failed to refresh dashboard"
+            onRetry={() => void activationQuery.refetch()}
+            isRetrying={activationQuery.isFetching}
+          />
+        ) : null}
 
-        {/* Every card is half width on large screens (only the checklist spans).
-          Cards with data render before setup pitches and empty states. */}
-        <div className="grid items-start gap-5 lg:grid-cols-2">
-          {[
-            // Array order is the within-bucket order after the data-first sort:
-            // the MCP pitch leads the setup cards.
-            ...(activation.mcp.firstToolCallAt || activation.mcp.cardDismissedAt
-              ? []
-              : [
-                  {
-                    key: "mcp",
-                    hasData: false,
-                    node: (
-                      <McpConnectCard
-                        projectId={projectId}
-                        activation={activation}
-                      />
-                    ),
-                  },
-                ]),
-            {
-              key: "gsc",
-              hasData: gscConnected,
-              node: <GscCard projectId={projectId} connected={gscConnected} />,
-            },
-            ...(ga4Connected || !activation.ga4.cardDismissedAt
-              ? [
-                  {
-                    key: "ga4",
-                    hasData: ga4Connected,
-                    node: (
-                      <Ga4Card projectId={projectId} connected={ga4Connected} />
-                    ),
-                  },
-                ]
-              : []),
-            {
-              key: "audit",
-              hasData: overview?.audit != null,
-              node: (
-                <AuditHealthCard
-                  projectId={projectId}
-                  audit={overview?.audit ?? null}
-                />
-              ),
-            },
-            ...(showBacklinks
-              ? [
-                  {
-                    key: "backlinks",
-                    hasData:
-                      overview?.backlinks != null || refreshMutation.isPending,
-                    node: (
-                      <BacklinkPulseCard
-                        projectId={projectId}
-                        backlinks={overview?.backlinks ?? null}
-                        refreshing={refreshMutation.isPending}
-                      />
-                    ),
-                  },
-                ]
-              : []),
-          ]
-            .toSorted((a, b) => Number(b.hasData) - Number(a.hasData))
-            .map((card) => (
-              <div key={card.key}>{card.node}</div>
+        {overviewQuery.isError ? (
+          <QueryError
+            error={overviewQuery.error}
+            fallback="Failed to load site health"
+            onRetry={() => void overviewQuery.refetch()}
+            isRetrying={overviewQuery.isFetching}
+          />
+        ) : null}
+
+        <DashboardOnboarding
+          key={projectId}
+          projectId={projectId}
+          activation={activation}
+        />
+
+        <Tabs
+          value={tab}
+          onValueChange={(value) => {
+            const parsed = dashboardSiteTabSchema.safeParse(value);
+            if (parsed.success) onTabChange(parsed.data);
+          }}
+          className="gap-4"
+        >
+          <TabsList aria-label="Your website dashboard" className="h-9">
+            {(
+              [
+                ["overview", "Overview"],
+                ["keywords", "Keywords"],
+                ["backlinks", "Backlinks"],
+              ] as const
+            ).map(([value, label]) => (
+              <TabsTrigger key={value} value={value} className="px-3">
+                {label}
+              </TabsTrigger>
             ))}
-        </div>
+          </TabsList>
+
+          {/* Base UI unmounts inactive panels, so paid detail queries load only on opening their tab. */}
+          <TabsContent
+            value="overview"
+            className="grid gap-5 lg:grid-cols-2"
+            keepMounted={false}
+          >
+            {sort(cards, (a, b) => Number(b.hasData) - Number(a.hasData)).map(
+              (card) => (
+                <Fragment key={card.key}>{card.node}</Fragment>
+              ),
+            )}
+          </TabsContent>
+
+          <TabsContent value="keywords" keepMounted={false}>
+            <DashboardKeywords
+              key={`${projectId}:${activation.domain}`}
+              projectId={projectId}
+              connected={gscConnected}
+              siteUrl={activation.gsc.siteUrl}
+            />
+          </TabsContent>
+          <TabsContent value="backlinks" keepMounted={false}>
+            {activation.domain ? (
+              <DashboardBacklinks
+                key={activation.domain}
+                projectId={projectId}
+                domain={activation.domain}
+              />
+            ) : (
+              <EmptyState
+                variant="card"
+                icon={Link2}
+                title="See who links to your website"
+                description="Add your website to track new and lost backlinks and the sites sending them."
+                action={
+                  <Button
+                    nativeButton={false}
+                    render={
+                      <Link
+                        to="/p/$projectId/settings"
+                        params={{ projectId }}
+                      />
+                    }
+                  >
+                    Add your website
+                  </Button>
+                }
+              />
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

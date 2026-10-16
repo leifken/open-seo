@@ -49,7 +49,7 @@ interface RankCheckParams {
   maxCostCredits?: number;
 }
 
-export async function prepareRankCheckKeywords(input: {
+async function prepareRankCheckKeywords(input: {
   runId: string;
   configId: string;
   billingCustomer: BillingCustomerContext;
@@ -86,7 +86,7 @@ export async function prepareRankCheckKeywords(input: {
   }
 
   const { costCredits } = estimateRankCheckCredits(
-    trackingKeywords.length,
+    trackingKeywords.map((kw) => kw.keyword),
     input.devices,
     input.serpDepth,
     input.trigger === "scheduled" ? "queued" : "live",
@@ -141,6 +141,7 @@ async function finalizeRankCheckRun(input: {
   projectId: string;
   billingCustomer: BillingCustomerContext;
   trigger: RankCheckParams["trigger"];
+  devices: RankCheckParams["devices"];
   batchError: string | null;
   queueStats: QueuedCheckStats | null;
 }) {
@@ -157,40 +158,65 @@ async function finalizeRankCheckRun(input: {
 
   const nowIso = new Date().toISOString();
 
-  // Snapshots were written incrementally by each batch step.
-  // Count from DB to get the authoritative keyword count.
+  // Snapshots were written incrementally by each batch step. Count from the
+  // DB: a keyword is checked when any device has a snapshot, but the run is
+  // partial when any device is missing one, so a lost device still shows.
   const snapshots = await RankTrackingRepository.getSnapshotsForRun(
     input.runId,
   );
   const keywordsChecked = new Set(snapshots.map((s) => s.trackingKeywordId))
     .size;
+  const devices: Array<"desktop" | "mobile"> =
+    input.devices === "both" ? ["desktop", "mobile"] : [input.devices];
+  const checkedByDevice = devices.map((device) => ({
+    device,
+    count: new Set(
+      snapshots
+        .filter((s) => s.device === device)
+        .map((s) => s.trackingKeywordId),
+    ).size,
+  }));
 
   const keywordsTotal = run.keywordsTotal || keywordsChecked;
-  const incompleteCount = keywordsTotal - keywordsChecked;
+  const isPartial = checkedByDevice.some((d) => d.count < keywordsTotal);
 
-  let errorMessage: string | undefined;
-  if (input.batchError) {
-    errorMessage = `Completed ${keywordsChecked} of ${keywordsTotal} keyword(s). Error: ${input.batchError}`;
-  } else if (incompleteCount > 0) {
-    errorMessage = `${incompleteCount} keyword(s) could not be checked`;
-  }
+  // Batch steps record the first per-keyword rejection on the run as it
+  // happens, so a failed run shows the vendor's reason rather than a count.
+  const keywordError = run.errorMessage ?? input.batchError;
+  const status =
+    keywordsChecked === 0 && keywordsTotal > 0 ? "failed" : "completed";
+  const checkedSummary =
+    checkedByDevice.length > 1
+      ? checkedByDevice
+          .map(({ device, count }) => `${count} of ${keywordsTotal} ${device}`)
+          .join(" and ")
+      : `${keywordsChecked} of ${keywordsTotal}`;
+  const errorMessage =
+    status === "failed"
+      ? (keywordError ?? "No keywords could be checked.")
+      : isPartial
+        ? `Checked ${checkedSummary} keyword(s)${keywordError ? `: ${keywordError}` : ""}`
+        : null;
 
   // Flipping status away from 'pending'/'running' is what releases the
   // partial-index slot for the next run.
   await RankTrackingRepository.updateRun(input.runId, {
-    status: "completed",
+    status,
     keywordsChecked,
     completedAt: nowIso,
-    ...(errorMessage ? { errorMessage } : {}),
+    errorMessage,
   });
 
-  // Clear any previous skip reason on success.
+  // Clear any previous skip reason on success. A failed run must not advance
+  // lastCheckedAt — nothing was actually checked.
   // Note: nextCheckAt is NOT set here — the cron handler advances it eagerly
   // before starting the workflow to prevent retry storms.
-  await RankTrackingRepository.updateConfig(input.configId, input.projectId, {
-    lastCheckedAt: nowIso,
-    lastSkipReason: null,
-  });
+  if (status === "completed") {
+    await RankTrackingRepository.updateConfig(input.configId, input.projectId, {
+      lastCheckedAt: nowIso,
+      lastSkipReason: null,
+    });
+  }
 
   // One-line summary per run so fallback rates are visible in Workers Logs.
   // Keys match the PostHog event properties for log/event correlation.
@@ -202,7 +228,7 @@ async function finalizeRankCheckRun(input: {
     ? ` error="${errorMessage.replace(/\s+/g, " ").slice(0, 200)}"`
     : "";
   console.log(
-    `[rank-check] ${input.runId} completed org=${input.billingCustomer.organizationId} project=${input.projectId} trigger=${input.trigger} keywords=${keywordsChecked}/${keywordsTotal}${queueSummary}${errorSummary}`,
+    `[rank-check] ${input.runId} ${status} org=${input.billingCustomer.organizationId} project=${input.projectId} trigger=${input.trigger} keywords=${keywordsChecked}/${keywordsTotal}${queueSummary}${errorSummary}`,
   );
 
   await captureServerEvent({
@@ -211,7 +237,7 @@ async function finalizeRankCheckRun(input: {
     organizationId: input.billingCustomer.organizationId,
     properties: {
       project_id: input.projectId,
-      status: "completed",
+      status,
       trigger: input.trigger,
       keywords_checked: keywordsChecked,
       ...(input.queueStats
@@ -351,12 +377,12 @@ export class RankCheckWorkflow extends WorkflowEntrypoint<
           runId,
         };
         // Scheduled checks use DataForSEO's task queue (~30% of live cost);
-        // manual checks stay on the live endpoint for instant results.
-        if (trigger === "scheduled") {
-          queueStats = await runQueuedCheck(step, checkContext);
-        } else {
-          await runLiveCheck(step, checkContext);
-        }
+        // manual checks stay on the live endpoint for instant results, and
+        // only the pairs the live endpoint missed go to the queue.
+        queueStats =
+          trigger === "scheduled"
+            ? await runQueuedCheck(step, checkContext)
+            : await runLiveCheck(step, checkContext);
       } catch (error) {
         // Batch failure — snapshots for completed batches are already
         // persisted incrementally. Continue to finalization.
@@ -371,6 +397,7 @@ export class RankCheckWorkflow extends WorkflowEntrypoint<
           projectId,
           billingCustomer,
           trigger,
+          devices,
           batchError,
           queueStats,
         }),

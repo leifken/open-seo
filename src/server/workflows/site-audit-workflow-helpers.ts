@@ -1,47 +1,18 @@
-import type {
-  CrawledPageResult,
-  PageFetchClass,
-} from "@/server/lib/audit/types";
+import { MAX_HTML_BYTES, readTextUpTo } from "@/server/lib/audit/html-response";
+import { classifyFetch } from "@/server/lib/audit/classify-fetch";
+import type { CrawledPageResult } from "@/server/lib/audit/types";
+import type { RenderedPage } from "@/server/lib/audit/rendered-page";
+import type { PageFetchClass } from "@/shared/audit-fetch-class";
 import { sha256Hex } from "@/server/lib/audit/ids";
 import { normalizeUrl } from "@/server/lib/audit/url-utils";
+import type { CrawlThrottle } from "@/server/lib/audit/crawl-throttle";
+import { crawlerHeadersFor, type CrawlerAccess } from "@/shared/crawler-access";
 
 const CRAWL_USER_AGENT = "OpenSEO-Audit/1.0";
 // Apache MultiViews answers 406 when Accept lacks a wildcard (real case
 // kinderkleidermarkt-nottuln.de, 24.09.2026): browsers always send `*/*`.
 export const CRAWL_ACCEPT =
   "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
-const MAX_HTML_BYTES = 1024 * 1024;
-
-/**
- * Markers of a bot-mitigation challenge page. We classify these honestly as
- * "blocked" instead of recording the challenge HTML as if it were the page.
- */
-const CHALLENGE_BODY_MARKERS = [
-  "just a moment...",
-  "challenge-platform",
-  "cf-browser-verification",
-  "attention required! | cloudflare",
-  "verifying you are human",
-];
-
-function classifyFetch(
-  statusCode: number,
-  headers: Headers,
-  bodySnippet: string,
-): PageFetchClass {
-  if (statusCode === 0) return "error";
-  if (headers.get("cf-mitigated")) return "blocked";
-  if (statusCode === 401 || statusCode === 403 || statusCode === 429) {
-    return "blocked";
-  }
-  if (statusCode === 503) {
-    const snippet = bodySnippet.toLowerCase();
-    if (CHALLENGE_BODY_MARKERS.some((marker) => snippet.includes(marker))) {
-      return "blocked";
-    }
-  }
-  return "ok";
-}
 
 /** Parse `Link: <url>; rel="canonical"` response headers. */
 function parseLinkHeaderCanonical(
@@ -59,14 +30,19 @@ function parseLinkHeaderCanonical(
   return null;
 }
 
-export async function crawlPage(
+/**
+ * Fetch one URL, pausing the whole chunk and retrying while the site 429s
+ * (see crawl-throttle.ts). `responseTimeMs` is measured from the last attempt
+ * so backoff waiting never looks like a slow server.
+ */
+async function fetchPage(
   url: string,
-  crawlDepth: number | null,
-  inSitemap: boolean,
-): Promise<CrawledPageResult> {
-  const startTime = Date.now();
-
-  try {
+  throttle: CrawlThrottle,
+  access: CrawlerAccess | null | undefined,
+) {
+  for (let attempt = 1; ; attempt++) {
+    if (!(await throttle.ready())) return null;
+    const startedAt = Date.now();
     // Manual redirect handling: each hop is recorded as its own page row and
     // its target is enqueued by the frontier, so redirect chains and loops are
     // detectable from the recorded rows. Trailing-slash redirects (/docs ->
@@ -77,13 +53,53 @@ export async function crawlPage(
       headers: {
         "User-Agent": CRAWL_USER_AGENT,
         Accept: CRAWL_ACCEPT,
+        ...crawlerHeadersFor(url, access),
       },
       redirect: "manual",
       signal: AbortSignal.timeout(15_000),
     });
+    const result = {
+      response,
+      responseTimeMs: Date.now() - startedAt,
+      // A retry means an earlier attempt was 429'd; a 429 handed back after
+      // the last retry is already classified rate_limited and needs no flag.
+      rateLimited: attempt > 1,
+    };
+    if (response.status !== 429) {
+      await throttle.recovered();
+      return result;
+    }
 
-    const responseTimeMs = Date.now() - startTime;
-    const statusCode = response.status;
+    const retry = await throttle.backoff(
+      attempt,
+      response.headers.get("retry-after"),
+    );
+    // The shared cooldown applies even when this URL has no retries left.
+    if (!retry) return result;
+    await response.body?.cancel();
+  }
+}
+
+/** Null leaves this URL deferred when the shared cooldown stops its fetch. */
+export async function crawlPage(
+  url: string,
+  crawlDepth: number | null,
+  inSitemap: boolean,
+  throttle: CrawlThrottle,
+  options: {
+    /** Crawler-access headers for the audited host, when the org has one. */
+    access?: CrawlerAccess | null;
+    render?: (url: string) => Promise<RenderedPage>;
+  } = {},
+): Promise<CrawledPageResult | null> {
+  const { access, render } = options;
+  const startTime = Date.now();
+
+  try {
+    const fetched = await fetchPage(url, throttle, access);
+    if (!fetched) return null;
+    const { response, responseTimeMs, rateLimited } = fetched;
+    let statusCode = response.status;
     const xRobotsTag = response.headers.get("x-robots-tag");
     const headerCanonicalUrl = parseLinkHeaderCanonical(
       response.headers.get("link"),
@@ -103,6 +119,7 @@ export async function crawlPage(
         headerCanonicalUrl,
         crawlDepth,
         inSitemap,
+        rateLimited,
       });
     }
 
@@ -110,12 +127,36 @@ export async function crawlPage(
     const isHtml = contentType.includes("text/html");
     // Cap what we read: the first 1 MiB still contains the SEO metadata and
     // navigation needed by the audit in normal documents.
-    const body = isHtml ? await readTextUpTo(response, MAX_HTML_BYTES) : "";
-    const fetchClass = classifyFetch(
+    let body = isHtml ? await readTextUpTo(response, MAX_HTML_BYTES) : "";
+    let fetchClass = classifyFetch(
       statusCode,
-      response.headers,
+      Boolean(response.headers.get("cf-mitigated")),
       body.slice(0, 4_000),
     );
+
+    // Rendering replaces the body of a readable HTML page, or of a bot
+    // challenge, with what the browser loaded. Redirects, non-HTML files,
+    // origin errors, login walls and rate limits keep their existing paths.
+    // The direct response's timing and headers stay authoritative.
+    const challenged = fetchClass === "blocked" && statusCode !== 401;
+    if (
+      render &&
+      isHtml &&
+      (challenged || (fetchClass === "ok" && statusCode < 400))
+    ) {
+      try {
+        const page = await render(url);
+        body = page.html;
+        // A challenge's status was never the page's. Browser Run reports the
+        // status it loaded; Context returns only pages that loaded.
+        if (challenged) statusCode = page.status ?? 200;
+        // The renderer can be challenged where the direct fetch was not.
+        fetchClass = classifyFetch(statusCode, false, body.slice(0, 4_000));
+      } catch (error) {
+        // A challenge that neither renderer passed stays blocked.
+        if (!challenged) throw error;
+      }
+    }
 
     if (!isHtml || fetchClass !== "ok" || statusCode >= 400) {
       return emptyPageResult({
@@ -131,6 +172,7 @@ export async function crawlPage(
         // The body was still fetched and buffered; report its size so the
         // crawl window's byte budget sees blocked/error pages too.
         htmlBytes: body.length,
+        rateLimited,
       });
     }
 
@@ -140,6 +182,9 @@ export async function crawlPage(
     // not just when an audit actually crawls.
     const { analyzeHtml } = await import("@/server/lib/audit/page-analyzer");
     const analysis = analyzeHtml(body, url, statusCode, responseTimeMs);
+    // Rendered HTML can still be the loading shell (a weak render), so the
+    // same check applies whether or not the page was rendered.
+    const javascriptShell = analysis.javascriptShell === true;
     const robotsDirectives = [analysis.robotsMeta, xRobotsTag]
       .filter(Boolean)
       .join(",")
@@ -148,7 +193,10 @@ export async function crawlPage(
     const headingCount = (level: number) =>
       analysis.headingOrder.filter((h) => h === level).length;
 
-    return {
+    // Parser strings can be V8 slices backed by the entire HTML body. Detach
+    // the finished result before persistence queues retain it: otherwise a
+    // few KB of metadata can keep ~2 MiB of decoded HTML alive per page.
+    return structuredClone({
       id: crypto.randomUUID(),
       url,
       statusCode,
@@ -173,11 +221,14 @@ export async function crawlPage(
       h6Count: headingCount(6),
       headingOrder: analysis.headingOrder,
       wordCount: analysis.wordCount,
-      contentHash: analysis.bodyText
-        ? await sha256Hex(analysis.bodyText)
-        : null,
+      contentHash:
+        analysis.bodyText && !javascriptShell
+          ? await sha256Hex(analysis.bodyText)
+          : null,
       isHtml: true,
+      javascriptShell,
       htmlBytes: body.length,
+      rateLimited,
       imagesTotal: analysis.images.length,
       // Only a truly absent alt attribute counts: alt="" is the correct
       // markup for decorative images.
@@ -191,8 +242,11 @@ export async function crawlPage(
       responseTimeMs,
       crawlDepth,
       inSitemap,
-    };
+    });
   } catch (error) {
+    // Losing a durable cooldown must fail the workflow, not become a page
+    // error that lets the scheduler continue making requests.
+    if (throttle.checkpointFailed) throw error;
     const responseTimeMs = Date.now() - startTime;
     console.warn(`Failed to crawl ${url}:`, error);
     return emptyPageResult({
@@ -209,38 +263,6 @@ export async function crawlPage(
   }
 }
 
-async function readTextUpTo(response: Response, maxBytes: number) {
-  if (!response.body) return "";
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  const parts: string[] = [];
-  let bytesRead = 0;
-
-  try {
-    while (bytesRead < maxBytes) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      const remaining = maxBytes - bytesRead;
-      const chunk =
-        value.byteLength > remaining ? value.subarray(0, remaining) : value;
-      bytesRead += chunk.byteLength;
-      parts.push(decoder.decode(chunk, { stream: true }));
-
-      if (bytesRead >= maxBytes) {
-        await reader.cancel();
-        break;
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  parts.push(decoder.decode());
-  return parts.join("");
-}
-
 function emptyPageResult(input: {
   url: string;
   statusCode: number;
@@ -252,6 +274,7 @@ function emptyPageResult(input: {
   crawlDepth: number | null;
   inSitemap: boolean;
   htmlBytes?: number;
+  rateLimited?: boolean;
 }): CrawledPageResult {
   return {
     id: crypto.randomUUID(),
@@ -279,6 +302,7 @@ function emptyPageResult(input: {
     contentHash: null,
     isHtml: false,
     htmlBytes: input.htmlBytes ?? 0,
+    rateLimited: input.rateLimited ?? false,
     imagesTotal: 0,
     imagesMissingAlt: 0,
     images: [],

@@ -12,10 +12,19 @@ vi.mock("@/server/lib/geo-location-resolver", () => ({
   resolveGeoLocations: mocks.resolveGeoLocations,
 }));
 
-vi.mock("cloudflare:workers", () => ({ env: {} }));
+vi.mock("cloudflare:workers", () => ({
+  env: {},
+  waitUntil: (p: Promise<unknown>) => p,
+}));
+vi.mock("@/server/lib/r2-cache", () => ({
+  buildCacheKey: async () => "test-serp",
+  getCached: async () => null,
+  setCached: async () => undefined,
+}));
 
 vi.mock("@/server/lib/dataforseo", () => ({
   createDataforseoClient: mocks.createDataforseoClient,
+  SERP_ANALYSIS_DEPTH: 20,
 }));
 
 vi.mock("@/server/features/projects/services/ProjectService", () => ({

@@ -51,6 +51,7 @@ export default defineConfig(({ mode }) => {
   ].filter((host): host is string => Boolean(host));
 
   return {
+    publicDir: "src/public",
     // Keep in sync with vite.config.ts — the client build inlines these.
     envPrefix: [
       "VITE_",

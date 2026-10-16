@@ -1,8 +1,7 @@
-import { autumn } from "@/server/billing/autumn";
 import {
-  AUTUMN_SEO_DATA_BALANCE_FEATURE_ID,
-  AUTUMN_SEO_DATA_TOPUP_BALANCE_FEATURE_ID,
-} from "@/shared/billing";
+  getOrCreateOrganizationCustomer,
+  getUsageCreditsRemaining,
+} from "@/server/billing/subscription";
 import { mcpResponse } from "@/server/mcp/formatters";
 import { type ToolContext } from "@/server/mcp/context";
 import { isHostedServerAuthMode } from "@/server/lib/runtime-env";
@@ -10,15 +9,6 @@ import { optionalMetaOutputSchema } from "@/server/mcp/output-schemas";
 import { fetchUserData } from "@/server/lib/dataforseo";
 import { buildCacheKey, getCached, setCached } from "@/server/lib/r2-cache";
 import { z } from "zod";
-
-async function checkBalance(featureId: string, customerId: string) {
-  try {
-    const result = await autumn.check({ customerId, featureId });
-    return result.balance?.remaining ?? null;
-  } catch {
-    return null;
-  }
-}
 
 // LEIFKEN (RankMeister SEO-4 Punkt 2): the actual DataForSEO account balance,
 // not the hosted-billing credit balance above — the number that answers "can
@@ -29,7 +19,7 @@ async function checkBalance(featureId: string, customerId: string) {
 const ACCOUNT_BALANCE_CACHE_NAMESPACE = "dataforseo:account-balance";
 const ACCOUNT_BALANCE_CACHE_TTL_SECONDS = 5 * 60;
 
-const accountBalanceSchema = z.object({
+const accountBalanceSchema = z.looseObject({
   balanceUsd: z.number().nullable(),
   depositedTotalUsd: z.number().nullable(),
   fetchedAt: z.string(),
@@ -74,16 +64,17 @@ export const whoamiTool = {
     description:
       "Confirms the connected OpenSEO account, server mode, token scopes, current credit balance, and the real DataForSEO account balance (GET /v3/appendix/user_data, cached for 5 minutes) when the user asks to check their account or connection. Uses no credits — does not make a billable DataForSEO call.",
     inputSchema: {} as Record<string, never>,
-    outputSchema: {
+    outputSchema: z.looseObject({
       userEmail: z.string(),
       scopes: z.array(z.string()),
       mode: z.enum(["hosted", "self-hosted"]),
       creditsRemaining: z.number().nullable(),
       dataforseoAccountBalance: accountBalanceSchema.nullable(),
       ...optionalMetaOutputSchema,
-    },
+    }),
     annotations: {
-      readOnlyHint: true,
+      readOnlyHint: false,
+      idempotentHint: true,
       openWorldHint: false,
       destructiveHint: false,
     },
@@ -91,21 +82,18 @@ export const whoamiTool = {
   handler: async (_args: Record<string, never>, context: ToolContext) => {
     const auth = context.auth;
     const isHosted = await isHostedServerAuthMode();
-    const [creditsRemaining, dataforseoAccountBalance] = await Promise.all([
-      isHosted
-        ? Promise.all([
-            checkBalance(
-              AUTUMN_SEO_DATA_BALANCE_FEATURE_ID,
-              auth.organizationId,
-            ),
-            checkBalance(
-              AUTUMN_SEO_DATA_TOPUP_BALANCE_FEATURE_ID,
-              auth.organizationId,
-            ),
-          ]).then(([base, topup]) => (base ?? 0) + (topup ?? 0))
-        : Promise.resolve(null as number | null),
-      getDataforseoAccountBalance(),
-    ]);
+    let creditsRemaining: number | null = null;
+    if (isHosted) {
+      try {
+        const customer = await getOrCreateOrganizationCustomer(auth);
+        const { monthlyRemaining, topupRemaining } =
+          await getUsageCreditsRemaining(customer.id);
+        creditsRemaining = monthlyRemaining + topupRemaining;
+      } catch {
+        // Account identity is still available when billing is unavailable.
+      }
+    }
+    const dataforseoAccountBalance = await getDataforseoAccountBalance();
     const lines = [
       `Account: ${auth.userEmail}`,
       `Mode: ${isHosted ? "hosted" : "self-hosted"}`,

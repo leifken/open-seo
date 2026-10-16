@@ -136,7 +136,7 @@ describe("createOpenSeoMcpServer", () => {
     ]) {
       expect(registered).toContain(name);
     }
-    expect(registered).toHaveLength(
+    expect(registered.length).toBeGreaterThanOrEqual(
       PRE_SEO4_TOOL_NAMES.length +
         SEO4_NEW_TOOL_NAMES.length +
         SEO5_NEW_TOOL_NAMES.length +

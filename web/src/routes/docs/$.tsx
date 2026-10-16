@@ -5,7 +5,7 @@ import { ContentPost, mdxComponents } from "@/components/content-post";
 import { baseOptions } from "@/lib/layout.shared";
 import { getDocsPageTree, getDocsPost } from "@/lib/content.functions";
 import { buildPageSeo } from "@/lib/seo";
-import { docs } from "../../../source.generated";
+import { docs } from "../../../.source/index";
 
 export const Route = createFileRoute("/docs/$")({
   loader: async ({ params }: { params: { _splat?: string } }) => {

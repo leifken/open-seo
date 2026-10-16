@@ -1,15 +1,7 @@
 // Public surface of the DataForSEO integration. Internals live in the
-// per-section files (labs / serp / business / backlinks / ai / lighthouse),
-// which sit behind the single dynamic import in client.ts so the ~3 MB SDK
-// loads lazily; everything funnels through envelope.ts (status + billing) and
-// is metered in client.ts. Runtime values re-exported here must be SDK-free
-// (shared.ts) or lazy — a static value re-export from a section file would
-// drag the SDK back into the eager isolate startup graph.
-
-import {
-  loadDataforseoSections,
-  type DataforseoSections,
-} from "@/server/lib/dataforseo/client";
+// per-section files (labs / serp / business / backlinks / ai / lighthouse);
+// everything funnels through envelope.ts (status + billing) and is metered in
+// client.ts.
 
 export { createDataforseoClient } from "@/server/lib/dataforseo/client";
 
@@ -26,53 +18,28 @@ export {
   type LlmPlatform,
 } from "@/server/lib/dataforseo/shared";
 
+export { SERP_ANALYSIS_DEPTH } from "@/server/lib/dataforseo/serp";
+
 export { normalizeBacklinksTarget } from "@/server/lib/dataforseoBacklinksTarget";
 
-// envelope.ts is an SDK-free leaf module (only zod + a type-only import), so
-// this is safe to re-export eagerly like the values above.
+// Section fetchers called outside the metered client. Task collection is free
+// at DataForSEO (the task was charged at task_post), so routing these through
+// the metering seam would charge the customer twice; business categories are
+// free ($0), so a zero-credit org can still list them.
 export {
-  extractMyBusinessInfoProfile,
-  isRecord,
-} from "@/server/lib/dataforseo/envelope";
-
-/** Lazy wrappers for the section fetchers called outside the metered client.
- * Task collection is free at DataForSEO (the task was charged at task_post), so
- * routing these through the metering seam would charge the customer twice. */
-export const fetchRankCheckTaskResult: DataforseoSections["fetchRankCheckTaskResult"] =
-  async (input) =>
-    (await loadDataforseoSections()).fetchRankCheckTaskResult(input);
-
-export const fetchBusinessDataTaskResult: DataforseoSections["fetchBusinessDataTaskResult"] =
-  async (input) =>
-    (await loadDataforseoSections()).fetchBusinessDataTaskResult(input);
-
-/** Free ($0) at DataForSEO, so it skips the metered client entirely — a
- *  zero-credit org can still list categories. */
-export const fetchBusinessListingsCategories: DataforseoSections["fetchBusinessListingsCategories"] =
-  async () =>
-    (await loadDataforseoSections()).fetchBusinessListingsCategories();
-
-/** LEIFKEN: GET /v3/appendix/user_data — free at DataForSEO (deposit,
- *  balance, spend by function), so it also skips the metered client. Used by
- *  the whoami MCP tool to show the real DataForSEO account balance. */
-export const fetchUserData: DataforseoSections["fetchUserData"] = async () =>
-  (await loadDataforseoSections()).fetchUserData();
-
-/** LEIFKEN (SEO-5): the country's Google geotarget list for the location
- *  resolver. Free ($0) at DataForSEO, so unmetered like fetchUserData. */
-export const fetchGeoLocationsForCountry: DataforseoSections["fetchGeoLocationsForCountry"] =
-  async (countryIso) =>
-    (await loadDataforseoSections()).fetchGeoLocationsForCountry(countryIso);
-
-/** LEIFKEN (SEO-5): collects one queued Maps SERP task (get_local_rank_grid).
- *  Free — the task was charged at task_post — so it skips the metered client. */
-export const fetchMapsTaskResult: DataforseoSections["fetchMapsTaskResult"] =
-  async (taskId) =>
-    (await loadDataforseoSections()).fetchMapsTaskResult(taskId);
-
-export type {
-  BusinessTaskEndpoint,
-  BusinessTaskOutcome,
+  fetchLocalSerpTaskResult,
+  fetchRankCheckTaskResult,
+} from "@/server/lib/dataforseo/serp";
+export {
+  fetchAiTrackingTaskResult,
+  type AiTrackingAnswer,
+  type PostedAiTrackingTask,
+} from "@/server/lib/dataforseo/ai-tracking";
+export {
+  fetchBusinessDataTaskResult,
+  fetchBusinessListingsCategories,
+  type BusinessTaskEndpoint,
+  type BusinessTaskOutcome,
 } from "@/server/lib/dataforseo/business";
 
 export type {
@@ -84,6 +51,7 @@ export type {
 export type { AdsKeywordIdeaItem } from "@/server/lib/dataforseo/google-ads";
 
 export type {
+  LocalSerpTaskOutcome,
   SerpLiveItem,
   RankCheckResult,
   RankCheckTaskInput,
@@ -97,3 +65,8 @@ export type {
   DomainPageSummaryItem,
   BacklinksHistoryItem,
 } from "@/server/lib/dataforseo/backlinks";
+
+export { extractMyBusinessInfoProfile, isRecord } from "./envelope";
+export { fetchUserData } from "./appendix";
+export { fetchGeoLocationsForCountry } from "./geo-locations";
+export { fetchMapsTaskResult } from "./maps-tasks";

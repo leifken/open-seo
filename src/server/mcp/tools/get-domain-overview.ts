@@ -48,8 +48,7 @@ export const getDomainOverviewTool = {
     description:
       "Returns a high-level view of a domain's organic footprint: estimated organic traffic, organic keyword count, backlinks, and referring domains. Use this first for domain research; for the detailed ranked-keyword list, call get_domain_keyword_suggestions next. Charges credits (~100-300 typical). Cached for 12 hours per domain.",
     inputSchema,
-    outputSchema: z
-      .object({
+    outputSchema: z.looseObject({
         domain: z.string().optional(),
         scope: researchScopeSchema.optional(),
         displayTarget: z.string().optional(),
@@ -62,7 +61,7 @@ export const getDomainOverviewTool = {
       .passthrough(),
     annotations: {
       readOnlyHint: false,
-      openWorldHint: false,
+      openWorldHint: true,
       destructiveHint: false,
     },
   },

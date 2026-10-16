@@ -16,7 +16,20 @@ import { dataDir } from "./r2-fs";
 import { waitUntil } from "./wait-until";
 
 /* oxlint-disable typescript/no-explicit-any */
-type ChatAgentCtor = new (ctx: any, env: any) => any;
+type ChatAgentCtor = new (ctx: any, env: any) => ChatAgent;
+// The Node bridge only invokes this part of the upstream agent surface.
+type ChatAgent = {
+  fetch(request: Request): Promise<Response>;
+  alarm?(): Promise<void>;
+  webSocketMessage?(ws: any, payload: any): void | Promise<void>;
+  webSocketClose?(
+    ws: any,
+    code: number,
+    reason: string,
+    clean: boolean,
+  ): void | Promise<void>;
+  webSocketError?(ws: any, error: any): void | Promise<void>;
+};
 /* oxlint-enable typescript/no-explicit-any */
 
 const ALARM_TABLE = "_node_runtime_alarm";
@@ -97,16 +110,16 @@ class NodeChatStorage {
           self.db.exec(query);
           return new SqlCursor<T>([], 0);
         }
-        const stmt = self.db.prepare(query);
+        const stmt = self.db.prepare<unknown[], T>(query);
         if (stmt.reader) {
-          return new SqlCursor<T>(stmt.all(...normalizeParams(params)) as T[], 0);
+          return new SqlCursor<T>(stmt.all(...normalizeParams(params)), 0);
         }
         const info = stmt.run(...normalizeParams(params));
         return new SqlCursor<T>([], info.changes);
       },
       get databaseSize(): number {
-        const pages = self.db.pragma("page_count", { simple: true }) as number;
-        const size = self.db.pragma("page_size", { simple: true }) as number;
+        const pages = Number(self.db.pragma("page_count", { simple: true }));
+        const size = Number(self.db.pragma("page_size", { simple: true }));
         return pages * size;
       },
     };
@@ -116,8 +129,11 @@ class NodeChatStorage {
     this.onAlarm = handler;
     // Re-arm a persisted alarm after a restart.
     const row = this.db
-      .prepare(`SELECT wake_at FROM ${ALARM_TABLE} WHERE id = 1`)
-      .get() as { wake_at: number } | undefined;
+      .prepare<
+        [],
+        { wake_at: number }
+      >(`SELECT wake_at FROM ${ALARM_TABLE} WHERE id = 1`)
+      .get();
     if (row) this.armTimer(row.wake_at);
   }
 
@@ -141,12 +157,18 @@ class NodeChatStorage {
       return result;
     }
     const row = this.db
-      .prepare(`SELECT value FROM ${KV_TABLE} WHERE key = ?`)
-      .get(key) as { value: string } | undefined;
+      .prepare<
+        [string],
+        { value: string }
+      >(`SELECT value FROM ${KV_TABLE} WHERE key = ?`)
+      .get(key);
     return row === undefined ? undefined : JSON.parse(row.value);
   }
 
-  async put(key: string | Record<string, unknown>, value?: unknown): Promise<void> {
+  async put(
+    key: string | Record<string, unknown>,
+    value?: unknown,
+  ): Promise<void> {
     const entries =
       typeof key === "string" ? [[key, value] as const] : Object.entries(key);
     const stmt = this.db.prepare(
@@ -164,13 +186,17 @@ class NodeChatStorage {
     return Array.isArray(key) ? deleted : deleted > 0;
   }
 
-  async list(options?: { prefix?: string; limit?: number }): Promise<Map<string, unknown>> {
+  async list(options?: {
+    prefix?: string;
+    limit?: number;
+  }): Promise<Map<string, unknown>> {
     const prefix = options?.prefix ?? "";
     const rows = this.db
-      .prepare(
-        `SELECT key, value FROM ${KV_TABLE} WHERE key >= ? AND key < ? ORDER BY key${options?.limit ? " LIMIT " + Math.floor(options.limit) : ""}`,
-      )
-      .all(prefix, prefix + "￿") as { key: string; value: string }[];
+      .prepare<
+        [string, string],
+        { key: string; value: string }
+      >(`SELECT key, value FROM ${KV_TABLE} WHERE key >= ? AND key < ? ORDER BY key${options?.limit ? " LIMIT " + Math.floor(options.limit) : ""}`)
+      .all(prefix, prefix + "￿");
     return new Map(rows.map((r) => [r.key, JSON.parse(r.value)]));
   }
 
@@ -180,13 +206,17 @@ class NodeChatStorage {
 
   async getAlarm(): Promise<number | null> {
     const row = this.db
-      .prepare(`SELECT wake_at FROM ${ALARM_TABLE} WHERE id = 1`)
-      .get() as { wake_at: number } | undefined;
+      .prepare<
+        [],
+        { wake_at: number }
+      >(`SELECT wake_at FROM ${ALARM_TABLE} WHERE id = 1`)
+      .get();
     return row?.wake_at ?? null;
   }
 
   async setAlarm(timestamp: number | Date): Promise<void> {
-    const wakeAt = typeof timestamp === "number" ? timestamp : timestamp.getTime();
+    const wakeAt =
+      typeof timestamp === "number" ? timestamp : timestamp.getTime();
     this.db
       .prepare(
         `INSERT INTO ${ALARM_TABLE} (id, wake_at) VALUES (1, ?)
@@ -222,11 +252,15 @@ type SocketAdapter = {
 
 class NodeChatState {
   readonly storage: NodeChatStorage;
-  readonly id: { name: string; toString(): string; equals(other: unknown): boolean };
+  readonly id: {
+    name: string;
+    toString(): string;
+    equals(other: unknown): boolean;
+  };
   private sockets = new Map<SocketAdapter, string[]>();
   private lock: Promise<unknown> = Promise.resolve();
   /* oxlint-disable typescript/no-explicit-any */
-  instance: any;
+  instance?: ChatAgent;
   /* oxlint-enable typescript/no-explicit-any */
 
   constructor(binding: string, name: string, onDeleteAll: () => void) {
@@ -289,9 +323,20 @@ class NodeChatState {
       this.sockets.delete(ws);
       inPgScope(() =>
         Promise.resolve(
-          this.instance?.webSocketClose?.(ws, Number(code) || 1006, String(reason ?? ""), true),
+          this.instance?.webSocketClose?.(
+            ws,
+            Number(code) || 1006,
+            typeof reason === "string"
+              ? reason
+              : reason instanceof Uint8Array
+                ? new TextDecoder().decode(reason)
+                : "",
+            true,
+          ),
         ),
-      ).catch((err: unknown) => console.error("[chat-agent] webSocketClose failed:", err));
+      ).catch((err: unknown) =>
+        console.error("[chat-agent] webSocketClose failed:", err),
+      );
     });
     real.on("error", (error: unknown) => {
       inPgScope(() =>
@@ -304,7 +349,9 @@ class NodeChatState {
 
   getWebSockets(tag?: string): SocketAdapter[] {
     const all = [...this.sockets.entries()];
-    return (tag ? all.filter(([, tags]) => tags.includes(tag)) : all).map(([ws]) => ws);
+    return (tag ? all.filter(([, tags]) => tags.includes(tag)) : all).map(
+      ([ws]) => ws,
+    );
   }
 
   setWebSocketAutoResponse(): void {}
@@ -323,18 +370,23 @@ export function makeChatAgentNamespace(
   loadCtor: () => Promise<ChatAgentCtor>,
   getEnv: () => unknown,
 ) {
-  const instances = new Map<string, { state: NodeChatState; instance: unknown }>();
+  const instances = new Map<
+    string,
+    { state: NodeChatState; instance: ChatAgent }
+  >();
 
   async function instantiate(name: string) {
     const existing = instances.get(name);
     if (existing) return existing;
     const Ctor = await loadCtor();
-    const state = new NodeChatState(binding, name, () => instances.delete(name));
+    const state = new NodeChatState(binding, name, () =>
+      instances.delete(name),
+    );
     const instance = new Ctor(state, getEnv());
     state.instance = instance;
     state.storage.bindAlarmHandler(() => {
       /* oxlint-disable typescript/no-explicit-any */
-      inPgScope(() => Promise.resolve((instance as any).alarm?.())).catch(
+      inPgScope(() => Promise.resolve(instance.alarm?.())).catch(
         (err: unknown) =>
           console.error(`[chat-agent ${binding}:${name}] alarm failed:`, err),
       );
@@ -359,19 +411,21 @@ export function makeChatAgentNamespace(
               return async (request: Request) => {
                 const { instance } = await instantiate(id.name);
                 /* oxlint-disable typescript/no-explicit-any */
-                return inPgScope(() => (instance as any).fetch(request));
+                return inPgScope(() => instance.fetch(request));
                 /* oxlint-enable typescript/no-explicit-any */
               };
             }
             return async (...args: unknown[]) => {
               const { instance } = await instantiate(id.name);
               /* oxlint-disable typescript/no-explicit-any */
-              const method = (instance as any)[prop];
+              const method: unknown = Reflect.get(instance, prop);
               /* oxlint-enable typescript/no-explicit-any */
               if (typeof method !== "function") {
                 throw new TypeError(`${binding}.${prop} is not a method`);
               }
-              return inPgScope(() => Promise.resolve(method.apply(instance, args)));
+              return inPgScope(
+                async (): Promise<unknown> => method.apply(instance, args),
+              );
             };
           },
         },

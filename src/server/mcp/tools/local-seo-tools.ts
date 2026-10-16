@@ -27,8 +27,8 @@ import {
 import {
   formatMcpCell,
   formatMcpTable,
-  readPath,
   truncatedCell,
+  readPath,
   type McpTableColumn,
 } from "@/server/mcp/table";
 import {
@@ -794,12 +794,27 @@ const BUSINESS_UPDATE_COLUMNS: McpTableColumn<unknown>[] = [
     header: "posted",
     value: (row) => readPath(row, "post_date") ?? readPath(row, "timestamp"),
   },
+  { header: "author", value: (row) => readPath(row, "author") },
   {
     header: "post",
     value: (row) => readPath(row, "post_text") ?? readPath(row, "snippet"),
     format: truncatedCell(120),
   },
   { header: "url", value: (row) => readPath(row, "url") },
+  {
+    header: "links",
+    value: (row) => {
+      const links = readPath(row, "links");
+      return Array.isArray(links)
+        ? links
+            .map(
+              (link: unknown) =>
+                `${formatMcpCell(readPath(link, "type"))} → ${formatMcpCell(readPath(link, "url"))}`,
+            )
+            .join(", ")
+        : links;
+    },
+  },
 ];
 
 export const getBusinessUpdatesTool = {
@@ -919,7 +934,7 @@ export const listBusinessCategoriesTool = {
     inputSchema: listBusinessCategoriesInputSchema,
     outputSchema: {
       categories: z.array(
-        z.object({
+        z.looseObject({
           category: z.string(),
           businessCount: z.number().nullable(),
         }),
@@ -1022,7 +1037,7 @@ const GRID_POLL_ATTEMPTS = 10;
 const GRID_POLL_INTERVAL_MS = 5000;
 const GRID_COLLECT_CONCURRENCY = 10;
 
-const gridTaskSchema = z.object({
+const gridTaskSchema = z.looseObject({
   row: z
     .number()
     .int()
@@ -1183,6 +1198,9 @@ type GridPointResult = GridPoint & {
 type GridTask = z.infer<typeof gridTaskSchema>;
 
 type GridStructuredContent = {
+  pointsReady?: number;
+  pointsTotal?: number;
+  retryAfterSeconds?: number;
   status: "completed" | "processing" | "estimate";
   grid: GridPointResult[];
   summary: {
@@ -1432,6 +1450,40 @@ async function collectGridTasks(
   return { grid, matches };
 }
 
+// The map above is only ranks, so every cell's context — where the point is,
+// how contested it was, who won it — lives here. Coordinates are pre-formatted
+// because formatMcpCell's 2-decimal rounding would move a point by kilometres.
+const GRID_POINT_COLUMNS: McpTableColumn<GridPointResult>[] = [
+  { header: "row", value: (point) => point.row },
+  { header: "col", value: (point) => point.col },
+  { header: "lat", value: (point) => point.latitude.toFixed(7) },
+  { header: "lon", value: (point) => point.longitude.toFixed(7) },
+  {
+    header: "rank",
+    value: (point) => (point.error ? "search failed" : point.rank),
+  },
+  { header: "results", value: (point) => point.resultsCount },
+  {
+    header: "top result",
+    value: (point) => point.topResult?.title,
+    format: truncatedCell(60),
+  },
+  { header: "top cid", value: (point) => point.topResult?.cid },
+];
+
+function formatMatchedBusiness(
+  business: {
+    title: string | null;
+    cid: string | null;
+    placeId: string | null;
+  } | null,
+): string {
+  if (!business) {
+    return "Matched business: none — the target was not found at any point, so no point has a rank.";
+  }
+  return `Matched business: ${formatMcpCell(business.title)} (cid ${formatMcpCell(business.cid)}, place_id ${formatMcpCell(business.placeId)}).`;
+}
+
 export const getLocalRankGridTool = {
   name: "get_local_rank_grid",
   config: {
@@ -1441,8 +1493,11 @@ export const getLocalRankGridTool = {
     inputSchema: getLocalRankGridInputSchema,
     outputSchema: {
       status: z.enum(["completed", "processing", "estimate"]).optional(),
+      pointsReady: z.number().optional(),
+      pointsTotal: z.number().optional(),
+      retryAfterSeconds: z.number().optional(),
       grid: z.array(
-        z.object({
+        z.looseObject({
           row: z.number(),
           col: z.number(),
           latitude: z.number(),
@@ -1450,7 +1505,7 @@ export const getLocalRankGridTool = {
           rank: z.number().nullable(),
           resultsCount: z.number().optional(),
           topResult: z
-            .object({
+            .looseObject({
               title: z.string().nullable(),
               cid: z.string().nullable(),
             })
@@ -1458,7 +1513,7 @@ export const getLocalRankGridTool = {
             .optional(),
           top3: z
             .array(
-              z.object({
+              z.looseObject({
                 rank: z.number().nullable(),
                 title: z.string().nullable(),
                 cid: z.string().nullable(),
@@ -1469,7 +1524,7 @@ export const getLocalRankGridTool = {
           pending: z.boolean().optional(),
         }),
       ),
-      summary: z.object({
+      summary: z.looseObject({
         pointsSearched: z.number(),
         pointsFound: z.number(),
         averageRank: z.number().nullable(),
@@ -1478,14 +1533,14 @@ export const getLocalRankGridTool = {
         pointsPending: z.number().optional(),
       }),
       matchedBusiness: z
-        .object({
+        .looseObject({
           title: z.string().nullable(),
           cid: z.string().nullable(),
           placeId: z.string().nullable(),
         })
         .nullable(),
       settings: z
-        .object({
+        .looseObject({
           gridSize: z.number(),
           spacingKm: z.number(),
           radiusKm: z.number(),
@@ -1495,7 +1550,7 @@ export const getLocalRankGridTool = {
         })
         .optional(),
       estimate: z
-        .object({
+        .looseObject({
           points: z.number(),
           costPerPointUsd: z.number(),
           estimatedCostUsd: z.number(),
@@ -1512,9 +1567,9 @@ export const getLocalRankGridTool = {
   },
   handler: withMcpProjectAuth(async (args: GetLocalRankGridArgs, context) => {
     if (
-      args.target.cid == null &&
-      args.target.placeId == null &&
-      args.target.name == null
+      [args.target.cid, args.target.placeId, args.target.name].every(
+        (value) => value == null,
+      )
     ) {
       throw new AppError(
         "VALIDATION_ERROR",
@@ -1582,13 +1637,41 @@ export const getLocalRankGridTool = {
         `Estimated cost ~$${estimate.estimatedCostUsd} (${estimate.points} points × ~$${costPerPointUsd}) exceeds maxCostUsd $${args.maxCostUsd}. Nothing was charged; use a smaller gridSize, mode "queue" or priority "normal".`,
       );
     }
-    if (args.resumeTasks && args.resumeTasks.length !== points.length) {
+    if (
+      args.resumeTasks &&
+      (args.resumeTasks.length > points.length ||
+        new Set(
+          args.resumeTasks
+            .filter((task) => task.row < gridSize && task.col < gridSize)
+            .map(gridTag),
+        ).size !== args.resumeTasks.length)
+    ) {
       throw new AppError(
         "VALIDATION_ERROR",
-        `resumeTasks has ${args.resumeTasks.length} entries but a ${gridSize}x${gridSize} grid has ${points.length} points. Pass back the full tasks list with the same gridSize.`,
+        `resumeTasks has ${args.resumeTasks.length} entries but a ${gridSize}x${gridSize} grid has ${points.length} points. Pass back the returned tasks list with the same gridSize and unique row/col coordinates.`,
       );
     }
 
+    const receiptKey = await buildCacheKey("mcp:local-rank-grid:v2", {
+      organizationId: context.billing.organizationId,
+      projectId: args.projectId,
+      keyword: args.keyword,
+      center: args.center,
+      gridSize,
+      spacingKm,
+      zoom,
+      device: args.device ?? "mobile",
+      languageCode,
+      mode,
+      priority,
+    });
+    const receipt = z
+      .array(gridTaskSchema)
+      .safeParse(
+        mode === "queue" && !args.resumeTasks
+          ? await getCached(receiptKey)
+          : null,
+      );
     const client = createDataforseoClient(context.billing);
     let run: { grid: GridPointResult[]; matches: unknown[] };
     let tasks: GridTask[] | undefined;
@@ -1597,6 +1680,8 @@ export const getLocalRankGridTool = {
     } else {
       if (args.resumeTasks) {
         tasks = args.resumeTasks;
+      } else if (receipt.success) {
+        tasks = receipt.data;
       } else {
         const posted = await client.serp.mapsTaskPost({
           keyword: args.keyword,
@@ -1622,8 +1707,16 @@ export const getLocalRankGridTool = {
           );
         }
       }
+      if (!args.resumeTasks && !receipt.success) {
+        await setCached(receiptKey, tasks, 60 * 60).catch((error) =>
+          console.error("[local-rank-grid] receipt write failed:", error),
+        );
+      }
       run = await collectGridTasks(points, tasks, args.target);
       if (run.grid.every((point) => point.error)) {
+        await setCached(receiptKey, null, 0).catch((error) =>
+          console.error("[local-rank-grid] receipt reset failed:", error),
+        );
         throw new AppError(
           "INTERNAL_ERROR",
           "Every grid point's Maps task failed at DataForSEO.",
@@ -1662,8 +1755,11 @@ export const getLocalRankGridTool = {
 
     const text = [
       `Local rank grid for "${args.keyword}" (${settingsText}).`,
+      formatMatchedBusiness(matchedBusiness),
       `Rank per point, north at the top ("–" = not among the results returned there; check that point's resultsCount and top3 before reading it as outranked, "x" = search failed but may still be charged, "?" = queued task not finished yet):`,
       renderGrid(grid, gridSize),
+      "Every point (row 0 = north edge, col 0 = west edge):",
+      formatMcpTable(grid, GRID_POINT_COLUMNS),
       `- ranked at ${summary.pointsFound} of ${summary.pointsSearched} points`,
       `- average rank where found: ${summary.averageRank ?? "—"}`,
       `- top 3 at ${summary.top3Count} points, top 10 at ${summary.top10Count} points`,
@@ -1679,6 +1775,9 @@ export const getLocalRankGridTool = {
       meta,
       structuredContent: {
         status,
+        pointsReady: grid.filter((point) => !point.pending).length,
+        pointsTotal: grid.length,
+        ...(pendingCount > 0 ? { retryAfterSeconds: 60 } : {}),
         grid,
         summary,
         matchedBusiness,

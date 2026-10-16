@@ -1,3 +1,4 @@
+import { sort } from "remeda";
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 import { fetchGeoLocationsForCountry } from "@/server/lib/dataforseo";
@@ -216,13 +217,12 @@ function toResolved(input: string, location: GeoLocation) {
 
 function suggestionsFor(name: string, rows: GeoLocation[]): string[] {
   const stem = name.slice(0, Math.max(3, Math.min(name.length, 5)));
-  return rows
-    .filter((row) => locationKeys(row).some((key) => key.startsWith(stem)))
-    .toSorted(
-      (a, b) =>
-        DEFAULT_TYPE_ORDER.indexOf(a.type) -
-          DEFAULT_TYPE_ORDER.indexOf(b.type) || a.code - b.code,
-    )
+  return sort(
+    rows.filter((row) => locationKeys(row).some((key) => key.startsWith(stem))),
+    (a, b) =>
+      DEFAULT_TYPE_ORDER.indexOf(a.type) - DEFAULT_TYPE_ORDER.indexOf(b.type) ||
+      a.code - b.code,
+  )
     .slice(0, MAX_SUGGESTIONS)
     .map((row) => `${row.name} (${row.type}, ${row.code})`);
 }
@@ -258,20 +258,21 @@ export function matchGeoLocation(
   }
   const types = allowedTypes(query.hint);
   const stem = query.name.replace(DISTRICT_SUFFIX, "");
-  const candidates = rows
-    .filter((row) => types.includes(row.type))
-    .filter((row) => {
-      const keys = locationKeys(row);
-      return keys.includes(query.name) || keys.includes(stem);
-    })
-    .filter((row) => {
-      const folded = fold(row.name);
-      return query.qualifiers.every((qualifier) => folded.includes(qualifier));
-    })
-    .toSorted(
-      (a, b) =>
-        types.indexOf(a.type) - types.indexOf(b.type) || a.code - b.code,
-    );
+  const candidates = sort(
+    rows
+      .filter((row) => types.includes(row.type))
+      .filter((row) => {
+        const keys = locationKeys(row);
+        return keys.includes(query.name) || keys.includes(stem);
+      })
+      .filter((row) => {
+        const folded = fold(row.name);
+        return query.qualifiers.every((qualifier) =>
+          folded.includes(qualifier),
+        );
+      }),
+    (a, b) => types.indexOf(a.type) - types.indexOf(b.type) || a.code - b.code,
+  );
 
   const [best, ...others] = candidates;
   if (!best) {

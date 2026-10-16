@@ -25,7 +25,6 @@ import {
 } from "@/server/mcp/context";
 import { normalizeClientRegistrationRequest } from "@/server/mcp/oauth-registration";
 import { getPublicOrigin } from "@/server/mcp/public-origin";
-import { handleAuthenticatedOpenSeoMcpRequest } from "@/server/mcp/transport";
 import { resolveHostedContext } from "@/middleware/ensure-user/hosted";
 import { handleMcpApiKeyRequest } from "@/server/mcp/api-key-auth";
 
@@ -333,6 +332,9 @@ async function handleOAuthConsentResponse(
     );
   }
 
+  // organizationId is only the fallback context for tools with no project
+  // argument; the hosted transport re-resolves it and stamps orgScope per
+  // request, so one authorization follows the user across every organization.
   const props = createWorkersOAuthMcpProps({
     userId: context.userId,
     userEmail: context.userEmail,
@@ -392,6 +394,8 @@ function createDefaultHandler(
 
 const mcpApiHandler: ExportedHandlerWithFetch<OpenSeoOAuthEnv> = {
   async fetch(request, env, ctx) {
+    const { handleAuthenticatedOpenSeoMcpRequest } =
+      await import("@/server/mcp/transport");
     return handleAuthenticatedOpenSeoMcpRequest(request, ctx.props, env, ctx);
   },
 };

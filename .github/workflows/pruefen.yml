@@ -50,7 +50,7 @@ jobs:
       - name: Typen
         run: |
           pnpm exec tsc --noEmit
-          pnpm exec tsc --noEmit -p badseo/tsconfig.json
+          pnpm exec tsc --noEmit -p tests/badseo/tsconfig.json
 
       - name: Plugin-Skills synchron
         run: |

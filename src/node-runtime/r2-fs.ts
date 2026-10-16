@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { sort } from "remeda";
 // R2Bucket shim backed by the local filesystem (the R2 data here is cache and
 // audit blobs only — losing it costs cache warmth, nothing else). Implements
 // the surface the app uses: get → {text(), customMetadata} | null, put with
@@ -46,7 +48,9 @@ async function readMeta(
   filePath: string,
 ): Promise<{ customMetadata?: Record<string, string> }> {
   try {
-    return JSON.parse(await readFile(filePath + META_SUFFIX, "utf8"));
+    return z
+      .object({ customMetadata: z.record(z.string(), z.string()).optional() })
+      .parse(JSON.parse(await readFile(filePath + META_SUFFIX, "utf8")));
   } catch {
     return {};
   }
@@ -65,7 +69,7 @@ async function walkKeys(root: string): Promise<string[]> {
     const rel = path.relative(root, path.join(entry.parentPath, entry.name));
     keys.push(relPathToKey(rel));
   }
-  return keys.toSorted();
+  return sort(keys, (a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 export class FsBucket {

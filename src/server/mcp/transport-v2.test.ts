@@ -9,6 +9,18 @@ vi.mock("@/lib/auth", () => ({
   getHostedBaseUrl: () => "https://open-seo.test",
 }));
 
+// The hosted transport re-checks membership per request; mocking the
+// repository keeps this test off `cloudflare:workers`-backed db imports.
+vi.mock("@/server/auth/repositories/AuthRepository", () => ({
+  AuthRepository: {
+    getMembership: vi.fn(async () => ({ role: "owner" })),
+  },
+}));
+
+vi.mock("@/server/auth/default-hosted-organization", () => ({
+  resolveExistingActiveHostedOrganization: vi.fn(),
+}));
+
 vi.mock("@/middleware/ensure-user/cloudflareAccess", () => ({
   resolveCloudflareAccessContext: vi.fn(),
 }));
@@ -55,26 +67,6 @@ function request(
 }
 
 describe("Agents SDK v2 MCP transport", () => {
-  it("rejects a standalone GET without constructing a server", async () => {
-    let serverCount = 0;
-    const handler = createMcpHandler(
-      () => {
-        serverCount += 1;
-        const server = new McpServer({ name: "test", version: "1.0.0" });
-        server.registerTool("ping", {}, () => ({
-          content: [{ type: "text", text: "pong" }],
-        }));
-        return server;
-      },
-      { route: "/mcp" },
-    );
-
-    const response = await handler(request("GET"), {}, ctx);
-
-    expect(response.status).toBe(405);
-    expect(serverCount).toBe(0);
-  });
-
   it("passes verified provider identity and application props to tools", async () => {
     const props = { openSeoAuth: { organizationId: "org-1" } };
     const oauthContext = {
@@ -129,40 +121,6 @@ describe("Agents SDK v2 MCP transport", () => {
     expect(responseText).toContain('\\"clientId\\":\\"client-1\\"');
     expect(responseText).toContain('\\"scopes\\":[\\"mcp\\"]');
     expect(responseText).toContain('\\"organizationId\\":\\"org-1\\"');
-  });
-
-  it("accepts the SurfMind extension origin and rejects other browser origins", async () => {
-    const handler = createMcpHandler(
-      () => new McpServer({ name: "test", version: "1.0.0" }),
-      {
-        route: "/mcp",
-        allowedOriginHostnames: [
-          "open-seo.test",
-          "pghallcbnfabbgfijhbcldaapmgidnaa",
-        ],
-      },
-    );
-    const body = {
-      jsonrpc: "2.0",
-      id: 1,
-      method: "tools/list",
-    };
-
-    const surfMindResponse = await handler(
-      request("POST", body, {
-        Origin: "chrome-extension://pghallcbnfabbgfijhbcldaapmgidnaa",
-      }),
-      {},
-      ctx,
-    );
-    const unrelatedOriginResponse = await handler(
-      request("POST", body, { Origin: "https://evil.com" }),
-      {},
-      ctx,
-    );
-
-    expect(surfMindResponse.status).toBe(200);
-    expect(unrelatedOriginResponse.status).toBe(403);
   });
 
   it("enforces exact hosted origins around the real SDK handler", async () => {

@@ -1,4 +1,1 @@
-declare module "cloudflare:workers" {
-  const env: Env;
-  export { env };
-}
+/// <reference types="@cloudflare/workers-types" />

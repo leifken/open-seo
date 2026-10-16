@@ -1,8 +1,9 @@
+import { identity, sortBy } from "remeda";
 import { z } from "zod";
 import { useTimestampedSearchHistory } from "@/client/hooks/useTimestampedSearchHistory";
 import {
   promptExplorerModelSchema,
-  webSearchCountryCodeSchema,
+  webSearchCountrySelectionSchema,
 } from "@/types/schemas/ai-search";
 
 const promptExplorerSearchBodySchema = z.object({
@@ -10,19 +11,15 @@ const promptExplorerSearchBodySchema = z.object({
   highlightBrand: z.string(),
   models: z.array(promptExplorerModelSchema),
   webSearch: z.boolean(),
-  webSearchCountryCode: webSearchCountryCodeSchema,
+  webSearchCountryCode: webSearchCountrySelectionSchema,
 });
 
 type PromptExplorerSearchBody = z.infer<typeof promptExplorerSearchBodySchema>;
 
-export type PromptExplorerSearchHistoryItem = PromptExplorerSearchBody & {
-  timestamp: number;
-};
-
 function sameModels(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
-  const sortedA = a.toSorted();
-  const sortedB = b.toSorted();
+  const sortedA = sortBy(a, identity());
+  const sortedB = sortBy(b, identity());
   return sortedA.every((model, index) => model === sortedB[index]);
 }
 

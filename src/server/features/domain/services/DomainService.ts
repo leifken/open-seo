@@ -12,7 +12,7 @@ import { mapKeywordItem } from "@/server/features/domain/services/domainKeywordM
 import { getKeywordsPage } from "@/server/features/domain/services/domainKeywordsPage";
 import { getPagesPage } from "@/server/features/domain/services/domainPagesPage";
 
-// Lets a caller attribute spend to its own feature (e.g. onboarding). Applied
+// Lets a caller attribute spend to its own feature (e.g. the SAM agent). Applied
 // to the DataForSEO call, not the cache key, so cached results are shared
 // across callers.
 type MeteringOverrides = {

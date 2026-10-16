@@ -8,6 +8,7 @@ import {
 } from "@/server/mcp/output-schemas";
 import { withMcpProjectAuth } from "@/server/mcp/project-auth";
 import {
+  formatMcpCell,
   formatMcpTable,
   readPath,
   type McpTableColumn,
@@ -21,6 +22,12 @@ import {
 import { normalizeBacklinksTarget } from "@/server/lib/dataforseo";
 import { researchScopeSchema } from "@/shared/researchScope";
 
+/** Provider timestamps look like "2019-03-05 07:34:01 +00:00"; the day is all a
+ *  link-age column needs. */
+function dayCell(value: unknown) {
+  return formatMcpCell(value).slice(0, 10);
+}
+
 const REFERRING_DOMAIN_COLUMNS: McpTableColumn<unknown>[] = [
   { header: "domain", value: (row) => readPath(row, "domain") },
   { header: "backlinks", value: (row) => readPath(row, "backlinks") },
@@ -29,6 +36,13 @@ const REFERRING_DOMAIN_COLUMNS: McpTableColumn<unknown>[] = [
     value: (row) => readPath(row, "referringPages"),
   },
   { header: "rank", value: (row) => readPath(row, "rank") },
+  { header: "spam", value: (row) => readPath(row, "spamScore") },
+  { header: "broken", value: (row) => readPath(row, "brokenBacklinks") },
+  {
+    header: "first seen",
+    value: (row) => readPath(row, "firstSeen"),
+    format: dayCell,
+  },
 ];
 
 const inputSchema = {
@@ -50,8 +64,17 @@ const inputSchema = {
 
 type Args = z.infer<z.ZodObject<typeof inputSchema>>;
 
-function formatMetric(value: unknown) {
-  return typeof value === "number" || typeof value === "string" ? value : "?";
+/** Link velocity, appended to the total it belongs to. Dropped entirely when
+ *  the provider returned neither side. */
+function formatNewLost(newValue: unknown, lostValue: unknown) {
+  if (newValue == null && lostValue == null) return "";
+  return ` (new ${formatMcpCell(newValue)} / lost ${formatMcpCell(lostValue)})`;
+}
+
+/** Bullet for a metric the provider may not return at all — omitted rather
+ *  than rendered as a bare "—" the reader has to interpret. */
+function optionalMetric(label: string, value: unknown) {
+  return value == null ? [] : [`- ${label}: ${formatMcpCell(value)}`];
 }
 
 export const getBacklinksOverviewTool = {
@@ -61,17 +84,17 @@ export const getBacklinksOverviewTool = {
     description:
       "Returns a backlinks profile summary (total backlinks, referring domains, top referring domains). Charges credits (~50 typical for a domain, ~25 for a single page). Note: bare domains default to scope 'subdomains'; pass scope 'domain' to exclude subdomains from the totals. Targets with a path default to 'subfolder', whose counts come from filtered backlink totals (no rank/trends/referring-domain breakdown). Trend data always includes subdomains (provider limitation). Self-hosted deployments need the Backlinks API enabled on their DataForSEO account.",
     inputSchema,
-    outputSchema: {
+    outputSchema: z.looseObject({
       target: z.string(),
       scope: researchScopeSchema,
       scopeNote: z.string().optional(),
       overview: looseObjectOutputSchema,
       referringDomains: looseObjectOutputSchema.optional(),
       ...optionalMetaOutputSchema,
-    },
+    }),
     annotations: {
       readOnlyHint: false,
-      openWorldHint: false,
+      openWorldHint: true,
       destructiveHint: false,
     },
   },
@@ -118,16 +141,28 @@ export const getBacklinksOverviewTool = {
     const text = [
       `Backlinks profile for ${displayTarget} (scope: ${scope}):`,
       ...(scopeNote ? [`Note: ${scopeNote}`] : []),
-      `- backlinks: ${formatMetric(summary.backlinks)}`,
-      `- referring domains: ${formatMetric(summary.referringDomains)}`,
-      `- referring pages: ${formatMetric(summary.referringPages)}`,
-      `- rank: ${formatMetric(summary.rank)}`,
+      `- backlinks: ${formatMcpCell(summary.backlinks)}${formatNewLost(
+        summary.newBacklinks,
+        summary.lostBacklinks,
+      )}`,
+      `- referring domains: ${formatMcpCell(
+        summary.referringDomains,
+      )}${formatNewLost(
+        summary.newReferringDomains,
+        summary.lostReferringDomains,
+      )}`,
+      `- referring pages: ${formatMcpCell(summary.referringPages)}`,
+      `- rank: ${formatMcpCell(summary.rank)}`,
+      ...optionalMetric("broken backlinks", summary.brokenBacklinks),
+      ...optionalMetric("broken pages", summary.brokenPages),
+      ...optionalMetric("backlinks spam score", summary.backlinksSpamScore),
+      ...optionalMetric("target spam score", summary.targetSpamScore),
       "",
       refDomains === null
         ? "Referring-domains breakdown unavailable for subfolder scope."
         : topDomains.length === 0
           ? "No referring domains found."
-          : `Referring domains (${topDomains.length}):\n${formatMcpTable(topDomains, REFERRING_DOMAIN_COLUMNS)}`,
+          : `Referring domains (top ${topDomains.length} of ${formatMcpCell(summary.referringDomains)}):\n${formatMcpTable(topDomains, REFERRING_DOMAIN_COLUMNS)}`,
     ].join("\n");
     return mcpResponse({
       text,

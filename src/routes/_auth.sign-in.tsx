@@ -1,21 +1,29 @@
-import { useForm } from "@tanstack/react-form";
-import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import {
-  AuthPageCard,
-  AuthMethodChooser,
-  authRedirectSearchSchema,
-  useAuthPageState,
-} from "@/client/features/auth/AuthPage";
-import { getFieldError, getFormError } from "@/client/lib/forms";
-import { captureClientEvent } from "@/client/lib/posthog";
-import { authClient } from "@/lib/auth-client";
 import {
   isAuthentikAuthEnabled,
   isGoogleAuthDisabled,
   isSignupDisabled,
 } from "@/lib/auth-mode";
-import { getSignInSearch, getVerifyEmailSearch } from "@/lib/auth-redirect";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
+import { useAppForm } from "@/client/components/form/useAppForm";
+import { Button } from "@/client/components/ui/button";
+import {
+  AuthPageCard,
+  AuthMethodChooser,
+  authInputClassName,
+  authSubmitClassName,
+  authRedirectSearchSchema,
+  useAuthPageState,
+} from "@/client/features/auth/AuthPage";
+import { useGoogleAuth } from "@/client/features/auth/useGoogleAuth";
+import { getFormError } from "@/client/lib/forms";
+import { captureClientEvent } from "@/client/lib/posthog";
+import { authClient } from "@/lib/auth-client";
+import {
+  getSignInSearch,
+  getVerifyEmailSearch,
+  toAuthCallbackURL,
+} from "@/lib/auth-redirect";
 import { z } from "zod";
 
 const signInSchema = z.object({
@@ -34,15 +42,34 @@ function SignInPage() {
   const { redirectTo, oauthQuery, isHostedMode } = useAuthPageState(
     search.redirect,
   );
-  const authCallbackURL = redirectTo;
-  // Without Google or Authentik there is no chooser — open the email form.
   const [showEmailForm, setShowEmailForm] = useState(
     isGoogleAuthDisabled() && !isAuthentikAuthEnabled(),
   );
-  const [isStartingGoogle, setIsStartingGoogle] = useState(false);
-  const [socialError, setSocialError] = useState<string | null>(null);
+  const google = useGoogleAuth({ redirectTo });
+  const [isStartingAuthentik, setIsStartingAuthentik] = useState(false);
+  const [authentikError, setAuthentikError] = useState<string | null>(null);
+  async function handleContinueWithAuthentik() {
+    setAuthentikError(null);
+    setIsStartingAuthentik(true);
+    try {
+      const result = await authClient.signIn.oauth2({
+        providerId: "authentik",
+        callbackURL: toAuthCallbackURL(redirectTo),
+      });
+      if (result.error) {
+        setAuthentikError(
+          result.error.message ||
+            "Zentrale Anmeldung ist gerade nicht verfügbar.",
+        );
+        setIsStartingAuthentik(false);
+      } else if (result.data?.url) window.location.href = result.data.url;
+    } catch {
+      setAuthentikError("Zentrale Anmeldung ist gerade nicht verfügbar.");
+      setIsStartingAuthentik(false);
+    }
+  }
 
-  const form = useForm({
+  const form = useAppForm({
     defaultValues: {
       email: "",
       password: "",
@@ -60,7 +87,7 @@ function SignInPage() {
         const result = await authClient.signIn.email({
           email,
           password: value.password,
-          callbackURL: authCallbackURL,
+          callbackURL: toAuthCallbackURL(redirectTo),
           ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
         });
 
@@ -102,55 +129,6 @@ function SignInPage() {
     },
   });
 
-  // LEIFKEN landscape SSO: central login through Authentik (auth.leifken.ai),
-  // wired via the better-auth genericOAuth provider in auth-config.ts.
-  async function handleContinueWithAuthentik() {
-    setSocialError(null);
-    setIsStartingGoogle(true);
-    try {
-      const result = await authClient.signIn.oauth2({
-        providerId: "authentik",
-        callbackURL: authCallbackURL,
-      });
-      if (result.error) {
-        setSocialError(
-          result.error.message || "Central sign-in is not available right now.",
-        );
-        setIsStartingGoogle(false);
-      } else if (result.data?.url) {
-        window.location.href = result.data.url;
-      }
-    } catch {
-      setSocialError("Central sign-in is not available right now.");
-      setIsStartingGoogle(false);
-    }
-  }
-
-  async function handleContinueWithGoogle() {
-    setSocialError(null);
-    setIsStartingGoogle(true);
-
-    try {
-      captureClientEvent("auth:sign_in_google_start", {
-        redirect_to: redirectTo,
-      });
-      const result = await authClient.signIn.social({
-        provider: "google",
-        callbackURL: authCallbackURL,
-      });
-
-      if (result.error) {
-        setSocialError(
-          result.error.message || "Google sign in is not available right now.",
-        );
-        setIsStartingGoogle(false);
-      }
-    } catch {
-      setSocialError("Google sign in is not available right now.");
-      setIsStartingGoogle(false);
-    }
-  }
-
   return (
     <AuthPageCard
       title="Sign in"
@@ -159,15 +137,15 @@ function SignInPage() {
           <div
             className={
               showEmailForm
-                ? "flex justify-between text-sm text-base-content/50"
-                : "text-sm text-base-content/50"
+                ? "flex w-full justify-between text-sm text-foreground/50"
+                : "w-full text-sm text-foreground/50"
             }
           >
             {showEmailForm ? (
               <Link
                 to="/forgot-password"
                 search={getSignInSearch(redirectTo)}
-                className="text-base-content underline underline-offset-2 hover:text-base-content/80 transition-colors"
+                className="text-foreground underline underline-offset-2 hover:text-foreground/80 transition-colors"
               >
                 Forgot password?
               </Link>
@@ -176,7 +154,7 @@ function SignInPage() {
               <Link
                 to="/sign-up"
                 search={getSignInSearch(redirectTo)}
-                className="text-base-content underline underline-offset-2 hover:text-base-content/80 transition-colors"
+                className="text-foreground underline underline-offset-2 hover:text-foreground/80 transition-colors"
               >
                 Create account
               </Link>
@@ -185,133 +163,96 @@ function SignInPage() {
         ) : null
       }
     >
-      {isAuthentikAuthEnabled() && !showEmailForm ? (
-        // LEIFKEN landscape SSO: one central login for everything. The
-        // password form stays reachable as a fail-safe (OL-CRM principle:
-        // an SSO outage must never lock the admin out).
+      {!showEmailForm ? (
         <>
-          <button
-            type="button"
-            className="btn btn-primary w-full"
-            onClick={() => {
-              void handleContinueWithAuthentik();
-            }}
-            disabled={!isHostedMode || isStartingGoogle}
-          >
-            {isStartingGoogle ? "Redirecting..." : "Sign in with LEIFKEN AI"}
-          </button>
-          {socialError ? (
-            <p className="text-sm text-error">{socialError}</p>
+          {isAuthentikAuthEnabled() ? (
+            <Button
+              type="button"
+              className="w-full"
+              onClick={() => void handleContinueWithAuthentik()}
+              disabled={isStartingAuthentik}
+            >
+              {isStartingAuthentik
+                ? "Anmeldung wird geöffnet…"
+                : "Mit LEIFKEN AI anmelden"}
+            </Button>
           ) : null}
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm w-full text-base-content/60"
-            onClick={() => {
-              setShowEmailForm(true);
-              setSocialError(null);
-            }}
-          >
-            Sign in with password instead
-          </button>
-        </>
-      ) : !showEmailForm ? (
-        <>
+          {authentikError ? (
+            <p className="text-sm text-destructive">{authentikError}</p>
+          ) : null}
           <AuthMethodChooser
             googleLabel="Continue with Google"
             disabled={!isHostedMode}
-            isBusy={isStartingGoogle}
+            isBusy={google.isStarting}
             onContinueWithGoogle={() => {
-              void handleContinueWithGoogle();
+              void google.start();
             }}
             onContinueWithEmail={() => {
               setShowEmailForm(true);
-              setSocialError(null);
+              google.clearError();
             }}
           />
-          {socialError ? (
-            <p className="text-sm text-error">{socialError}</p>
+          {google.error ? (
+            <p className="text-sm text-destructive">{google.error}</p>
           ) : null}
         </>
       ) : (
-        <form
-          className="space-y-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void form.handleSubmit();
-          }}
-        >
-          <form.Field name="email">
-            {(field) => {
-              const error = getFieldError(field.state.meta.errors);
+        <form.AppForm>
+          <form.Form className="space-y-4">
+            <form.AppField name="email">
+              {(field) => (
+                <field.TextField
+                  label="Email address"
+                  hideLabel
+                  className={authInputClassName}
+                  type="email"
+                  placeholder="Email address..."
+                  autoComplete="email"
+                  required
+                />
+              )}
+            </form.AppField>
+            <form.AppField name="password">
+              {(field) => (
+                <field.TextField
+                  label="Password"
+                  hideLabel
+                  className={authInputClassName}
+                  type="password"
+                  placeholder="Password..."
+                  autoComplete="current-password"
+                  required
+                />
+              )}
+            </form.AppField>
 
-              return (
-                <div>
-                  <input
-                    type="email"
-                    className="input input-bordered w-full"
-                    placeholder="Email address..."
-                    value={field.state.value}
-                    onChange={(event) => field.handleChange(event.target.value)}
-                    autoComplete="email"
-                    disabled={!isHostedMode}
-                    required
-                  />
-                  {error ? (
-                    <p className="mt-1 text-sm text-error">{error}</p>
-                  ) : null}
-                </div>
-              );
-            }}
-          </form.Field>
-
-          <form.Field name="password">
-            {(field) => {
-              const error = getFieldError(field.state.meta.errors);
-
-              return (
-                <div>
-                  <input
-                    type="password"
-                    className="input input-bordered w-full"
-                    placeholder="Password..."
-                    value={field.state.value}
-                    onChange={(event) => field.handleChange(event.target.value)}
-                    autoComplete="current-password"
-                    disabled={!isHostedMode}
-                    required
-                  />
-                  {error ? (
-                    <p className="mt-1 text-sm text-error">{error}</p>
-                  ) : null}
-                </div>
-              );
-            }}
-          </form.Field>
-
-          <form.Subscribe
-            selector={(state) => ({
-              submitError: state.errorMap.onSubmit,
-              isSubmitting: state.isSubmitting,
-            })}
-          >
-            {({ submitError, isSubmitting }) => {
-              const errorMessage = getFormError(submitError);
-              return (
-                <>
-                  {errorMessage ? (
-                    <p className="text-sm text-error">{errorMessage}</p>
-                  ) : null}
-                  <button
-                    className="btn btn-primary w-full"
-                    disabled={!isHostedMode || isSubmitting}
-                  >
-                    {isSubmitting ? "Signing in..." : "Sign in"}
-                  </button>
-                </>
-              );
-            }}
-          </form.Subscribe>
-        </form>
+            <form.Subscribe
+              selector={(state) => ({
+                submitError: state.errorMap.onSubmit,
+                isSubmitting: state.isSubmitting,
+              })}
+            >
+              {({ submitError, isSubmitting }) => {
+                const errorMessage = getFormError(submitError);
+                return (
+                  <>
+                    {errorMessage ? (
+                      <p className="text-sm text-destructive">{errorMessage}</p>
+                    ) : null}
+                    <Button
+                      type="submit"
+                      variant="secondary"
+                      className={authSubmitClassName}
+                      pending={isSubmitting}
+                    >
+                      {isSubmitting ? "Signing in..." : "Sign in"}
+                    </Button>
+                  </>
+                );
+              }}
+            </form.Subscribe>
+          </form.Form>
+        </form.AppForm>
       )}
     </AuthPageCard>
   );

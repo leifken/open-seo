@@ -1,9 +1,10 @@
+import { SiteAuditWorkflow } from "../server/workflows/SiteAuditWorkflow";
 // TanStack Start server entry for the Node build (vite.config.node.ts).
 // Delegates every request to the untouched upstream Worker entry
 // (src/server.ts) with a Node-built env and ExecutionContext, and replaces
 // the wrangler cron triggers with in-process timers.
 import { installCfWebSocketGlobals } from "./cf-websocket-globals";
-import server, { SiteAuditWorkflow, RankCheckWorkflow } from "../server";
+import server, { RankCheckWorkflow, AiVisibilityWorkflow } from "../server";
 import { nodeEnv } from "./env";
 import { waitUntil } from "./cf-workers-shim";
 import { registerWorkflows, startWorkflowWorker } from "./workflow-engine";
@@ -13,6 +14,7 @@ import { registerWorkflows, startWorkflowWorker } from "./workflow-engine";
 installCfWebSocketGlobals();
 
 const makeCtx = (): ExecutionContext =>
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Node implements the Cloudflare surface used by the worker
   ({
     waitUntil,
     passThroughOnException() {},
@@ -27,11 +29,7 @@ const MCP_OAUTH_PURGE_CRON = "17 3 * * *";
 function runScheduled(cron: string) {
   const controller = { cron, scheduledTime: Date.now() };
   Promise.resolve(
-    server.scheduled?.(
-      controller as unknown as ScheduledController,
-      nodeEnv,
-      makeCtx(),
-    ),
+    server.scheduled?.({ ...controller, noRetry() {} }, nodeEnv, makeCtx()),
   ).catch((err) => console.error(`[node-runtime] cron ${cron} failed:`, err));
 }
 
@@ -73,7 +71,9 @@ function startCron() {
   };
   setTimeout(tickDaily, msUntilNextDailyUtc(3, 17)).unref?.();
 
-  console.log("[node-runtime] cron timers armed (*/5 rank+reconcile, 03:17 UTC oauth purge)");
+  console.log(
+    "[node-runtime] cron timers armed (*/5 rank+reconcile, 03:17 UTC oauth purge)",
+  );
 }
 
 // Guard against double-arming across dev-server module reloads.
@@ -87,15 +87,17 @@ if (!globalState[CRON_FLAG] && process.env.DISABLE_CRON !== "1") {
 // The workflow worker runs in-process. Workflow classes come from the
 // untouched upstream entry's named exports; the registry keys must match the
 // names used by makeWorkflowBinding in env.ts.
-registerWorkflows({ SiteAuditWorkflow, RankCheckWorkflow });
+registerWorkflows({
+  SiteAuditWorkflow,
+  RankCheckWorkflow,
+  AiVisibilityWorkflow,
+});
 
 // Provision the single admin account (no-op unless ADMIN_EMAIL/ADMIN_PASSWORD
 // are set and the user doesn't exist yet).
 import("./bootstrap-admin")
   .then(({ bootstrapAdminAccount }) => bootstrapAdminAccount())
-  .catch((err) =>
-    console.error("[node-runtime] admin bootstrap failed:", err),
-  );
+  .catch((err) => console.error("[node-runtime] admin bootstrap failed:", err));
 const WORKER_FLAG = Symbol.for("openseo.node-runtime.workflow-worker");
 if (!globalState[WORKER_FLAG] && process.env.DISABLE_WORKFLOW_WORKER !== "1") {
   globalState[WORKER_FLAG] = true;

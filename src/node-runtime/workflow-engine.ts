@@ -16,6 +16,7 @@
 // the server entry) — one container, no separate deployment unit.
 import { Queue, Worker, type Job } from "bullmq";
 import postgres from "postgres";
+import { z } from "zod";
 
 type StepConfig = {
   retries?: { limit: number; delay: string | number; backoff?: string };
@@ -92,9 +93,10 @@ function getQueue(): Queue {
 function parseDuration(value: string | number | undefined): number {
   if (value === undefined) return 0;
   if (typeof value === "number") return value;
-  const match = /^(\d+(?:\.\d+)?)\s*(ms|milliseconds?|s|seconds?|m|minutes?|h|hours?|d|days?)$/.exec(
-    value.trim(),
-  );
+  const match =
+    /^(\d+(?:\.\d+)?)\s*(ms|milliseconds?|s|seconds?|m|minutes?|h|hours?|d|days?)$/.exec(
+      value.trim(),
+    );
   if (!match) throw new Error(`Unparseable workflow duration: ${value}`);
   const amount = Number(match[1]);
   const unit = match[2];
@@ -123,12 +125,14 @@ class WorkflowTerminatedError extends Error {
 class NodeWorkflowStep {
   constructor(private readonly instanceId: string) {}
 
-  private async memoized(stepName: string): Promise<{ hit: boolean; output?: unknown }> {
-    const rows = await sql()`
+  private async memoized(
+    stepName: string,
+  ): Promise<{ hit: boolean; output?: unknown }> {
+    const rows = await sql()<{ output: string | null }[]>`
       select output from node_workflow_steps
       where instance_id = ${this.instanceId} and step_name = ${stepName}`;
     if (rows.length === 0) return { hit: false };
-    const raw = rows[0].output as string | null;
+    const raw = rows[0].output;
     return { hit: true, output: raw === null ? undefined : JSON.parse(raw) };
   }
 
@@ -149,11 +153,17 @@ class NodeWorkflowStep {
   }
 
   // Overloads mirror step.do(name, fn) and step.do(name, config, fn).
-  async do<T>(name: string, configOrFn: StepConfig | (() => Promise<T>), maybeFn?: () => Promise<T>): Promise<T> {
+  async do<T>(
+    name: string,
+    configOrFn: StepConfig | (() => Promise<T>),
+    maybeFn?: () => Promise<T>,
+  ): Promise<T> {
     const config = typeof configOrFn === "function" ? undefined : configOrFn;
     const fn = typeof configOrFn === "function" ? configOrFn : maybeFn!;
 
     const cached = await this.memoized(name);
+    // The persisted result was produced by this named step before a restart.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- generic replay cannot be validated without a caller-provided schema
     if (cached.hit) return cached.output as T;
 
     await this.assertNotTerminated();
@@ -198,7 +208,7 @@ class NodeWorkflowStep {
     const stepName = `sleep:${name}`;
     const cached = await this.memoized(stepName);
     const wakeAt = cached.hit
-      ? (cached.output as number)
+      ? z.number().parse(cached.output)
       : Date.now() + parseDuration(duration);
     if (!cached.hit) await this.persist(stepName, wakeAt);
     const remaining = wakeAt - Date.now();
@@ -209,12 +219,17 @@ class NodeWorkflowStep {
   }
 
   async sleepUntil(name: string, timestamp: Date | number): Promise<void> {
-    const wakeAt = typeof timestamp === "number" ? timestamp : timestamp.getTime();
+    const wakeAt =
+      typeof timestamp === "number" ? timestamp : timestamp.getTime();
     await this.sleep(name, Math.max(0, wakeAt - Date.now()));
   }
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(
       () => reject(new Error(`Step "${label}" timed out after ${ms}ms`)),
@@ -245,28 +260,31 @@ async function setRunStatus(
       and status not in ('terminated', 'complete')`;
 }
 
-async function processJob(job: Job): Promise<void> {
-  const { workflowName, instanceId } = job.data as {
-    workflowName: string;
-    instanceId: string;
-  };
-  const rows = await sql()`
+async function processJob(job: Job<unknown>): Promise<void> {
+  const { workflowName, instanceId } = z
+    .object({ workflowName: z.string(), instanceId: z.string() })
+    .parse(job.data);
+  const rows = await sql()<
+    { params: string; status: string; created_at: Date }[]
+  >`
     select params, status, created_at from node_workflow_runs where id = ${instanceId}`;
   if (rows.length === 0) throw new Error(`Run row missing for ${instanceId}`);
   if (["terminated", "complete", "errored"].includes(rows[0].status)) return;
 
   const WorkflowCtor = registry.get(workflowName);
-  if (!WorkflowCtor) throw new Error(`No workflow registered as ${workflowName}`);
+  if (!WorkflowCtor)
+    throw new Error(`No workflow registered as ${workflowName}`);
 
   await setRunStatus(instanceId, "running");
   const { nodeEnv } = await import("./env");
   const instance = new WorkflowCtor({}, nodeEnv);
   const step = new NodeWorkflowStep(instanceId);
   try {
+    const payload: unknown = JSON.parse(rows[0].params);
     await instance.run(
       {
-        payload: JSON.parse(rows[0].params as string),
-        timestamp: new Date(rows[0].created_at as string),
+        payload,
+        timestamp: new Date(rows[0].created_at),
         instanceId,
       },
       step,
@@ -282,7 +300,9 @@ async function processJob(job: Job): Promise<void> {
   }
 }
 
-export function registerWorkflows(classes: Record<string, WorkflowClass>): void {
+export function registerWorkflows(
+  classes: Record<string, WorkflowClass>,
+): void {
   for (const [name, ctor] of Object.entries(classes)) {
     registry.set(name, ctor);
   }
@@ -332,11 +352,13 @@ export function makeWorkflowBinding(workflowName: string) {
       return {
         id: instanceId,
         async status() {
-          const current = await sql()`
+          const current = await sql()<
+            { status: string; error: string | null }[]
+          >`
             select status, error from node_workflow_runs where id = ${instanceId}`;
           return {
-            status: (current[0]?.status ?? "unknown") as string,
-            error: (current[0]?.error as string | null) ?? undefined,
+            status: current[0]?.status ?? "unknown",
+            error: current[0]?.error ?? undefined,
           };
         },
         async terminate() {

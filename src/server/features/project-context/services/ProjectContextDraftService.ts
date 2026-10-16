@@ -1,3 +1,7 @@
+import {
+  getRequiredEnvValue,
+  getOptionalEnvValue,
+} from "@/server/lib/runtime-env";
 // LEIFKEN addition: draft the project context straight from the project's own
 // website, so a new project doesn't start with four empty text boxes. Reads a
 // handful of pages with the existing scraper (SSRF-guarded, no credits), has
@@ -7,7 +11,7 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import { readSite } from "@/server/lib/scrape";
-import { getChatAgentModel } from "@/server/lib/openrouter";
+import { buildChatAgentModel } from "@/server/lib/openrouter";
 import { openRouterCostUsd } from "@/server/lib/chatAgent";
 import { AppError } from "@/server/lib/errors";
 import { isHostedServerAuthMode } from "@/server/lib/runtime-env";
@@ -72,7 +76,10 @@ async function draftFromPages(
   domain: string,
   pages: { url: string; title: string | null; text: string }[],
 ) {
-  const model = await getChatAgentModel();
+  const model = buildChatAgentModel(
+    await getRequiredEnvValue("OPENROUTER_API_KEY"),
+    (await getOptionalEnvValue("OPENROUTER_MODEL")) ?? undefined,
+  );
   const corpus = pages
     .map((p) => `## ${p.title ?? p.url}\nURL: ${p.url}\n\n${p.text}`)
     .join("\n\n---\n\n");

@@ -3,9 +3,19 @@ title: "Install the OpenSEO plugin for Codex"
 description: "Add OpenSEO MCP and Agent Skills to Codex with one marketplace and one install command."
 ---
 
-The OpenSEO plugin bundles OpenSEO MCP and all nine SEO Agent Skills into one install. This is the preferred way to set up OpenSEO in Codex CLI.
+The OpenSEO plugin bundles OpenSEO MCP and all twelve SEO Agent Skills into one install. This is the preferred way to set up OpenSEO in Codex CLI.
 
-## Install
+## Desktop app
+
+In the ChatGPT desktop app, open **Codex** and start a new chat. Paste the [agent setup prompt](/docs/agent-setup#set-up-your-agent) so Codex can configure OpenSEO and guide you through sign-in.
+
+If OpenSEO appears in your **Plugins** directory, install it, approve the OpenSEO sign-in, and start a new Codex chat. If the listing is missing, use the setup prompt or the CLI steps below.
+
+Ask: “Use OpenSEO to check my connection and list my projects.” The check uses no OpenSEO credits. A tool call followed by your projects, or an empty list, confirms that this chat is connected.
+
+Check [OpenAI's plan support](https://learn.chatgpt.com/docs/pricing) for access to your Codex client. Installing in Codex does not connect a regular chat on chatgpt.com. For that, use the [ChatGPT guide](/docs/chatgpt).
+
+## Install in the CLI
 
 Run these commands in your terminal:
 
@@ -17,26 +27,36 @@ codex mcp login openseo
 
 `codex mcp login` opens a browser to approve the OpenSEO connection. If it reports that `openseo` isn't found, restart Codex first — bundled MCP servers only register after a restart, not immediately after install — then run `codex mcp login openseo` again.
 
-Codex connects OpenSEO MCP at `https://app.openseo.so/mcp` and enables nine skills:
+Codex connects OpenSEO MCP at `https://app.openseo.so/mcp` and enables twelve skills:
 
 - SEO Project Setup
 - SEO Coach
 - SEO Audit
+- AI Visibility Audit
+- AI Prompt Research
 - Keyword Research
 - Keyword Clustering
 - Competitive Landscape
 - Competitor Analysis
 - Local SEO
 - Link Prospecting
+- SEO Report
 
 ## Run a skill
 
 Type `$` in Codex to see available skills, or ask Codex to run one by name, for example "run seo-project-setup" or "run seo-audit on example.com".
 
-## Update or remove
+## Update
 
 ```bash
 codex plugin marketplace upgrade openseo
+```
+
+Reload or restart Codex if the updated skills are not available. For other installation methods, see [Agent setup and skill updates](/docs/agent-setup#update-your-skills).
+
+## Remove
+
+```bash
 codex plugin remove openseo@openseo
 ```
 
@@ -55,4 +75,4 @@ If a `codex plugin` command reports "unrecognized subcommand," run `codex plugin
 
 ## Other clients
 
-This plugin is for Codex CLI. For Claude Code, use the [OpenSEO plugin for Claude Code](/docs/claude-code-plugin) instead. For Claude Desktop, Cursor, Codex Desktop, or an API key setup, see [Set up OpenSEO MCP](/docs/mcp) and [Set up OpenSEO Agent Skills](/docs/skills/setup).
+For ChatGPT web, use the [ChatGPT setup guide](/docs/chatgpt). For Claude Code or Claude Cowork, use the [OpenSEO plugin for Claude](/docs/claude-code-plugin) instead. For Cursor or an API key setup, see [Set up OpenSEO MCP](/docs/mcp) and [Set up OpenSEO Agent Skills](/docs/skills/setup).

@@ -1,8 +1,11 @@
-import { getAuth } from "@/lib/auth";
-import { getAuditScratchpad } from "@/server/features/audit/AuditScratchpad";
-import type { OnboardingChatAgent } from "@/server/features/onboarding/OnboardingChatAgent";
+import { getGoogleAccessToken } from "@/server/features/google/googleOAuth";
 import type { SamChatAgent } from "@/server/features/sam/SamChatAgent";
 import { captureServerError } from "@/server/lib/posthog";
+import { deleteProjectAiObjects } from "@/server/features/ai-visibility/services/aiVisibilityStorage";
+import {
+  DUB_REFERRED_ORG_KV_PREFIX,
+  DUB_REFERRED_USER_KV_PREFIX,
+} from "@/server/referrals/dub";
 import {
   AI_SEARCH_PROMPT_CACHE_NAMESPACE,
   cacheObjectPrefix,
@@ -137,22 +140,18 @@ async function revokeGoogleAccount(
   userId: string,
   account: GdprStorageErasurePayload["googleAccounts"][number],
 ): Promise<GoogleRevocationResult> {
-  let accessToken: string | undefined;
+  let accessToken: string;
   try {
-    const result = await getAuth().api.getAccessToken({
-      body: {
-        userId,
-        providerId: account.providerId,
-        accountId: account.accountId,
-      },
+    accessToken = await getGoogleAccessToken({
+      userId,
+      providerId: account.providerId,
+      accountId: account.accountId,
     });
-    accessToken = result?.accessToken;
   } catch {
-    // If Better Auth cannot mint a token, the locally stored grant is no longer
-    // usable. The Postgres transaction still removes its encrypted token row.
+    // If no token can be minted, the locally stored grant is no longer usable.
+    // The Postgres transaction still removes its encrypted token row.
     return { ...account, status: "token_unavailable" };
   }
-  if (!accessToken) return { ...account, status: "token_unavailable" };
 
   const response = await fetch(GOOGLE_REVOKE_URL, {
     method: "POST",
@@ -180,6 +179,15 @@ async function eraseStorage(env: Env, payload: GdprStorageErasurePayload) {
     env.RANK_CHECK_WORKFLOW,
     payload.activeRankWorkflowIds,
   );
+  const aiWorkflowsTerminated = await terminateWorkflows(
+    env.AI_VISIBILITY_WORKFLOW,
+    [
+      ...payload.activeAiVisibilityWorkflowIds,
+      ...payload.aiVisibilityProjectIds.map(
+        (projectId) => `ai-research-setup-${projectId}`,
+      ),
+    ],
+  );
 
   const googleRevocations: GoogleRevocationResult[] = [];
   for (const account of payload.googleAccounts) {
@@ -194,22 +202,24 @@ async function eraseStorage(env: Env, payload: GdprStorageErasurePayload) {
   for (const sessionId of payload.samSessionIds) {
     await samChat.get(samChat.idFromName(sessionId)).destroyForErasure();
   }
-  const onboardingChat =
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the binding is declared as this class in wrangler.jsonc
-    env.ONBOARDING_CHAT as unknown as DurableObjectNamespace<OnboardingChatAgent>;
-  for (const projectId of payload.projectIds) {
-    await onboardingChat
-      .get(onboardingChat.idFromName(projectId))
-      .destroyForErasure();
-  }
   for (const auditId of payload.auditIds) {
-    await getAuditScratchpad(auditId).destroyForErasure();
+    // The scratchpad DO lives in the open-seo-audit worker; destroy is the
+    // same full wipe destroyForErasure performs.
+    await env.AUDIT_ENGINE.destroyScratchpad(auditId);
     await env.KV.delete(`audit-progress:${auditId}`);
   }
   // The autumn:customer-ensured KV markers are deliberately left alone: they
   // hold no personal data (org id key, "1" value), expire on their own 24h
   // TTL, and clearing them would let an in-flight authenticated request
   // re-create the Autumn customer before the Postgres delete lands.
+
+  // Dub referral pins key on user/org ids and store a referral click
+  // identifier. The Dub-side customer record (pseudonymous external id) is
+  // removed via the erasure runbook.
+  await env.KV.delete(`${DUB_REFERRED_USER_KV_PREFIX}${payload.userId}`);
+  for (const organizationId of payload.organizationIds) {
+    await env.KV.delete(`${DUB_REFERRED_ORG_KV_PREFIX}${organizationId}`);
+  }
 
   for (let index = 0; index < payload.r2Keys.length; index += 1_000) {
     await env.R2.delete(payload.r2Keys.slice(index, index + 1_000));
@@ -218,16 +228,20 @@ async function eraseStorage(env: Env, payload: GdprStorageErasurePayload) {
     env.R2,
     payload.organizationIds,
   );
+  let aiVisibilityObjects = 0;
+  for (const projectId of payload.aiVisibilityProjectIds) {
+    aiVisibilityObjects += await deleteProjectAiObjects(env.R2, projectId);
+  }
 
   const oauth = await deleteOauthGrants(env.OAUTH_KV, payload.userId);
   return {
     workflows: {
       auditTerminated: auditWorkflowsTerminated,
       rankTerminated: rankWorkflowsTerminated,
+      aiVisibilityTerminated: aiWorkflowsTerminated,
     },
     durableObjects: {
       sam: payload.samSessionIds.length,
-      onboarding: payload.projectIds.length,
       auditScratchpads: payload.auditIds.length,
     },
     kv: {
@@ -237,6 +251,7 @@ async function eraseStorage(env: Env, payload: GdprStorageErasurePayload) {
     },
     r2Objects: payload.r2Keys.length,
     promptCacheObjects,
+    aiVisibilityObjects,
     googleRevocations,
   };
 }
@@ -290,6 +305,8 @@ export async function handleGdprStorageErasure(
     // Raw fetch handlers run outside the server-function middleware, so
     // nothing else reports failures here.
     console.error("gdpr.storage-erasure failed:", error);
+    // Deliberately anonymous: this request erases the user, so keying the
+    // exception to their distinct id would recreate the person profile.
     await captureServerError(error, { source: "gdpr_storage_erasure" });
     return Response.json({ error: "Erasure failed" }, { status: 500 });
   }

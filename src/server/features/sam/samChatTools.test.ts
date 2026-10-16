@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Tool } from "ai";
-import { waitingAuditStatusTool } from "./samChatTools";
+import { toModelOutput, waitingAuditStatusTool } from "./samChatTools";
 
 vi.mock("cloudflare:workers", () => ({
   env: {},
@@ -56,5 +56,32 @@ describe("waitingAuditStatusTool", () => {
       summary: "phase lighthouse, 56/56 pages",
     });
     expect(execute).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("toModelOutput", () => {
+  const rows = Array.from({ length: 40 }, (_, i) => ({ keyword: `kw ${i}` }));
+  const text = rows.map((row) => `| ${row.keyword} | 100 |`).join("\n");
+
+  it("keeps only the head of the text when the structured data carries the rows", () => {
+    const out = toModelOutput({
+      content: [{ type: "text", text }],
+      structuredContent: { rows },
+    });
+    expect(out.data).toEqual({ rows });
+    expect(out.summary.length).toBeLessThan(text.length);
+    expect(out.summary).toContain("(full rows in data)");
+  });
+
+  it("keeps the full text when structuredContent is only a meta deep link", () => {
+    expect(
+      toModelOutput({
+        content: [{ type: "text", text }],
+        structuredContent: { meta: { url: "https://example.com" } },
+      }),
+    ).toEqual({
+      summary: text,
+      data: { meta: { url: "https://example.com" } },
+    });
   });
 });

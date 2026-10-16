@@ -1,3 +1,4 @@
+import { sort } from "remeda";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { DataforseoApiCallCost } from "@/server/lib/dataforseo/envelope";
 
@@ -44,11 +45,7 @@ export function roundUsd(value: number): number {
 export function recordDataforseoCost(billing: DataforseoApiCallCost): void {
   const costUsd = Number.isFinite(billing.costUsd) ? billing.costUsd : 0;
   const path = billing.path.join("/");
-  for (
-    let ledger = ledgerStorage.getStore();
-    ledger;
-    ledger = ledger.parent
-  ) {
+  for (let ledger = ledgerStorage.getStore(); ledger; ledger = ledger.parent) {
     const entry = ledger.entries.get(path) ?? { calls: 0, costUsd: 0 };
     entry.calls += 1;
     entry.costUsd += costUsd;
@@ -72,7 +69,7 @@ function summarize(ledger: Ledger): DataforseoCostSummary {
   return {
     costUsd: roundUsd(costUsd),
     dataforseoCalls,
-    costBreakdown: costBreakdown.toSorted((a, b) => b.costUsd - a.costUsd),
+    costBreakdown: sort(costBreakdown, (a, b) => b.costUsd - a.costUsd),
   };
 }
 

@@ -2,10 +2,11 @@
  * Per-audit crawl scratchpad — a SQLite-backed Durable Object.
  *
  * Holds all transient crawl state for one audit (id = auditId): the frontier
- * (URL queue + seen-set), the internal-link edges, and a slim mirror of page
- * rows. This keeps chatty crawl-loop writes off Postgres, removes the ~1MiB
- * Workflow step-output limits (nothing large flows through step returns
- * anymore), and gives the finalize link checks a local SQL database.
+ * (URL queue + seen-set), each page's internal link targets, and a slim
+ * mirror of page rows. This keeps chatty crawl-loop writes off Postgres,
+ * removes the ~1MiB Workflow step-output limits (nothing large flows through
+ * step returns anymore), and gives the finalize link checks a local SQL
+ * database.
  *
  * Lifecycle: seeded by the discover-urls step, read/written by every crawl
  * chunk, queried once at finalize, then destroyed on success. A self-cleanup
@@ -13,11 +14,18 @@
  * write racing in after destroy() — is wiped after 7 days (failed audits'
  * state doubles as the resume/debug artifact until then).
  *
- * All methods are synchronous inside (SQLite in DOs is sync), so each RPC is
- * effectively atomic. Writes are idempotent: the workflow retries steps, so
+ * SQL mutations are synchronous; key-value checkpoints await durable writes.
+ * Writes are idempotent: the workflow retries steps, so
  * every insert is OR IGNORE / OR REPLACE on a stable key.
  */
 import { DurableObject, env } from "cloudflare:workers";
+import type { CrawlThrottleState } from "@/server/lib/audit/crawl-throttle";
+import {
+  BROKEN_LINKS_SQL,
+  FRONTIER_DISCOVER_SQL,
+  ORPHAN_PAGES_SQL,
+  SCRATCHPAD_SCHEMA_SQL,
+} from "@/server/features/audit/scratchpad-sql";
 
 export interface ClaimedUrl {
   url: string;
@@ -54,19 +62,19 @@ interface ScratchpadPageRow {
   redirectUrl: string | null;
 }
 
-export interface ScratchpadLinkRow {
-  sourcePageId: string;
-  sourceUrl: string;
-  targetUrl: string;
-  anchor: string | null;
-  isNofollow: boolean;
+/** One crawled page's internal link targets — the whole row is one write. */
+export interface ScratchpadPageLinksRow {
+  pageId: string;
+  url: string;
+  /** Same-origin link targets, already deduped by the page analyzer. */
+  targets: string[];
 }
 
 interface RecordBatchInput {
   /** URLs whose crawl attempt finished (successfully or not). */
   crawledUrls: string[];
   pages: ScratchpadPageRow[];
-  links: ScratchpadLinkRow[];
+  links: ScratchpadPageLinksRow[];
   /** Newly discovered same-origin URLs to enqueue (already policy-filtered). */
   discovered: Array<{ url: string; depth: number | null }>;
 }
@@ -86,10 +94,10 @@ interface OrphanPageRow {
 const BROKEN_LINK_ISSUE_CAP = 2_000;
 const CLEANUP_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 /**
- * Stop storing link edges once the database reaches this size. Link rows are
- * the only unbounded-per-page data; a pathological link-dense site could
- * otherwise hit the platform's per-object SQLite cap (1 GB on the free plan
- * self-hosters may run on) and fail the crawl with SQLITE_FULL. Past the
+ * Stop storing link targets once the database reaches this size. The link
+ * arrays are the only unbounded-per-page data; a pathological link-dense site
+ * could otherwise hit the platform's per-object SQLite cap (1 GB on the free
+ * plan self-hosters may run on) and fail the crawl with SQLITE_FULL. Past the
  * budget the crawl continues — the audit just loses link-graph issues.
  */
 const LINK_STORAGE_BUDGET_BYTES = 500 * 1024 * 1024;
@@ -97,37 +105,10 @@ const LINK_STORAGE_BUDGET_BYTES = 500 * 1024 * 1024;
 export class AuditScratchpad extends DurableObject {
   constructor(ctx: DurableObjectState, workerEnv: Env) {
     super(ctx, workerEnv);
-    this.ctx.storage.sql.exec(`
-      CREATE TABLE IF NOT EXISTS frontier (
-        url TEXT PRIMARY KEY,
-        depth INTEGER,
-        source TEXT NOT NULL,
-        in_sitemap INTEGER NOT NULL DEFAULT 0,
-        state TEXT NOT NULL DEFAULT 'pending',
-        chunk_no INTEGER
-      );
-      CREATE INDEX IF NOT EXISTS frontier_claim_idx ON frontier (state, source);
-      CREATE TABLE IF NOT EXISTS links (
-        source_page_id TEXT NOT NULL,
-        source_url TEXT NOT NULL,
-        target_url TEXT NOT NULL,
-        anchor TEXT,
-        is_nofollow INTEGER NOT NULL DEFAULT 0,
-        PRIMARY KEY (source_page_id, target_url)
-      );
-      CREATE INDEX IF NOT EXISTS links_target_idx ON links (target_url);
-      CREATE TABLE IF NOT EXISTS page_mirror (
-        page_id TEXT PRIMARY KEY,
-        url TEXT NOT NULL UNIQUE,
-        status_code INTEGER,
-        fetch_class TEXT NOT NULL,
-        redirect_url TEXT
-      );
-      CREATE INDEX IF NOT EXISTS page_mirror_redirect_idx ON page_mirror (redirect_url);
-    `);
+    this.ctx.storage.sql.exec(SCRATCHPAD_SCHEMA_SQL);
     // Guarantee the cleanup alarm on EVERY instantiation, not just at seed:
     // any RPC (even one racing in right after destroy()) re-creates the
-    // tables above, and without an alarm that storage would leak forever.
+    // schema, and without an alarm that storage would leak forever.
     // blockConcurrencyWhile gates RPC delivery on its own; the returned
     // promise doesn't need observing (constructors can't await).
     void this.ctx.blockConcurrencyWhile(() => this.ensureCleanupAlarm());
@@ -138,6 +119,14 @@ export class AuditScratchpad extends DurableObject {
       `INSERT OR IGNORE INTO frontier (url, depth, source, in_sitemap) VALUES (?, 0, 'link', 0)`,
       url,
     );
+  }
+
+  async getCrawlThrottle(): Promise<CrawlThrottleState | undefined> {
+    return this.ctx.storage.get<CrawlThrottleState>("crawl-throttle");
+  }
+
+  async saveCrawlThrottle(state: CrawlThrottleState): Promise<void> {
+    await this.ctx.storage.put("crawl-throttle", state);
   }
 
   async seedSitemapUrls(urls: string[]): Promise<void> {
@@ -216,26 +205,17 @@ export class AuditScratchpad extends DurableObject {
     // once the budget trips it stays tripped — runFinalizeChecks uses the
     // same comparison to know the link graph is incomplete.
     if (this.ctx.storage.sql.databaseSize < LINK_STORAGE_BUDGET_BYTES) {
-      for (const link of input.links) {
+      for (const page of input.links) {
         this.ctx.storage.sql.exec(
-          `INSERT OR IGNORE INTO links (source_page_id, source_url, target_url, anchor, is_nofollow)
-           VALUES (?, ?, ?, ?, ?)`,
-          link.sourcePageId,
-          link.sourceUrl,
-          link.targetUrl,
-          link.anchor,
-          link.isNofollow ? 1 : 0,
+          `INSERT OR REPLACE INTO page_links (page_id, url, targets_json) VALUES (?, ?, ?)`,
+          page.pageId,
+          page.url,
+          JSON.stringify(page.targets),
         );
       }
     }
     for (const found of input.discovered) {
-      // OR IGNORE: already-seen URLs (crawled, leased, or pending) keep
-      // their existing row — this is the global dedup.
-      this.ctx.storage.sql.exec(
-        `INSERT OR IGNORE INTO frontier (url, depth, source, in_sitemap) VALUES (?, ?, 'link', 0)`,
-        found.url,
-        found.depth,
-      );
+      this.ctx.storage.sql.exec(FRONTIER_DISCOVER_SQL, found.url, found.depth);
     }
     return this.stats();
   }
@@ -271,14 +251,7 @@ export class AuditScratchpad extends DurableObject {
         source_url: string;
         target_url: string;
         target_status: number;
-      }>(
-        `SELECT l.source_page_id, l.source_url, l.target_url, m.status_code AS target_status
-         FROM links l JOIN page_mirror m ON m.url = l.target_url
-         WHERE m.status_code >= 400 AND m.fetch_class = 'ok'
-         ORDER BY l.source_page_id, l.target_url
-         LIMIT ?`,
-        BROKEN_LINK_ISSUE_CAP,
-      )
+      }>(BROKEN_LINKS_SQL, BROKEN_LINK_ISSUE_CAP)
       .toArray()
       .map((row) => ({
         sourcePageId: row.source_page_id,
@@ -296,20 +269,10 @@ export class AuditScratchpad extends DurableObject {
     const orphanPages =
       input.crawlCompleted && linkGraphComplete
         ? this.ctx.storage.sql
-            .exec<{ page_id: string; url: string }>(
-              `SELECT m.page_id, m.url FROM page_mirror m
-             WHERE m.url != ?
-               AND m.fetch_class = 'ok'
-               AND m.status_code >= 200 AND m.status_code < 300
-               AND NOT EXISTS (
-                 SELECT 1 FROM links l
-                 WHERE l.target_url = m.url AND l.source_page_id != m.page_id
-               )
-               AND NOT EXISTS (
-                 SELECT 1 FROM page_mirror r WHERE r.redirect_url = m.url
-               )`,
-              input.startUrl,
-            )
+            .exec<{
+              page_id: string;
+              url: string;
+            }>(ORPHAN_PAGES_SQL, input.startUrl)
             .toArray()
             .map((row) => ({ pageId: row.page_id, url: row.url }))
         : [];

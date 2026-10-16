@@ -4,6 +4,7 @@ import { existsSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { FEATURE_PAGE_SLUGS } from "../src/lib/feature-page-slugs.js";
+import { FREE_TOOL_PATHS } from "../src/lib/free-tools/free-tool-paths.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -25,12 +26,20 @@ const STATIC_PATHS = [
   "/docs",
   "/features",
   "/features/mcp",
-  "/backlink-checker",
+  "/tools",
   "/open-source-seo",
+  "/about",
+  "/why-openseo",
   "/google-search-console-mcp",
+  "/semrush-alternative",
+  "/semrush-pricing",
+  "/ahrefs-alternative",
+  "/ahrefs-pricing",
+  "/openseo-vs-dataforseo",
   "/roadmap",
   "/support",
   ...Object.values(FEATURE_PAGE_SLUGS).map((slug) => `/features/${slug}`),
+  ...Object.values(FREE_TOOL_PATHS),
 ];
 
 function getContentEntries(

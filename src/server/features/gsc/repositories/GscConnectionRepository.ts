@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { gscConnections } from "@/db/schema";
 
@@ -55,26 +55,8 @@ async function deleteByProjectId(projectId: string): Promise<void> {
     .where(eq(gscConnections.projectId, projectId));
 }
 
-async function existsForConnectorAccount(
-  userId: string,
-  gscAccountId: string,
-): Promise<boolean> {
-  const rows = await db
-    .select({ id: gscConnections.id })
-    .from(gscConnections)
-    .where(
-      and(
-        eq(gscConnections.connectedByUserId, userId),
-        eq(gscConnections.gscAccountId, gscAccountId),
-      ),
-    )
-    .limit(1);
-  return rows.length > 0;
-}
-
 export const GscConnectionRepository = {
   getByProjectId,
   upsert,
   deleteByProjectId,
-  existsForConnectorAccount,
 };

@@ -1,6 +1,6 @@
 ---
 title: "Set up OpenSEO MCP"
-description: "Connect OpenSEO MCP to Claude, Codex, and other AI clients."
+description: "Connect OpenSEO MCP to ChatGPT, Claude, Codex, and other AI clients."
 ---
 
 OpenSEO MCP lets compatible AI clients call OpenSEO tools for keyword research, SERP inspection, local business research, competitive search intelligence, domain research, backlink overview, saved keywords, rank tracking, shared project context, and Google Search Console performance and URL inspection.
@@ -13,11 +13,19 @@ https://app.openseo.so/mcp
 
 The first connection sends you through OpenSEO login. After authorization, your MCP client can call OpenSEO tools with the project context and account scopes you approved. For headless environments and CI, [connect with an API key](#connect-with-an-api-key) instead.
 
-For the most current setup UI and a copyable endpoint, open [AI & MCP in OpenSEO](https://app.openseo.so/ai).
+For the most current setup UI and a copyable endpoint, open [Agent setup in OpenSEO](https://app.openseo.so/ai).
+
+For setup prompts, plugin commands, and skill updates, see [Agent setup](/docs/agent-setup).
+
+No account yet? Try the [free SEO tools](/tools).
+
+## ChatGPT web and desktop
+
+Follow the [ChatGPT setup guide](/docs/chatgpt). The custom ChatGPT connection works on Free and paid plans. Workspace permissions can limit access. Pasting the setup prompt into ChatGPT gives you the same manual steps.
 
 ## Claude Code
 
-The [OpenSEO plugin](/docs/claude-code-plugin) is the preferred way to connect Claude Code — one install adds MCP and all nine Agent Skills together. Use the steps below only if you want MCP on its own.
+The [OpenSEO plugin](/docs/claude-code-plugin) is the preferred way to connect Claude Code — one install adds MCP and the public SEO skills together. Use the steps below only if you want MCP on its own.
 
 Use user scope to make OpenSEO available across projects. Use local scope for the current repository.
 
@@ -29,12 +37,14 @@ After adding the server, approve the OpenSEO login when prompted.
 
 ## Claude Desktop
 
-1. Open Settings -> Connectors.
-2. Click Add custom connector.
+On a paid Claude plan, prefer the [OpenSEO plugin](/docs/claude-code-plugin#install-in-claude-cowork), which adds MCP and the SEO skills in one install. Use the custom connector below for MCP only or on the Free plan.
+
+1. Open Customize -> Connectors.
+2. Click Add (or +), then choose Add custom connector.
 3. Paste `https://app.openseo.so/mcp`.
 4. Approve the OpenSEO login when prompted.
 
-Claude Desktop custom connectors require a Claude plan that supports custom connectors.
+Claude Desktop custom connectors are available on Free, Pro, Max, Team, and Enterprise plans. Free plans support one custom connector.
 
 ## Cursor
 
@@ -56,7 +66,7 @@ Claude Desktop custom connectors require a Claude plan that supports custom conn
 
 ## Codex CLI
 
-The [OpenSEO plugin](/docs/codex-plugin) is the preferred way to connect Codex CLI — one install adds MCP and all nine Agent Skills together. Use the steps below only if you want MCP on its own.
+The [OpenSEO plugin](/docs/codex-plugin) is the preferred way to connect Codex CLI — one install adds MCP and the public SEO skills together. Use the steps below only if you want MCP on its own.
 
 Run this in your terminal:
 
@@ -66,12 +76,17 @@ codex mcp add openseo --url https://app.openseo.so/mcp
 
 Approve the login when prompted.
 
-## Codex Desktop
+## Codex in the ChatGPT desktop app
 
-1. Open Settings -> Integrations & MCP.
-2. Click Add your own.
-3. Paste `https://app.openseo.so/mcp`.
-4. Approve the OpenSEO login when prompted.
+The [OpenSEO plugin](/docs/codex-plugin#desktop-app) includes MCP and SEO skills. For MCP alone:
+
+1. Open **Codex**, then **Settings → MCP servers → Add server**.
+2. Name it `openseo`, choose **Streamable HTTP**, and enter `https://app.openseo.so/mcp`.
+3. Save and select **Restart** when prompted.
+4. Select **Authenticate** for OpenSEO and approve sign-in when prompted. Skip this step for a local server configured without authentication.
+5. Start a new Codex chat and ask: “Use OpenSEO to check my connection and list my projects.”
+
+This local connection is separate from ChatGPT web. See [OpenAI's MCP documentation](https://learn.chatgpt.com/docs/extend/mcp).
 
 ## Connect with an API key
 
@@ -130,11 +145,19 @@ OpenSEO MCP exposes tools for SEO research workflows:
 - Summarize a domain's organic footprint.
 - Find keywords a domain already ranks for.
 - Check backlink and referring-domain overview data.
+- Explore a prompt in ChatGPT or compare answers and available citations across selected AI models. ChatGPT is the default; uncached answers use credits.
+- Research questions about a keyword with ChatGPT's answers and cited sources (uses credits).
+- Configure AI prompt tracking, preview cost, and start or pause scheduled checks.
+- Read and export saved AI answers, trends, citations, and competitor appearances without using credits.
 - Read first-party Google Search Console performance (clicks, impressions, CTR, position).
 - Inspect index status, crawl, and canonical for specific URLs (up to 10 per call).
 - Read and update a project's shared context: business, goal, positioning, writing preferences, competitors, key pages, and a research log (free, no credits).
+- Save and read HTML reports on a project (free, no credits). New reports are private. On hosted OpenSEO, explicitly ask the agent to publish with `set_report_sharing` (`public: true`) or revoke the link (`public: false`). `get_report` returns `report.shareUrl` for an existing public link, or `null` when unavailable.
+- List a project's report templates, and save a reusable report brief to the project (free, no credits).
 
 ## What to do after setup
+
+See the [AI Visibility guide](/docs/ai-visibility) for supported engines, research coverage, and costs.
 
 Once OpenSEO MCP is connected, [set up OpenSEO Agent Skills](/docs/skills/setup). MCP gives your agent access to OpenSEO data. Skills are separate `SKILL.md` files that tell your agent how to use that data for specific SEO jobs.
 
@@ -142,6 +165,8 @@ Start with one focused workflow instead of asking your agent to "do SEO" broadly
 
 - Use [SEO project setup](/docs/skills/seo-project-setup) to save your goals, positioning, competitors, and key pages to your project context, so every other skill reuses them.
 - Use [SEO coach](/docs/skills/seo-coach) if you are new to SEO or are not sure which workflow to run first.
+- Use [AI Prompt Research](/docs/skills/ai-prompt-research) to find questions and cited sources before choosing what to track.
+- Use [AI Visibility Audit](/docs/skills/ai-visibility-audit) to investigate why competitors appear and which changes to try.
 - Use [keyword research](/docs/skills/keyword-research) to discover keyword opportunities.
 - Use [competitive landscape](/docs/skills/competitive-landscape) to map a market before choosing competitors or pages.
 - Use [competitor analysis](/docs/skills/competitor-analysis) to study one competitor.

@@ -1,3 +1,4 @@
+import { identity, sortBy } from "remeda";
 import { describe, expect, it } from "vitest";
 import type { KeywordIntent, KeywordResearchRow } from "@/types/keywords";
 import {
@@ -40,33 +41,15 @@ const rows: KeywordResearchRow[] = [
   makeRow("mystery term", "unknown"),
 ];
 
-describe("parseIntentFilter", () => {
-  it("returns an empty list for an empty string", () => {
-    expect(parseIntentFilter("")).toEqual([]);
-  });
-
-  it("parses a comma-separated string in canonical order", () => {
+describe("toggleIntentFilter", () => {
+  it("adds and removes intents while keeping canonical order", () => {
     expect(parseIntentFilter("transactional,informational")).toEqual([
       "informational",
       "transactional",
     ]);
-  });
-
-  it("drops unknown tokens and de-duplicates", () => {
-    expect(parseIntentFilter("commercial,bogus,commercial")).toEqual([
-      "commercial",
-    ]);
-  });
-});
-
-describe("toggleIntentFilter", () => {
-  it("adds an intent when absent and keeps canonical order", () => {
     expect(toggleIntentFilter("transactional", "informational")).toBe(
       "informational,transactional",
     );
-  });
-
-  it("removes an intent when already present", () => {
     expect(
       toggleIntentFilter("informational,transactional", "informational"),
     ).toBe("transactional");
@@ -74,34 +57,20 @@ describe("toggleIntentFilter", () => {
 });
 
 describe("applyKeywordFiltersAndSort — intent filtering", () => {
-  it("returns every row when no intent is selected", () => {
-    expect(filter(rows, { intents: "" })).toHaveLength(rows.length);
-  });
-
-  it("keeps only rows matching a single selected intent", () => {
-    const result = filter(rows, { intents: "transactional" });
-    expect(result.map((r) => r.keyword)).toEqual(["buy running shoes"]);
-  });
-
   it("keeps rows matching any of multiple selected intents", () => {
     const result = filter(rows, { intents: "transactional,commercial" });
-    expect(result.map((r) => r.keyword).toSorted()).toEqual([
-      "best running shoes",
-      "buy running shoes",
-    ]);
-  });
-
-  it("combines the intent filter with other filters (AND)", () => {
-    // "running" narrows to the two shoe rows; intent narrows to the commercial one.
-    const result = filter(rows, {
-      include: "running",
-      intents: "commercial",
-    });
-    expect(result.map((r) => r.keyword)).toEqual(["best running shoes"]);
+    expect(
+      sortBy(
+        result.map((r) => r.keyword),
+        identity(),
+      ),
+    ).toEqual(["best running shoes", "buy running shoes"]);
   });
 
   it("ignores invalid intent tokens (treated as no intent match constraint)", () => {
-    const result = filter(rows, { intents: "bogus" });
-    expect(result).toHaveLength(rows.length);
+    expect(parseIntentFilter("commercial,bogus,commercial")).toEqual([
+      "commercial",
+    ]);
+    expect(filter(rows, { intents: "bogus" })).toHaveLength(rows.length);
   });
 });

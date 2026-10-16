@@ -1,3 +1,4 @@
+import { sort } from "remeda";
 /**
  * LEIFKEN · SEO-7: Tests für scripts/deploy.sh mit nachgebildeten Aufrufen.
  *
@@ -179,7 +180,7 @@ describe("scripts/deploy.sh · Gutlauf", { timeout: ZEIT }, () => {
       "rm -rf '/run/rankmeister-deploy.lock'",
     ].map(stelle);
     reihe.forEach((i) => expect(i).toBeGreaterThan(-1));
-    expect(reihe.toSorted((a, b) => a - b)).toEqual(reihe);
+    expect(sort(reihe, (a, b) => a - b)).toEqual(reihe);
     expect(existsSync(path.join(dir, "sperre"))).toBe(false);
 
     // Sicherung wie backup-olseo.sh: im Container schreiben, per docker cp holen,

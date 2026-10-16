@@ -133,41 +133,8 @@ async function setProperty(input: {
   });
 }
 
-async function unlinkUserGrant(
-  userId: string,
-  ga4AccountId: string,
-): Promise<void> {
-  await db
-    .delete(account)
-    .where(
-      and(
-        eq(account.userId, userId),
-        eq(account.providerId, GA4_OAUTH_PROVIDER_ID),
-        eq(account.accountId, ga4AccountId),
-      ),
-    );
-}
-
-async function disconnect(input: {
-  projectId: string;
-  userId: string;
-}): Promise<void> {
-  const connection = await Ga4ConnectionRepository.getByProjectId(
-    input.projectId,
-  );
+async function disconnect(input: { projectId: string }): Promise<void> {
   await Ga4ConnectionRepository.deleteByProjectId(input.projectId);
-  if (
-    connection?.ga4AccountId &&
-    connection.connectedByUserId === input.userId
-  ) {
-    const stillUsed = await Ga4ConnectionRepository.existsForConnectorAccount(
-      input.userId,
-      connection.ga4AccountId,
-    );
-    if (!stillUsed) {
-      await unlinkUserGrant(input.userId, connection.ga4AccountId);
-    }
-  }
 }
 
 export const Ga4Service = {

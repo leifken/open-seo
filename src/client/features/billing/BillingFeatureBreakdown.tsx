@@ -1,24 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
-import {
-  AUTUMN_SEO_DATA_BALANCE_FEATURE_ID,
-  AUTUMN_SEO_DATA_TOPUP_BALANCE_FEATURE_ID,
-  autumnSeoDataCreditsToUsd,
-} from "@/shared/billing";
+import { sort } from "remeda";
+import { autumnSeoDataCreditsToUsd } from "@/shared/billing";
 import {
   creditFeatureLabel,
   mapDataforseoPathToCreditFeature,
 } from "@/shared/billing-credit-features";
-import {
-  getBillingUsageEvents,
-  type BillingUsageEvent,
-} from "@/serverFunctions/billing";
-
-const BILLING_USAGE_FEATURE_IDS: string[] = [
-  AUTUMN_SEO_DATA_BALANCE_FEATURE_ID,
-  AUTUMN_SEO_DATA_TOPUP_BALANCE_FEATURE_ID,
-];
-
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+import type { BillingUsageEvent } from "@/serverFunctions/billing";
+import { QueryState } from "@/client/components/QueryState";
+import { Skeleton } from "@/client/components/ui/skeleton";
+import { BillingUsageSection } from "@/client/features/billing/BillingUsageSection";
+import { useBillingUsageEvents } from "@/client/features/billing/useBillingUsageEvents";
 
 type BillingUsageEventProperties = {
   creditFeature?: unknown;
@@ -31,19 +21,6 @@ type BillingFeatureBreakdownRow = {
   label: string;
   usd: number;
 };
-
-type BillingUsageRange = {
-  start: number;
-  end: number;
-};
-
-function getLast30DayUsageRange(): BillingUsageRange {
-  const end = Date.now();
-  return {
-    start: end - THIRTY_DAYS_MS,
-    end,
-  };
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -124,62 +101,67 @@ export function getBillingFeatureBreakdownRows(
     creditsByLabel.set(label, (creditsByLabel.get(label) ?? 0) + event.value);
   }
 
-  return [...creditsByLabel.entries()]
-    .map(([label, credits]) => ({
-      label,
-      usd: autumnSeoDataCreditsToUsd(credits),
-    }))
-    .filter((row) => row.usd > 0)
-    .toSorted((a, b) => b.usd - a.usd);
+  return sort(
+    [...creditsByLabel.entries()]
+      .map(([label, credits]) => ({
+        label,
+        usd: autumnSeoDataCreditsToUsd(credits),
+      }))
+      .filter((row) => row.usd > 0),
+    (a, b) => b.usd - a.usd,
+  );
 }
 
 export function BillingFeatureBreakdown() {
-  const eventsQuery = useQuery({
-    queryKey: ["billing", "usage-events", BILLING_USAGE_FEATURE_IDS, "30d"],
-    queryFn: () => getBillingUsageEvents({ data: getLast30DayUsageRange() }),
-    staleTime: 60_000,
-  });
-
-  const rows = getBillingFeatureBreakdownRows(eventsQuery.data ?? []);
-  const total = rows.reduce((sum, row) => sum + row.usd, 0);
+  const eventsQuery = useBillingUsageEvents();
 
   return (
-    <div className="rounded-lg border border-base-300 bg-base-100 p-4 space-y-3">
-      <div className="flex items-baseline justify-between gap-4">
-        <span className="font-semibold">Usage by feature</span>
-        <span className="text-xs text-base-content/50">Last 30 days</span>
-      </div>
+    <BillingUsageSection title="Usage by feature">
+      <QueryState
+        query={eventsQuery}
+        errorFallback="Failed to load usage"
+        loading={
+          <div className="space-y-3">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-4 w-full" />
+            ))}
+          </div>
+        }
+      >
+        {(events) => <BreakdownRows events={events} />}
+      </QueryState>
+    </BillingUsageSection>
+  );
+}
 
-      {eventsQuery.isLoading ? (
-        <div className="space-y-3">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="skeleton h-4 w-full" />
-          ))}
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="text-sm text-base-content/40">
-          No usage recorded yet
-        </div>
-      ) : (
-        <ul className="space-y-2.5">
-          {rows.map((row) => (
-            <li key={row.label} className="space-y-1">
-              <div className="flex items-baseline justify-between gap-4 text-sm">
-                <span>{row.label}</span>
-                <span className="tabular-nums text-base-content/70">
-                  ${row.usd.toFixed(2)}
-                </span>
-              </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-base-200">
-                <div
-                  className="h-full rounded-full bg-[#7c3aed]"
-                  style={{ width: `${(row.usd / total) * 100}%` }}
-                />
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+function BreakdownRows({ events }: { events: BillingUsageEvent[] }) {
+  const rows = getBillingFeatureBreakdownRows(events);
+  const total = rows.reduce((sum, row) => sum + row.usd, 0);
+
+  if (rows.length === 0) {
+    return (
+      <div className="text-sm text-muted-foreground">No usage recorded yet</div>
+    );
+  }
+
+  return (
+    <ul className="space-y-2.5">
+      {rows.map((row) => (
+        <li key={row.label} className="space-y-1">
+          <div className="flex items-baseline justify-between gap-4 text-sm">
+            <span>{row.label}</span>
+            <span className="tabular-nums text-muted-foreground">
+              ${row.usd.toFixed(2)}
+            </span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-[#7c3aed]"
+              style={{ width: `${(row.usd / total) * 100}%` }}
+            />
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }

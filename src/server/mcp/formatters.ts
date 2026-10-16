@@ -1,5 +1,9 @@
 import type { CallToolResult } from "@modelcontextprotocol/server";
 
+// This limits the combined human/model-readable text, not structured data,
+// serialized response bytes, or model tokens.
+export const MCP_TEXT_CHAR_BUDGET = 40_000;
+
 type McpResponseMeta = {
   url?: string;
   projectId?: string;
@@ -44,8 +48,19 @@ export function mcpResponse(opts: {
   structuredContent?: Record<string, unknown>;
   isError?: boolean;
 }): CallToolResult {
+  const truncationNotice =
+    `\n\n[Text truncated at ${MCP_TEXT_CHAR_BUDGET.toLocaleString("en-US")} characters; this is partial text output. ` +
+    (opts.structuredContent
+      ? "The structuredContent payload is unchanged. "
+      : "") +
+    "Use pagination or a narrower request where supported; another call may charge credits.]";
+  const text =
+    opts.text.length > MCP_TEXT_CHAR_BUDGET
+      ? opts.text.slice(0, MCP_TEXT_CHAR_BUDGET - truncationNotice.length) +
+        truncationNotice
+      : opts.text;
   const result: CallToolResult = {
-    content: [{ type: "text", text: opts.text }],
+    content: [{ type: "text", text }],
     ...(opts.isError ? { isError: true } : {}),
   };
   let meta: Record<string, unknown> | undefined;
@@ -68,3 +83,13 @@ export function mcpResponse(opts: {
   }
   return result;
 }
+
+/**
+ * A short preview of a long text field for a list response. mcpResponse puts
+ * `text` AND `structuredContent` on the wire and clients count both, so a list
+ * page carries every preview twice — full summaries or instructions at their
+ * caps would be tens of KB on the one call every agent is told to make first.
+ * The single-item read is where the whole field is returned.
+ */
+export const truncatePreview = (value: string, max = 300) =>
+  value.length <= max ? value : `${value.slice(0, max).trimEnd()}…`;

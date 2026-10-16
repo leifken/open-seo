@@ -1,10 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
+import { waitUntil } from "cloudflare:workers";
 import { z } from "zod";
 import {
   requireAuthenticatedContext,
   requireProjectContext,
 } from "@/serverFunctions/middleware";
 import { AppError } from "@/server/lib/errors";
+import { captureServerEvent } from "@/server/lib/posthog";
 import { SamSessionRepository } from "@/server/features/sam/SamSessionRepository";
 import { ProjectRepository } from "@/server/features/projects/repositories/ProjectRepository";
 
@@ -36,6 +38,14 @@ export const createSamSession = createServerFn({ method: "POST" })
     if (!session) {
       throw new AppError("INTERNAL_ERROR", "Failed to create chat session");
     }
+    waitUntil(
+      captureServerEvent({
+        distinctId: context.userId,
+        event: "sam:session_create",
+        organizationId: context.organizationId,
+        properties: { project_id: context.projectId, session_id: session.id },
+      }),
+    );
     return { id: session.id };
   });
 
@@ -64,5 +74,13 @@ export const archiveSamSession = createServerFn({ method: "POST" })
       throw new AppError("NOT_FOUND", "Chat session not found");
     }
     await SamSessionRepository.archiveSession(data.sessionId);
+    waitUntil(
+      captureServerEvent({
+        distinctId: context.userId,
+        event: "sam:session_archive",
+        organizationId: context.organizationId,
+        properties: { project_id: project.id, session_id: session.id },
+      }),
+    );
     return { ok: true };
   });

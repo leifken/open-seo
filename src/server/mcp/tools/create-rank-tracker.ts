@@ -16,6 +16,7 @@ import {
   projectIdSchema,
 } from "@/server/mcp/schemas";
 import { domainField } from "@/types/schemas/domain";
+import { scheduleTimeSchema } from "@/types/schemas/schedule-time";
 
 const inputSchema = {
   projectId: projectIdSchema,
@@ -32,7 +33,9 @@ const inputSchema = {
     .min(1)
     .max(200)
     .optional()
-    .describe("Optional city or region name for local rank tracking."),
+    .describe(
+      'Exact DataForSEO location name for local rank tracking, e.g. "Catonsville,Maryland,United States". Must come from search_serp_locations; free-form names like "Catonsville, MD" are rejected.',
+    ),
   devices: z
     .enum(["desktop", "mobile", "both"])
     .optional()
@@ -51,6 +54,11 @@ const inputSchema = {
     .describe(
       "Check schedule. Defaults to manual so creating a tracker cannot cause future credit spend. Scheduled checks may use credits later.",
     ),
+  scheduleTime: scheduleTimeSchema
+    .optional()
+    .describe(
+      "When scheduled checks run. Pass the user's timeZone with it so their local time is converted for you; the schedule is then fixed in UTC and shifts an hour when their clocks change. Omit it unless the user asks for a specific time: the default spreads checks across quiet hours. Daily runs at this time every day, weekly on the given weekday, monthly at this time on the last day of the month. Checks start within about 15 minutes of the chosen time. Not valid with a manual schedule.",
+    ),
 } as const;
 
 type Args = z.infer<z.ZodObject<typeof inputSchema>>;
@@ -60,10 +68,9 @@ export const createRankTrackerTool = {
   config: {
     title: "Create rank tracker",
     description:
-      "Create a rank tracking configuration for a project. Creating an empty tracker uses no credits and starts no check, but daily, weekly, and monthly trackers will spend credits after keywords are added. The domain defaults to the project's domain; market defaults to the project's market; devices default to mobile, search depth to 40, and schedule to manual. Use estimate_rank_tracker_cost before adding keywords to a scheduled tracker or starting a live run. Call get_rank_tracker first to avoid duplicates.",
+      "Create a rank tracking configuration for a project. Creating an empty tracker uses no credits and starts no check, but daily, weekly, and monthly trackers will spend credits after keywords are added. The domain defaults to the project's domain; market defaults to the project's market; devices default to mobile, search depth to 40, and schedule to manual. Use estimate_rank_tracker_cost before adding keywords to a scheduled tracker or starting a live run. Call get_rank_tracker first to avoid duplicates. For local (city-level) tracking, call search_serp_locations first and pass its locationName verbatim.",
     inputSchema,
-    outputSchema: z
-      .object({
+    outputSchema: z.looseObject({
         trackerId: z.string(),
         config: looseObjectOutputSchema,
         ...optionalMetaOutputSchema,
@@ -94,6 +101,7 @@ export const createRankTrackerTool = {
       devices: args.devices ?? "mobile",
       serpDepth: args.serpDepth ?? 40,
       scheduleInterval: args.scheduleInterval ?? "manual",
+      scheduleTime: args.scheduleTime,
     });
     waitUntil(
       captureServerEvent({
@@ -111,7 +119,7 @@ export const createRankTrackerTool = {
     );
 
     return mcpResponse({
-      text: `Created rank tracker ${config.id} for ${config.domain} (${config.devices}, top ${config.serpDepth}, ${config.scheduleInterval}). No keywords were added, no check was started, and no credits were used.${config.scheduleInterval === "manual" ? "" : " Scheduled checks will spend credits after keywords are added; estimate and obtain approval before adding them."}`,
+      text: `Created rank tracker ${config.id} for ${config.domain} (${config.devices}, top ${config.serpDepth}, ${config.scheduleInterval}). No keywords were added, no check was started, and no credits were used.${config.locationName ? ` Local tracking for ${config.locationName}.` : ""}${config.nextCheckAt ? ` First scheduled check: ${config.nextCheckAt}.` : ""}${config.scheduleInterval === "manual" ? "" : " Scheduled checks will spend credits after keywords are added; estimate and obtain approval before adding them."}`,
       meta: buildProjectMeta(
         context,
         args.projectId,

@@ -40,6 +40,7 @@ const bindings: Record<string, unknown> = {
   },
   SITE_AUDIT_WORKFLOW: makeWorkflowBinding("SiteAuditWorkflow"),
   RANK_CHECK_WORKFLOW: makeWorkflowBinding("RankCheckWorkflow"),
+  AI_VISIBILITY_WORKFLOW: makeWorkflowBinding("AiVisibilityWorkflow"),
   AUDIT_SCRATCHPAD: makeScratchpadNamespace(
     async () =>
       (await import("../server/features/audit/AuditScratchpad"))
@@ -50,13 +51,6 @@ const bindings: Record<string, unknown> = {
   // with idFromName and kebab-cases the KEY — so these names must stay
   // exactly ONBOARDING_CHAT / SAM_CHAT to match the client's
   // /agents/onboarding-chat/... and /agents/sam-chat/... paths.
-  ONBOARDING_CHAT: makeChatAgentNamespace(
-    "ONBOARDING_CHAT",
-    async () =>
-      (await import("../server/features/onboarding/OnboardingChatAgent"))
-        .OnboardingChatAgent,
-    () => nodeEnv,
-  ),
   SAM_CHAT: makeChatAgentNamespace(
     "SAM_CHAT",
     async () =>
@@ -65,6 +59,7 @@ const bindings: Record<string, unknown> = {
   ),
 };
 
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Node implements the Cloudflare surface used by the worker
 export const nodeEnv = new Proxy(bindings, {
   get(target, prop) {
     if (typeof prop !== "string") return undefined;

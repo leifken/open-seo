@@ -1,7 +1,7 @@
 ---
 title: "SEO for Startups: A Founder’s Handbook"
 description: "A founder-focused handbook to SEO for startups: how to use search for market research, early rankings, and smarter growth without wasting time."
-author: "OpenSEO Team"
+author: "Ben Senescu"
 date: "2026-04-22"
 ---
 
@@ -80,7 +80,7 @@ Backlink analysis shows which websites link to a specific website.
 
 When you look at who links to competitors, you start to see which publications, directories, newsletters, and communities matter in the market. You can also see why certain companies are treated as credible. Sometimes they earn attention through PR. Sometimes it is partnerships, original research, or a useful tool that people keep citing.
 
-Those links can tell you how attention moves through a market.
+Those links can tell you how attention moves through a market. To look at one domain right now, the [free backlink checker](/backlink-checker) shows its referring domains and strongest links without an account.
 
 ![OpenSEO backlink analysis showing referring domains or top backlinks for a competitor](/blog/seo-for-startups/backlink-analysis.png)
 
@@ -99,6 +99,8 @@ They play a big role in whether someone clicks. A good title matches the search,
 [Google Search Console](https://search.google.com/search-console/about) is your source of truth for how your site is performing in Google Search.
 
 It helps you see what queries you show up for, which pages get impressions and clicks, whether Google is indexing your pages, and what crawl or coverage issues need attention.
+
+Search Console only covers sites you own and lags by a couple of days. To discover keywords another site ranks for, use the [free competitor keyword finder](/competitor-keyword-finder). It shows up to 20 keywords from the provider’s database, with available search volumes, positions, and ranking URLs. Results may be cached for up to 24 hours.
 
 If you're new to it, Google's docs are worth reading:
 

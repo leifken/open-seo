@@ -29,20 +29,24 @@ export function installCfWebSocketGlobals(): void {
   if (g.__cfWsGlobalsInstalled) return;
   g.__cfWsGlobalsInstalled = true;
 
-  const WS = g.WebSocket as { prototype: object } & Record<string, unknown>;
+  const WS = globalThis.WebSocket;
   if (WS) {
-    WS.READY_STATE_CONNECTING = 0;
-    WS.READY_STATE_OPEN = 1;
-    WS.READY_STATE_CLOSING = 2;
-    WS.READY_STATE_CLOSED = 3;
-    const proto = WS.prototype as Record<string, unknown>;
-    if (!proto.serializeAttachment) {
-      proto.serializeAttachment = function (value: unknown) {
-        attachments.set(this as object, structuredClone(value));
-      };
-      proto.deserializeAttachment = function () {
-        return attachments.get(this as object) ?? null;
-      };
+    Reflect.set(WS, "READY_STATE_CONNECTING", 0);
+    Reflect.set(WS, "READY_STATE_OPEN", 1);
+    Reflect.set(WS, "READY_STATE_CLOSING", 2);
+    Reflect.set(WS, "READY_STATE_CLOSED", 3);
+    const proto = WS.prototype;
+    if (!Reflect.get(proto, "serializeAttachment")) {
+      Reflect.set(
+        proto,
+        "serializeAttachment",
+        function (this: object, value: unknown) {
+          attachments.set(this, structuredClone(value));
+        },
+      );
+      Reflect.set(proto, "deserializeAttachment", function (this: object) {
+        return attachments.get(this) ?? null;
+      });
     }
   }
 
@@ -62,7 +66,7 @@ export function installCfWebSocketGlobals(): void {
     }
     accept(): void {}
     send(data: unknown): void {
-      this.real.send(data as never);
+      this.real.send(data);
     }
     close(code?: number, reason?: string): void {
       try {
@@ -86,7 +90,15 @@ export function installCfWebSocketGlobals(): void {
         );
       } else if (event === "close") {
         this.real.on("close", (code: unknown, reason: unknown) =>
-          cb({ code, reason: String(reason ?? "") }),
+          cb({
+            code,
+            reason:
+              typeof reason === "string"
+                ? reason
+                : reason instanceof Uint8Array
+                  ? new TextDecoder().decode(reason)
+                  : "",
+          }),
         );
       } else if (event === "error") {
         this.real.on("error", (error: unknown) => cb({ error }));
@@ -127,18 +139,20 @@ export function installCfWebSocketGlobals(): void {
   // `instanceof Response` in the app and its libraries keeps working — the
   // shared prototype covers both directions) and a lightweight stand-in
   // only for 101.
-  const OrigResponse = g.Response as typeof Response;
+  const OrigResponse = globalThis.Response;
   function PatchedResponse(
     this: unknown,
     body?: BodyInit | null,
     init?: ResponseInit & { webSocket?: unknown },
   ) {
     if (init && init.status === 101) {
-      const fake = Object.create(OrigResponse.prototype) as Record<string, unknown>;
+      const fake: unknown = Object.create(OrigResponse.prototype);
       Object.defineProperty(fake, "status", { value: 101 });
       Object.defineProperty(fake, "ok", { value: false });
       Object.defineProperty(fake, "headers", { value: new Headers() });
-      Object.defineProperty(fake, "webSocket", { value: init.webSocket ?? null });
+      Object.defineProperty(fake, "webSocket", {
+        value: init.webSocket ?? null,
+      });
       Object.defineProperty(fake, "body", { value: null });
       return fake;
     }

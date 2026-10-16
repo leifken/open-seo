@@ -9,9 +9,9 @@ import {
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { AutumnProvider } from "autumn-js/react";
 import * as React from "react";
 import { DefaultCatchBoundary } from "@/client/components/DefaultCatchBoundary";
+import { captureGoogleLinkError } from "@/client/features/integrations/googleLinkError";
 import { ExportToSheetsModal } from "@/client/components/table/ExportToSheetsModal";
 import { themePreferenceInitScript } from "@/client/lib/theme";
 import {
@@ -21,23 +21,17 @@ import {
   stopAnalyticsCapture,
 } from "@/client/lib/posthog";
 import { NotFound } from "@/client/components/NotFound";
+import { TooltipProvider } from "@/client/components/ui/tooltip";
 import appCss from "@/client/styles/app.css?url";
 import { useSession } from "@/lib/auth-client";
-import {
-  isBillingClientEnabled,
-  isHostedClientAuthMode,
-} from "@/lib/auth-mode";
+import { isHostedClientAuthMode } from "@/lib/auth-mode";
 import { Toaster } from "sonner";
 import { queryClient } from "@/client/tanstack-db";
 import { getActiveOrganizationId } from "@/lib/auth-session";
 
-// LEIFKEN: self-hosts have no Autumn account, and every mounted consumer
-// would hammer a handler that cannot answer. Skip the provider entirely
-// when billing is off.
-function BillingProvider({ children }: { children: React.ReactNode }) {
-  if (!isBillingClientEnabled()) return <>{children}</>;
-  return <AutumnProvider>{children}</AutumnProvider>;
-}
+// Capture Google link error params before the router starts — a route loader
+// redirect would otherwise replace the URL and lose them. See googleLinkError.ts.
+captureGoogleLinkError();
 
 export const Route = createRootRoute({
   head: () => ({
@@ -139,37 +133,27 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <ClientOnly>
-          {/* Keep this the ONLY AutumnProvider. Each provider creates its own
-              customer cache (autumn-js bundles a private react-query, so it
-              never shares the app QueryClient), and every extra provider mount
-              pays its own ~1s getOrCreateCustomer round trip. It only provides
-              context — nothing fetches until a useCustomer consumer mounts. */}
-          <BillingProvider>
-            <QueryClientProvider client={queryClient}>
-              <>
-                <PostHogBootstrap />
-                {children}
-                <ExportToSheetsModal />
-                <Toaster
-                  position="bottom-right"
-                  mobileOffset={{ bottom: 100 }}
+          <QueryClientProvider client={queryClient}>
+            <TooltipProvider>
+              <PostHogBootstrap />
+              {children}
+              <ExportToSheetsModal />
+              <Toaster position="bottom-right" mobileOffset={{ bottom: 100 }} />
+              {showDevtools ? (
+                <TanStackDevtools
+                  config={{ position: "bottom-right" }}
+                  eventBusConfig={{ connectToServerBus: true }}
+                  plugins={[
+                    {
+                      name: "TanStack Router",
+                      render: <TanStackRouterDevtoolsPanel />,
+                      defaultOpen: true,
+                    },
+                  ]}
                 />
-                {showDevtools ? (
-                  <TanStackDevtools
-                    config={{ position: "bottom-right" }}
-                    eventBusConfig={{ connectToServerBus: true }}
-                    plugins={[
-                      {
-                        name: "TanStack Router",
-                        render: <TanStackRouterDevtoolsPanel />,
-                        defaultOpen: true,
-                      },
-                    ]}
-                  />
-                ) : null}
-              </>
-            </QueryClientProvider>
-          </BillingProvider>
+              ) : null}
+            </TooltipProvider>
+          </QueryClientProvider>
         </ClientOnly>
         <Scripts />
       </body>

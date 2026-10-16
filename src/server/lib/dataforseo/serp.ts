@@ -1,25 +1,31 @@
+/* eslint-disable max-lines -- one file per DataForSEO section (see index.ts); SERP spans live, rank-check and Maps queue calls */
 import { z } from "zod";
-import {
-  SerpApiStopCrawlOnMatchInfo,
-  SerpGoogleAutocompleteLiveAdvancedRequestInfo,
-  SerpGoogleLocalFinderLiveAdvancedRequestInfo,
-  SerpGoogleMapsLiveAdvancedRequestInfo,
-  SerpGoogleOrganicLiveAdvancedRequestInfo,
-  SerpGoogleOrganicTaskPostRequestInfo,
-  type Autocomplete,
-} from "dataforseo-client";
-import { serpApi } from "@/server/lib/dataforseo/core";
+import { dataforseoGet, dataforseoPost } from "@/server/lib/dataforseo/core";
 import { MAX_TASKS_PER_POST } from "@/server/lib/dataforseo/shared";
 import {
   assertOk,
   buildTaskBilling,
+  DataforseoChargedTaskError,
+  invalidFieldName,
   isNoResultsTask,
   isPartialResultsTask,
   isTaskInProgress,
   parseTaskItems,
   type DataforseoApiResponse,
+  type DataforseoItemsTask,
+  type DataforseoTaskLike,
+  failedResponseError,
 } from "@/server/lib/dataforseo/envelope";
 import { AppError } from "@/server/lib/errors";
+
+// Default depth for keyword SERP analysis. DataForSEO crawls (and bills) one
+// Google page of 10 results at a time, and the crawls are sequential, so depth
+// is the single lever on both latency and cost here: every 10 results is
+// another page fetch against the shared 60s request budget. Keep this low —
+// callers that need to see deeper ranks pass an explicit depth. There is no
+// offset/cursor: a deeper request re-crawls pages 1..N/10 from the top, so it
+// replaces the shallow snapshot rather than extending it.
+export const SERP_ANALYSIS_DEPTH = 20;
 
 /** DataForSEO bills SERPs in pages of 10; depth outside 10-100 is rejected. */
 export function clampSerpDepth(depth: number): number {
@@ -37,10 +43,7 @@ export function clampSerpDepth(depth: number): number {
 function stopCrawlOnTarget(targetDomain: string) {
   return {
     stop_crawl_on_match: [
-      new SerpApiStopCrawlOnMatchInfo({
-        match_value: targetDomain,
-        match_type: "with_subdomains",
-      }),
+      { match_value: targetDomain, match_type: "with_subdomains" },
     ],
     find_targets_in: ["organic"],
   };
@@ -87,9 +90,6 @@ export type SerpLiveItem = z.infer<typeof serpSnapshotItemSchema>;
 
 export type SerpLiveResult = {
   items: SerpLiveItem[];
-  /** True when DataForSEO could only retrieve some of the requested pages
-   *  ("Task completed with partial results ..."). The items it did retrieve
-   *  are still real, billed results — not a failure. */
   partial: boolean;
   partialReason?: string;
 };
@@ -98,29 +98,36 @@ export async function fetchLiveSerp(input: {
   keyword: string;
   locationCode: number;
   languageCode: string;
-  /** Rows to crawl, clamped to DataForSEO's 10-100 page range. Defaults to
-   *  100 (full page) when omitted; callers that only need a handful of rows
-   *  should pass a smaller depth to avoid paying for pages they discard. */
   depth?: number;
+  loadAsyncAiOverview?: boolean;
+  /** Canonical DataForSEO name of a city, county, or region for a local SERP. */
+  locationName?: string;
+  device?: "desktop" | "mobile";
 }): Promise<DataforseoApiResponse<SerpLiveResult>> {
-  const response = await serpApi().googleOrganicLiveAdvanced([
-    new SerpGoogleOrganicLiveAdvancedRequestInfo({
-      keyword: input.keyword,
-      location_code: input.locationCode,
-      language_code: input.languageCode,
-      device: "desktop",
-      os: "windows",
-      depth: clampSerpDepth(input.depth ?? 100),
-      // Ask DataForSEO to wait for a slow-to-generate AI Overview instead of
-      // only returning it from cache. Extra charge only applies (and only
-      // once) when an async overview actually had to be loaded; DataForSEO
-      // refunds it automatically when the element is absent or was already
-      // synchronous (see load_async_ai_overview docs).
-      load_async_ai_overview: true,
-    }),
-  ]);
-  const task = assertOk(response, { treatPartialResultsAsPartial: true });
-  const partial = isPartialResultsTask(task);
+  const device = input.device ?? "desktop";
+  const locationParams = input.locationName
+    ? { location_name: input.locationName }
+    : { location_code: input.locationCode };
+  const response = await dataforseoPost(
+    "/v3/serp/google/organic/live/advanced",
+    [
+      {
+        keyword: input.keyword,
+        ...locationParams,
+        language_code: input.languageCode,
+        device,
+        os: device === "desktop" ? "windows" : "android",
+        depth: clampSerpDepth(input.depth ?? SERP_ANALYSIS_DEPTH),
+        load_async_ai_overview: input.loadAsyncAiOverview ?? false,
+      },
+    ],
+  );
+  // DataForSEO uses a task error for a valid empty SERP. Keep the charged
+  // response in the normal billing path and return an empty item list.
+  const task = assertOk(response, {
+    treatNoResultsAsEmpty: true,
+    treatPartialResultsAsPartial: true,
+  });
   return {
     data: {
       items: parseTaskItems(
@@ -128,9 +135,9 @@ export async function fetchLiveSerp(input: {
         task,
         serpSnapshotItemSchema,
       ),
-      partial,
-      ...(partial && task.status_message
-        ? { partialReason: task.status_message }
+      partial: isPartialResultsTask(task),
+      ...(isPartialResultsTask(task)
+        ? { partialReason: task.status_message ?? undefined }
         : {}),
     },
     billing: buildTaskBilling(task),
@@ -184,17 +191,20 @@ export async function fetchRankCheckSerp(input: {
   const locationParams = input.locationName
     ? { location_name: input.locationName }
     : { location_code: input.locationCode };
-  const response = await serpApi().googleOrganicLiveAdvanced([
-    new SerpGoogleOrganicLiveAdvancedRequestInfo({
-      keyword: input.keyword,
-      ...locationParams,
-      language_code: input.languageCode,
-      device: input.device,
-      os: input.device === "desktop" ? "windows" : "android",
-      depth,
-      ...stopCrawlOnTarget(input.targetDomain),
-    }),
-  ]);
+  const response = await dataforseoPost(
+    "/v3/serp/google/organic/live/advanced",
+    [
+      {
+        keyword: input.keyword,
+        ...locationParams,
+        language_code: input.languageCode,
+        device: input.device,
+        os: input.device === "desktop" ? "windows" : "android",
+        depth,
+        ...stopCrawlOnTarget(input.targetDomain),
+      },
+    ],
+  );
 
   // "No Search Results" (40501) is valid for obscure/new keywords — treat as an
   // empty result set rather than failing the whole rank-tracking run.
@@ -246,33 +256,30 @@ export async function postRankCheckTasks(input: {
   const locationParams = input.locationName
     ? { location_name: input.locationName }
     : { location_code: input.locationCode };
-  const response = await serpApi().googleOrganicTaskPost(
-    input.tasks.map(
-      (task) =>
-        new SerpGoogleOrganicTaskPostRequestInfo({
-          keyword: task.keyword,
-          ...locationParams,
-          language_code: input.languageCode,
-          device: task.device,
-          os: task.device === "desktop" ? "windows" : "android",
-          depth,
-          // Queued tasks are billed provisionally at full depth at post time;
-          // task_get later reports the reduced actual cost when the crawl
-          // stopped early. We meter customers on the post-time amount —
-          // collection-time metering is a possible future optimization.
-          ...stopCrawlOnTarget(input.targetDomain),
-          // Echoed back on the response entry and task_get; used to map a
-          // DataForSEO task id back to our keyword without relying on order.
-          tag: `${task.keywordId}:${task.device}`,
-        }),
-    ),
+  const response = await dataforseoPost<
+    DataforseoTaskLike & { id?: string; data?: Record<string, unknown> }
+  >(
+    "/v3/serp/google/organic/task_post",
+    input.tasks.map((task) => ({
+      keyword: task.keyword,
+      ...locationParams,
+      language_code: input.languageCode,
+      device: task.device,
+      os: task.device === "desktop" ? "windows" : "android",
+      depth,
+      // Queued tasks are billed provisionally at full depth at post time;
+      // task_get later reports the reduced actual cost when the crawl
+      // stopped early. We meter customers on the post-time amount —
+      // collection-time metering is a possible future optimization.
+      ...stopCrawlOnTarget(input.targetDomain),
+      // Echoed back on the response entry and task_get; used to map a
+      // DataForSEO task id back to our keyword without relying on order.
+      tag: `${task.keywordId}:${task.device}`,
+    })),
   );
 
   if (!response || response.status_code !== 20000) {
-    throw new AppError(
-      "INTERNAL_ERROR",
-      response?.status_message || "DataForSEO task_post failed",
-    );
+    throw failedResponseError(response, "DataForSEO task_post failed");
   }
 
   // One response entry per submitted task; accepted entries have status 20100
@@ -325,13 +332,12 @@ export async function fetchRankCheckTaskResult(input: {
   keyword: string;
   targetDomain: string;
 }): Promise<RankCheckTaskOutcome> {
-  const response = await serpApi().googleOrganicTaskGetAdvanced(input.taskId);
+  const response = await dataforseoGet(
+    `/v3/serp/google/organic/task_get/advanced/${encodeURIComponent(input.taskId)}`,
+  );
   const task = response?.tasks?.[0];
   if (!response || response.status_code !== 20000 || !task) {
-    throw new AppError(
-      "INTERNAL_ERROR",
-      response?.status_message || "DataForSEO task_get failed",
-    );
+    throw failedResponseError(response, "DataForSEO task_get failed");
   }
 
   if (isTaskInProgress(task)) {
@@ -365,7 +371,6 @@ export async function fetchRankCheckTaskResult(input: {
 export async function fetchLocalSerp(input: {
   keyword: string;
   locationCoordinate?: string;
-  /** LEIFKEN (SEO-5): city/region location code instead of a coordinate. */
   locationCode?: number;
   languageCode: string;
   searchType: "maps" | "local_finder";
@@ -375,11 +380,11 @@ export async function fetchLocalSerp(input: {
 }): Promise<DataforseoApiResponse<Record<string, unknown>[]>> {
   const os = input.device === "desktop" ? "windows" : "android";
 
-  // Maps and Local Finder return different SDK item models; both carry an index
-  // signature, so the typed items assign cleanly to the generic row shape.
   if (input.searchType === "maps") {
-    const response = await serpApi().googleMapsLiveAdvanced([
-      new SerpGoogleMapsLiveAdvancedRequestInfo({
+    const response = await dataforseoPost<
+      DataforseoItemsTask<Record<string, unknown>>
+    >("/v3/serp/google/maps/live/advanced", [
+      {
         keyword: input.keyword,
         location_coordinate: input.locationCoordinate,
         location_code: input.locationCode,
@@ -388,7 +393,7 @@ export async function fetchLocalSerp(input: {
         os,
         depth: input.depth,
         search_places: input.searchPlaces,
-      }),
+      },
     ]);
     // 40501 = billed empty SERP; DataForSEO returns it for some coordinate-only
     // Maps and Local Finder queries (both paths below opt in).
@@ -399,8 +404,10 @@ export async function fetchLocalSerp(input: {
     };
   }
 
-  const response = await serpApi().googleLocalFinderLiveAdvanced([
-    new SerpGoogleLocalFinderLiveAdvancedRequestInfo({
+  const response = await dataforseoPost<
+    DataforseoItemsTask<Record<string, unknown>>
+  >("/v3/serp/google/local_finder/live/advanced", [
+    {
       keyword: input.keyword,
       location_coordinate: input.locationCoordinate,
       location_code: input.locationCode,
@@ -408,7 +415,7 @@ export async function fetchLocalSerp(input: {
       device: input.device,
       os,
       depth: input.depth,
-    }),
+    },
   ]);
   const task = assertOk(response, { treatNoResultsAsEmpty: true });
   return {
@@ -417,25 +424,144 @@ export async function fetchLocalSerp(input: {
   };
 }
 
-/** Google Autocomplete suggestions for one partial query (SEO-4 Punkt 5). */
+// ---------------------------------------------------------------------------
+// Task-queue Maps searches (local rank grids). One task_post carries every
+// grid point, so DataForSEO runs the searches in parallel instead of a Worker
+// request waiting on them six at a time, and at the queue's lower price.
+// Collection through task_get is free.
+// ---------------------------------------------------------------------------
+
+/** High priority finishes in ~10-40 s; the normal queue takes minutes. */
+const LOCAL_TASK_PRIORITY_HIGH = 2;
+
+/**
+ * Posts one Maps task per coordinate and returns the task ids in input
+ * order, null where DataForSEO rejected an entry. Not retried on a 5xx,
+ * which does not prove the post went unbilled.
+ */
+export async function postLocalSerpTasks(input: {
+  keyword: string;
+  locationCoordinates: string[];
+  languageCode: string;
+  device: "desktop" | "mobile";
+  depth: number;
+}): Promise<DataforseoApiResponse<Array<string | null>>> {
+  const response = await dataforseoPost<
+    DataforseoTaskLike & { id?: string; data?: Record<string, unknown> }
+  >(
+    "/v3/serp/google/maps/task_post",
+    input.locationCoordinates.map((coordinate, index) => ({
+      keyword: input.keyword,
+      location_coordinate: coordinate,
+      language_code: input.languageCode,
+      device: input.device,
+      os: input.device === "desktop" ? "windows" : "android",
+      depth: input.depth,
+      search_places: false,
+      priority: LOCAL_TASK_PRIORITY_HIGH,
+      // Echoed back on each entry, so ids map to points without relying on
+      // response order.
+      tag: String(index),
+    })),
+    { maxServerErrorRetries: 0 },
+  );
+  if (!response || response.status_code !== 20000) {
+    throw failedResponseError(response, "DataForSEO task_post failed");
+  }
+
+  // Cost is summed over every entry, accepted or not, so anything DataForSEO
+  // charged is metered.
+  const taskIds: Array<string | null> = input.locationCoordinates.map(
+    () => null,
+  );
+  let costUsd = 0;
+  for (const entry of response.tasks ?? []) {
+    costUsd += entry.cost ?? 0;
+    const index = Number(entry.data?.tag);
+    if (entry.status_code === 20100 && entry.id && taskIds[index] === null) {
+      taskIds[index] = entry.id;
+    } else {
+      console.warn(
+        `dataforseo.task_post.rejected-entry (${entry.status_code}): ${entry.status_message}`,
+      );
+    }
+  }
+  const billing = {
+    path: ["v3", "serp", "google", "maps", "task_post"],
+    costUsd,
+  };
+  if (taskIds.every((id) => id === null)) {
+    // Charged-task error, so the meter still bills whatever DataForSEO
+    // charged, and an uncharged invalid request reads as a validation error.
+    const message =
+      response.tasks?.[0]?.status_message || "DataForSEO created no tasks";
+    throw new DataforseoChargedTaskError(
+      message,
+      billing,
+      invalidFieldName(message) !== null,
+    );
+  }
+  return { data: taskIds, billing };
+}
+
+export type LocalSerpTaskOutcome =
+  | { status: "pending" }
+  | { status: "failed"; message: string }
+  | { status: "completed"; items: Record<string, unknown>[] };
+
+/**
+ * Collects one queued Maps task. Not metered, like fetchRankCheckTaskResult:
+ * the task was charged at task_post.
+ */
+export async function fetchLocalSerpTaskResult(
+  taskId: string,
+): Promise<LocalSerpTaskOutcome> {
+  const response = await dataforseoGet<
+    DataforseoItemsTask<Record<string, unknown>>
+  >(`/v3/serp/google/maps/task_get/advanced/${encodeURIComponent(taskId)}`);
+  const task = response?.tasks?.[0];
+  if (!response || response.status_code !== 20000 || !task) {
+    throw failedResponseError(response, "DataForSEO task_get failed");
+  }
+
+  if (isTaskInProgress(task)) return { status: "pending" };
+  if (task.status_code !== 20000) {
+    // "No Search Results" is a billed empty SERP, as on the live path.
+    if (isNoResultsTask(task)) return { status: "completed", items: [] };
+    return {
+      status: "failed",
+      message:
+        task.status_message || `DataForSEO task failed (${task.status_code})`,
+    };
+  }
+  return { status: "completed", items: task.result?.[0]?.items ?? [] };
+}
+
+const autocompleteItemSchema = z.looseObject({
+  suggestion: z.string().nullable().optional(),
+  rank_absolute: z.number().nullable().optional(),
+  relevance: z.number().nullable().optional(),
+});
 export async function fetchAutocomplete(input: {
   keyword: string;
   locationCode: number;
   languageCode: string;
   cursorPointer?: number;
-}): Promise<DataforseoApiResponse<Autocomplete[]>> {
-  const response = await serpApi().googleAutocompleteLiveAdvanced([
-    new SerpGoogleAutocompleteLiveAdvancedRequestInfo({
-      keyword: input.keyword,
-      location_code: input.locationCode,
-      language_code: input.languageCode,
-      cursor_pointer: input.cursorPointer,
-    }),
-  ]);
-  // 40501 = billed empty result: no suggestions for this keyword/market.
+}): Promise<DataforseoApiResponse<z.infer<typeof autocompleteItemSchema>[]>> {
+  const response = await dataforseoPost(
+    "/v3/serp/google/autocomplete/live/advanced",
+    [
+      {
+        keyword: input.keyword,
+        location_code: input.locationCode,
+        language_code: input.languageCode,
+        cursor_pointer: input.cursorPointer,
+      },
+    ],
+  );
   const task = assertOk(response, { treatNoResultsAsEmpty: true });
   return {
-    data: task.result?.[0]?.items ?? [],
+    data: parseTaskItems("google-autocomplete", task, autocompleteItemSchema),
     billing: buildTaskBilling(task),
   };
 }

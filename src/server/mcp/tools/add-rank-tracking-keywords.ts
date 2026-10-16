@@ -18,13 +18,19 @@ const inputSchema = {
     .min(1)
     .max(2000)
     .describe("Keywords to track. Existing and repeated keywords are skipped."),
+  matchCase: z
+    .boolean()
+    .optional()
+    .describe(
+      "Track the keywords exactly as typed instead of lowercasing them. Defaults to false. Use for brand names where Google's results differ by capitalization; a cased keyword is tracked and billed separately from its lowercase form.",
+    ),
   maxEstimatedScheduledCheckCredits: z
     .number()
     .int()
     .positive()
     .optional()
     .describe(
-      "Nominal queued credits per scheduled check that the user approved after seeing estimate_rank_tracker_cost with additionalKeywordCount. Required for scheduled trackers. This is an estimate approval, not a runtime cap; live fallback may add separately billed credits.",
+      "Nominal queued credits per scheduled check that the user approved after seeing estimate_rank_tracker_cost with additionalKeywords. Required for scheduled trackers. This is an estimate approval, not a runtime cap; live fallback may add separately billed credits.",
     ),
 } as const;
 
@@ -35,16 +41,15 @@ export const addRankTrackingKeywordsTool = {
   config: {
     title: "Add rank tracking keywords",
     description:
-      "Add keywords to an existing rank tracker. The mutation itself uses no credits and does not start a check or fetch metrics, but scheduled trackers will spend credits on future recurring checks. For a scheduled tracker, call estimate_rank_tracker_cost with additionalKeywordCount, show the recurring estimate and live-fallback caveat to the user, and pass the approved nominal per-check estimate as maxEstimatedScheduledCheckCredits. This approval is not a runtime spending cap: rejected, failed, or timed-out queued tasks may use additional separately billed live fallback. Existing and repeated keywords are skipped, and `added` is the number actually inserted.",
+      "Add keywords to an existing rank tracker. The mutation itself uses no credits and does not start a check or fetch metrics, but scheduled trackers will spend credits on future recurring public Google searches. For a scheduled tracker, call estimate_rank_tracker_cost with additionalKeywords, show the recurring estimate and live-fallback caveat to the user, and pass the approved nominal per-check estimate as maxEstimatedScheduledCheckCredits. This approval is not a runtime spending cap: rejected, failed, or timed-out queued tasks may use additional separately billed live fallback. Existing and repeated keywords are skipped, and `added` is the number actually inserted.",
     inputSchema,
-    outputSchema: z
-      .object({
+    outputSchema: z.looseObject({
         trackerId: z.string(),
         requested: z.number(),
         added: z.number(),
         addedIds: z.array(z.string()),
         scheduledEstimate: z
-          .object({
+          .looseObject({
             scheduleInterval: z.enum(["daily", "weekly", "monthly"]),
             costUsd: z.number(),
             costCredits: z.number(),
@@ -58,7 +63,7 @@ export const addRankTrackingKeywordsTool = {
       .passthrough(),
     annotations: {
       readOnlyHint: false,
-      openWorldHint: false,
+      openWorldHint: true,
       destructiveHint: false,
     },
   },
@@ -72,6 +77,7 @@ export const addRankTrackingKeywordsTool = {
         maxEstimatedScheduledCheckCredits:
           args.maxEstimatedScheduledCheckCredits,
       },
+      args.matchCase,
     );
     const requested = args.keywords.length;
     return mcpResponse({

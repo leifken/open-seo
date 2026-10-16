@@ -1,4 +1,5 @@
 import { RankTrackingRepository } from "@/server/features/rank-tracking/repositories/RankTrackingRepository";
+import type { rankTrackingKeywords } from "@/db/schema";
 import { AppError } from "@/server/lib/errors";
 import {
   devicesCount,
@@ -18,6 +19,9 @@ async function addKeywords(
         kind: "credit_ceiling";
         maxEstimatedScheduledCheckCredits?: number;
       },
+  // Keep the keyword exactly as typed instead of lowercasing it. "Nodex" and
+  // "nodex" are then two separately tracked (and separately billed) keywords.
+  matchCase = false,
 ) {
   const config = await getValidatedConfig(configId, projectId);
   const existing = await RankTrackingRepository.getKeywordsForConfig(configId);
@@ -32,18 +36,24 @@ async function addKeywords(
   const existingKeywords = new Set(existing.map((kw) => kw.keyword));
   const available = MAX_KEYWORDS_PER_CONFIG - existing.length;
   const seen = new Set<string>();
-  const rows: Array<{ id: string; configId: string; keyword: string }> = [];
+  const rows: (typeof rankTrackingKeywords.$inferInsert)[] = [];
 
   for (const raw of keywords) {
     if (rows.length >= available) break;
-    const normalized = raw.trim().toLowerCase();
+    const trimmed = raw.trim();
+    const normalized = matchCase ? trimmed : trimmed.toLowerCase();
     if (
       normalized &&
       !seen.has(normalized) &&
       !existingKeywords.has(normalized)
     ) {
       seen.add(normalized);
-      rows.push({ id: crypto.randomUUID(), configId, keyword: normalized });
+      rows.push({
+        id: crypto.randomUUID(),
+        configId,
+        keyword: normalized,
+        matchCase,
+      });
     }
   }
 
@@ -57,7 +67,7 @@ async function addKeywords(
     | undefined;
   if (rows.length > 0 && scheduleInterval) {
     scheduledEstimate = estimateScheduledRankCheckCredits(
-      existing.length + rows.length,
+      [...existing, ...rows].map((kw) => kw.keyword),
       config.devices,
       config.serpDepth,
       scheduleInterval,
@@ -83,10 +93,10 @@ async function addKeywords(
     addedIds.length > 0 &&
     approval.kind === "credit_ceiling"
   ) {
-    const persistedKeywordCount =
-      await RankTrackingRepository.getKeywordCountForConfig(configId);
+    const persisted =
+      await RankTrackingRepository.getKeywordsForConfig(configId);
     scheduledEstimate = estimateScheduledRankCheckCredits(
-      persistedKeywordCount,
+      persisted.map((kw) => kw.keyword),
       config.devices,
       config.serpDepth,
       scheduleInterval,
@@ -117,23 +127,36 @@ async function removeKeywords(
   return { removed: removedIds.length, removedIds };
 }
 
+async function setKeywordsPinned(
+  configId: string,
+  projectId: string,
+  keywordIds: string[],
+  pinned: boolean,
+) {
+  await getValidatedConfig(configId, projectId);
+  const updatedIds = await RankTrackingRepository.setKeywordsPinned(
+    [...new Set(keywordIds)],
+    configId,
+    pinned,
+  );
+  return { updated: updatedIds.length, updatedIds };
+}
+
 async function estimateCost(
   configId: string,
   projectId: string,
-  additionalKeywordCount = 0,
+  additionalKeywords: readonly string[] = [],
 ) {
   const config = await getValidatedConfig(configId, projectId);
-  const existingKeywordCount =
-    await RankTrackingRepository.getKeywordCountForConfig(configId);
-  const keywordCount = Math.max(
-    existingKeywordCount,
-    Math.min(
-      MAX_KEYWORDS_PER_CONFIG,
-      existingKeywordCount + additionalKeywordCount,
-    ),
-  );
+  const existing = await RankTrackingRepository.getKeywordsForConfig(configId);
+  const existingKeywordCount = existing.length;
+  const keywords = [
+    ...existing.map((kw) => kw.keyword),
+    ...additionalKeywords,
+  ].slice(0, Math.max(existingKeywordCount, MAX_KEYWORDS_PER_CONFIG));
+  const keywordCount = keywords.length;
   const { costUsd, costCredits } = estimateRankCheckCredits(
-    keywordCount,
+    keywords,
     config.devices,
     config.serpDepth,
     "live",
@@ -154,7 +177,7 @@ async function estimateCost(
     additionalKeywordCount: keywordCount - existingKeywordCount,
     scheduledEstimate: scheduleInterval
       ? estimateScheduledRankCheckCredits(
-          keywordCount,
+          keywords,
           config.devices,
           config.serpDepth,
           scheduleInterval,
@@ -180,12 +203,13 @@ function scheduledApprovalError(
 ) {
   return new AppError(
     "VALIDATION_ERROR",
-    `Adding these keywords would make each ${scheduleInterval} scheduled check cost a nominal queued estimate of ${estimate.costCredits} credits (~$${estimate.costUsd.toFixed(4)} per check; ~${estimate.monthlyCostCredits} credits/month). Call estimate_rank_tracker_cost with additionalKeywordCount, show the recurring estimate and live-fallback caveat to the user, then retry with maxEstimatedScheduledCheckCredits set to the approved per-check estimate. Live fallback for rejected, failed, or timed-out queued tasks may use additional separately billed credits.`,
+    `Adding these keywords would make each ${scheduleInterval} scheduled check cost a nominal queued estimate of ${estimate.costCredits} credits (~$${estimate.costUsd.toFixed(4)} per check; ~${estimate.monthlyCostCredits} credits/month). Call estimate_rank_tracker_cost with additionalKeywords, show the recurring estimate and live-fallback caveat to the user, then retry with maxEstimatedScheduledCheckCredits set to the approved per-check estimate. Live fallback for rejected, failed, or timed-out queued tasks may use additional separately billed credits.`,
   );
 }
 
 export const RankTrackingKeywordService = {
   addKeywords,
   removeKeywords,
+  setKeywordsPinned,
   estimateCost,
 };

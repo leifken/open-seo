@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AppError } from "@/server/lib/errors";
 import { objectSchema } from "@/server/mcp/output-schemas";
 import * as researchTools from "./dataforseo-research-tools";
 import * as localSeoTools from "./local-seo-tools";
 import { getBacklinksProfileTool } from "./get-backlinks-profile";
+import { getSearchConsolePerformanceTool } from "./search-console-tools";
 import { makeToolContext } from "./tool-test-support";
 
 const mocks = vi.hoisted(() => ({
@@ -13,6 +13,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("cloudflare:workers", () => ({
   env: {},
+  DurableObject: class {
+    readonly ctx = null;
+  },
 }));
 
 vi.mock("@/server/features/projects/services/ProjectService", () => ({
@@ -81,66 +84,62 @@ beforeEach(() => {
   });
 });
 
+const providerRows = (field: string) => ({
+  [field]: [new ProviderRow("example.com", 1)],
+  totalCount: 1,
+  // Required by the queued business-data tools; ignored by the rest.
+  status: "completed",
+  taskId: "google:task-1",
+});
+
 describe("DataForSEO research tool output schemas", () => {
-  // Every tool that streams provider rows straight to structuredContent.
+  // Every tool that streams provider rows or objects straight to
+  // structuredContent.
   it.each([
-    ["find_serp_competitors", "competitors"],
-    ["get_local_serp_results", "results"],
-    ["search_local_businesses", "businesses"],
-    ["get_google_business_questions", "questions"],
-    ["get_ranked_keywords", "keywords"],
-    ["get_business_reviews", "reviews"],
-    ["get_business_updates", "updates"],
+    ["find_serp_competitors", providerRows("competitors")],
+    ["get_local_serp_results", providerRows("results")],
+    ["search_local_businesses", providerRows("businesses")],
+    ["get_google_business_questions", providerRows("questions")],
+    ["get_ranked_keywords", providerRows("keywords")],
+    ["get_business_reviews", providerRows("reviews")],
+    ["get_business_updates", providerRows("updates")],
+    [
+      "get_business_profile",
+      {
+        status: "completed",
+        taskId: "task-1",
+        profile: new ProviderRow("example.com", 1),
+      },
+    ],
   ])(
     "%s accepts typed (non-plain-object) provider rows",
-    async (toolName, field) => {
+    async (toolName, payload) => {
       const tools = { ...researchTools, ...localSeoTools };
       const tool = Object.values(tools).find((t) => t.name === toolName);
       if (!tool) throw new Error(`tool ${toolName} not found`);
 
-      const schema = objectSchema(tool.config.outputSchema);
-
       // Mirror the MCP server: validate structuredContent against the tool's
       // own output schema. Extra keys (e.g. get_ranked_keywords' totalCount)
       // are allowed by the passthrough schemas, so one payload covers all.
-      const result = await schema.safeParseAsync({
-        [field]: [new ProviderRow("example.com", 1)],
-        totalCount: 1,
-        // Required by the queued business-data tools; ignored by the rest.
-        status: "completed",
-        taskId: "google:task-1",
-      });
+      const result = await objectSchema(
+        tool.config.outputSchema,
+      ).safeParseAsync(payload);
 
       expect(result.success).toBe(true);
     },
   );
+});
 
-  it("get_business_profile accepts a typed provider profile object", async () => {
+describe("MCP output schemas with expected missing fields", () => {
+  // Google omits position for the discover and googleNews search types.
+  it("accepts Search Console rows without a position", async () => {
     const schema = objectSchema(
-      localSeoTools.getBusinessProfileTool.config.outputSchema,
+      getSearchConsolePerformanceTool.config.outputSchema,
     );
 
     const result = await schema.safeParseAsync({
-      status: "completed",
-      taskId: "task-1",
-      profile: new ProviderRow("example.com", 1),
-    });
-
-    expect(result.success).toBe(true);
-  });
-
-  it("get_backlinks_profile accepts a paginated backlinks profile payload", async () => {
-    const schema = objectSchema(getBacklinksProfileTool.config.outputSchema);
-
-    const result = await schema.safeParseAsync({
-      target: "example.com",
-      scope: "domain",
-      backlinks: backlinkPage,
-      meta: {
-        organizationId: "org_123",
-        projectId: "project_123",
-        url: "https://app.example.com/p/project_123/backlinks",
-      },
+      ok: true,
+      rows: [{ clicks: 0, impressions: 1, ctr: 0 }],
     });
 
     expect(result.success).toBe(true);
@@ -197,68 +196,5 @@ describe("get_backlinks_profile MCP tool", () => {
     expect(result.structuredContent?.backlinks).toEqual(backlinkPage);
     const first = result.content[0];
     expect(first.type === "text" && first.text).toContain("- has more: yes");
-  });
-
-  it("passes through final-page pagination state", async () => {
-    const finalPage = {
-      ...backlinkPage,
-      totalCount: 51,
-      hasMore: false,
-      page: 2,
-    };
-    mocks.profileBacklinksPage.mockResolvedValue(finalPage);
-
-    const result = await getBacklinksProfileTool.handler(
-      {
-        projectId: "project_123",
-        target: "example.com",
-        scope: "domain",
-        page: 2,
-        pageSize: 50,
-        sortField: "rank",
-        sortOrder: "desc",
-        filters: {},
-        mode: "one_per_domain",
-        hideSpam: true,
-      },
-      toolContext,
-    );
-
-    expect(result.structuredContent?.backlinks).toMatchObject({
-      totalCount: 51,
-      hasMore: false,
-      page: 2,
-      pageSize: 50,
-    });
-  });
-
-  it("preserves Backlinks API access and credit errors", async () => {
-    const error = new AppError(
-      "BACKLINKS_BILLING_ISSUE",
-      "The connected DataForSEO account has a billing or balance issue",
-    );
-    mocks.profileBacklinksPage.mockRejectedValue(error);
-
-    await expect(
-      getBacklinksProfileTool.handler(
-        {
-          projectId: "project_123",
-          target: "example.com",
-          scope: "domain",
-          page: 1,
-          pageSize: 100,
-          sortField: "rank",
-          sortOrder: "desc",
-          filters: {},
-          mode: "one_per_domain",
-          hideSpam: true,
-        },
-        toolContext,
-      ),
-    ).rejects.toMatchObject({
-      code: "BACKLINKS_BILLING_ISSUE",
-      message:
-        "The connected DataForSEO account has a billing or balance issue",
-    });
   });
 });

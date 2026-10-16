@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { serpApi } from "@/server/lib/dataforseo/core";
+import { dataforseoGet } from "@/server/lib/dataforseo/core";
 import { assertOk } from "@/server/lib/dataforseo/envelope";
 import type { GeoLocation } from "@/server/lib/geo-location-resolver";
 
@@ -37,8 +37,8 @@ const locationItemSchema = z.object({
 export async function fetchGeoLocationsForCountry(
   countryIso: string,
 ): Promise<GeoLocation[]> {
-  const response = await serpApi().googleLocationsCountry(
-    countryIso.toLowerCase(),
+  const response = await dataforseoGet(
+    `/v3/serp/google/locations/${encodeURIComponent(countryIso.toLowerCase())}`,
   );
   const task = assertOk(response);
   return (task.result ?? [])

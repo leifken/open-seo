@@ -12,51 +12,62 @@
       "enabled": true,
     },
   },
-  // Smart Placement relocates only the `fetch` handler (cron + Workflow runs
-  // stay at the edge) toward external subrequests — Postgres via Hyperdrive,
-  // SEO APIs — not D1/KV/R2 bindings, so it's a DB no-op on the D1 default.
+  // Smart Placement moves only the `fetch` handler (cron, Workflow, and RPC
+  // runs are unaffected); local dev and Docker ignore it. Hosted prod
+  // overrides it with a us-east-1 region pin next to its Postgres
+  // (deploy/alchemy/alchemy.run.ts), which the legacy `pnpm run deploy` would
+  // undo: it targets the same prod script.
   // Must live here: a dashboard-only toggle is wiped by `wrangler deploy`.
   "placement": {
     "mode": "smart",
   },
   "workflows": [
+    // The site-audit engine lives in the open-seo-audit aux worker
+    // (wrangler.audit.jsonc) — its memory spikes (multi-MB Lighthouse
+    // payloads, in-flight HTML) OOMed this worker's near-limit baseline
+    // heap. This is a cross-script binding for starting audits and reading
+    // instance status.
     {
       "name": "site-audit-workflow",
       "binding": "SITE_AUDIT_WORKFLOW",
       "class_name": "SiteAuditWorkflow",
+      "script_name": "open-seo-audit",
     },
     {
       "name": "rank-check-workflow",
       "binding": "RANK_CHECK_WORKFLOW",
       "class_name": "RankCheckWorkflow",
     },
+    {
+      "name": "ai-visibility-workflow",
+      "binding": "AI_VISIBILITY_WORKFLOW",
+      "class_name": "AiVisibilityWorkflow",
+    },
   ],
-  // Durable Object backing the onboarding strategy chat (Agents SDK
-  // AIChatAgent). One instance per project; messages persist in the DO's
-  // SQLite. SQLite-backed classes must be declared in `migrations` below for
-  // the wrangler/workerd surfaces (local dev, Docker self-host); Alchemy
-  // deploys derive SQLite backing on their own.
+  // Durable Object backing the SAM in-app agent (Agents SDK AIChatAgent). One
+  // instance per chat session; messages persist in the DO's SQLite.
+  // SQLite-backed classes must be declared in `migrations` below for the
+  // wrangler/workerd surfaces (local dev, Docker self-host); Alchemy deploys
+  // derive SQLite backing on their own.
   "durable_objects": {
     "bindings": [
-      {
-        "name": "ONBOARDING_CHAT",
-        "class_name": "OnboardingChatAgent",
-      },
-      // SAM in-app agent. One instance per chat session; messages persist in the
-      // DO's SQLite. SQLite-backed classes must be declared in `migrations`.
       {
         "name": "SAM_CHAT",
         "class_name": "SamChatAgent",
       },
-      // Per-audit crawl scratchpad: frontier, link edges, and a slim page
-      // mirror in the DO's SQLite. Destroyed at finalize; self-cleans via
-      // alarm if the audit dies.
-      {
-        "name": "AUDIT_SCRATCHPAD",
-        "class_name": "AuditScratchpad",
-      },
     ],
   },
+  // The site-audit engine lives in the open-seo-audit aux worker
+  // (wrangler.audit.jsonc), including the scratchpad DO — the DO cannot be
+  // bound cross-script here (the Cloudflare API rejects deleting the class
+  // below while any binding still references its name). Cancel + GDPR
+  // erasure go through this service binding's AuditEngine entrypoint.
+  "services": [
+    {
+      "binding": "AUDIT_ENGINE",
+      "service": "open-seo-audit",
+    },
+  ],
   "migrations": [
     {
       "tag": "v1",
@@ -70,6 +81,23 @@
       "tag": "v3",
       "new_sqlite_classes": ["AuditScratchpad"],
     },
+    // AuditScratchpad moved to the open-seo-audit worker (no binding may
+    // still reference the class name in the same upload — see the services
+    // comment above). Deleting it here is safe: scratchpad state is
+    // disposable by design (destroyed at finalize, 7-day cleanup alarm) —
+    // in-flight audits at the cutover fail once and the stale-audit
+    // reconciler reaps them.
+    {
+      "tag": "v4",
+      "deleted_classes": ["AuditScratchpad"],
+    },
+    // The onboarding strategy chat was removed: the namespace had had zero
+    // invocations for months. Deleting the class destroys every instance's
+    // stored conversation, which is the intent — nothing else reads it.
+    {
+      "tag": "v5",
+      "deleted_classes": ["OnboardingChatAgent"],
+    },
   ],
   "triggers": {
     // Every 5 min: rank checks + stale-audit reconcile. Daily: OAuth KV GC.
@@ -78,7 +106,7 @@
   },
   // This config serves local dev and Docker self-host only. All Cloudflare
   // deployments — previews, prod, self-host — go through Alchemy
-  // (alchemy.run.ts), which provisions real resources per stage and never
+  // (deploy/alchemy/alchemy.run.ts), which provisions real resources per stage and never
   // reads these ids.
   //
   // The ids below are NOT dead config: miniflare derives its on-disk storage
@@ -100,7 +128,7 @@
       "binding": "DB",
       "database_name": "open-seo",
       "database_id": "37bee90a-e1aa-404f-b01e-b0d1d479bda1",
-      "migrations_dir": "drizzle",
+      "migrations_dir": "drizzle/sqlite",
     },
   ],
   // Postgres scale path (opt-in; D1 is the default). Hyperdrive is the ONLY way

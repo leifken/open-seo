@@ -1,3 +1,4 @@
+import { sort } from "remeda";
 /* eslint-disable max-lines -- covers every tool in the also max-lines-disabled local-seo-tools.ts */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@/server/lib/errors";
@@ -62,6 +63,7 @@ beforeEach(() => {
     languageCode: "en",
   });
   mocks.getCached.mockResolvedValue(null);
+  mocks.setCached.mockResolvedValue(undefined);
 });
 
 describe("get_business_profile", () => {
@@ -529,21 +531,25 @@ describe("get_local_rank_grid", () => {
     // from the spacing (13z here) so each point's viewport spans its neighbours
     // instead of hiding businesses one grid step east or west.
     expect(
-      local.mock.calls
-        .map(([input]) => input.locationCoordinate)
-        .toSorted(byText),
+      sort(
+        local.mock.calls.map(([input]) => input.locationCoordinate),
+        byText,
+      ),
     ).toEqual(
-      [
-        "40.0180874,-74.0234532,13z",
-        "40.0180874,-74,13z",
-        "40.0180874,-73.9765468,13z",
-        "40,-74.0234532,13z",
-        "40,-74,13z",
-        "40,-73.9765468,13z",
-        "39.9819126,-74.0234532,13z",
-        "39.9819126,-74,13z",
-        "39.9819126,-73.9765468,13z",
-      ].toSorted(byText),
+      sort(
+        [
+          "40.0180874,-74.0234532,13z",
+          "40.0180874,-74,13z",
+          "40.0180874,-73.9765468,13z",
+          "40,-74.0234532,13z",
+          "40,-74,13z",
+          "40,-73.9765468,13z",
+          "39.9819126,-74.0234532,13z",
+          "39.9819126,-74,13z",
+          "39.9819126,-73.9765468,13z",
+        ],
+        byText,
+      ),
     );
     expect(local).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -806,6 +812,32 @@ describe("get_local_rank_grid (queue, SEO-5)", () => {
       estimate: { estimatedCostUsd: 0 },
       summary: { pointsFound: 9 },
     });
+  });
+
+  it("reuses paid grid tasks on a repeat with the same search, including a different target", async () => {
+    const receipts = new Map<string, unknown>();
+    mocks.getCached.mockImplementation(
+      async (key: string) => receipts.get(key) ?? null,
+    );
+    mocks.setCached.mockImplementation(async (key: string, value: unknown) => {
+      receipts.set(key, value);
+    });
+    const mapsTaskPost = postAll();
+    mocks.createDataforseoClient.mockReturnValue({ serp: { mapsTaskPost } });
+    mocks.fetchMapsTaskResult.mockResolvedValue({
+      status: "completed",
+      items: mapsItems,
+    });
+
+    const first = await getLocalRankGridTool.handler(baseArgs, toolContext);
+    const repeat = await getLocalRankGridTool.handler(
+      { ...baseArgs, target: { cid: "749" } },
+      toolContext,
+    );
+
+    expect(mapsTaskPost).toHaveBeenCalledTimes(1);
+    expect(first.structuredContent.status).toBe("completed");
+    expect(repeat.structuredContent.matchedBusiness?.cid).toBe("749");
   });
 
   it("estimates without searching and refuses a run above maxCostUsd", async () => {

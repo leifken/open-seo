@@ -1,12 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GscApiError, GscNotConnectedError } from "@/server/lib/gscErrors";
 import * as searchConsoleTools from "./search-console-tools";
-import { makeToolContext } from "./tool-test-support";
+import { makeToolContext, textContent } from "./tool-test-support";
 
 const mocks = vi.hoisted(() => ({
   getProjectForOrganization: vi.fn(),
-  isHostedServerAuthMode: vi.fn(),
-  hasSelfHostedGoogleOAuthConfig: vi.fn(),
+  hasGoogleOAuthConfig: vi.fn(),
   GscService: {
     getPerformance: vi.fn(),
     inspectUrls: vi.fn(),
@@ -14,11 +13,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("cloudflare:workers", () => ({ env: {} }));
-vi.mock("@/server/lib/runtime-env", () => ({
-  isHostedServerAuthMode: mocks.isHostedServerAuthMode,
-}));
 vi.mock("@/server/features/google/oauth-config", () => ({
-  hasSelfHostedGoogleOAuthConfig: mocks.hasSelfHostedGoogleOAuthConfig,
+  hasGoogleOAuthConfig: mocks.hasGoogleOAuthConfig,
 }));
 vi.mock("@/server/features/projects/services/ProjectService", () => ({
   ProjectService: {
@@ -30,6 +26,14 @@ vi.mock("@/server/features/gsc/services/GscService", () => ({
 }));
 const toolContext = makeToolContext();
 
+const gscRow = (position: number, impressions = 100) => ({
+  keys: [`q${position}`],
+  clicks: 1,
+  impressions,
+  ctr: 0.041237113402061855,
+  position,
+});
+
 describe("search console MCP tools", () => {
   beforeEach(() => {
     mocks.getProjectForOrganization.mockResolvedValue({
@@ -37,8 +41,7 @@ describe("search console MCP tools", () => {
       locationCode: 2840,
       languageCode: "en",
     });
-    mocks.isHostedServerAuthMode.mockResolvedValue(true);
-    mocks.hasSelfHostedGoogleOAuthConfig.mockResolvedValue(false);
+    mocks.hasGoogleOAuthConfig.mockResolvedValue(true);
   });
 
   it("returns performance rows on success and passes filters through", async () => {
@@ -103,6 +106,58 @@ describe("search console MCP tools", () => {
     expect(text?.type === "text" && text.text).toContain("4.0%");
   });
 
+  it("applies position/impression filters server-side over the full window and paginates in Google row space", async () => {
+    mocks.GscService.getPerformance.mockResolvedValue({
+      siteUrl: "https://example.com/",
+      connectedBy: "alice@example.com",
+      request: {
+        dimensions: ["query"],
+        startDate: "2026-04-27",
+        endDate: "2026-05-25",
+        rowLimit: 1000,
+        startRow: 10,
+      },
+      rows: [
+        gscRow(2),
+        gscRow(7),
+        gscRow(12, 5),
+        gscRow(15),
+        gscRow(18),
+        gscRow(30),
+      ],
+    });
+
+    const result =
+      await searchConsoleTools.getSearchConsolePerformanceTool.handler(
+        {
+          projectId: "project_1",
+          rowLimit: 2,
+          startRow: 10,
+          minPosition: 5,
+          maxPosition: 20,
+          minImpressions: 50,
+        },
+        toolContext,
+      );
+
+    expect(mocks.GscService.getPerformance).toHaveBeenCalledWith(
+      expect.objectContaining({ rowLimit: 1000, startRow: 10 }),
+    );
+    expect(mocks.GscService.getPerformance).toHaveBeenCalledWith(
+      expect.not.objectContaining({ minPosition: 5 }),
+    );
+    expect(result.structuredContent).toMatchObject({
+      rowCount: 2,
+      rows: [
+        { keys: ["q7"], ctr: 0.0412, position: 7 },
+        { keys: ["q15"], ctr: 0.0412, position: 15 },
+      ],
+      hasMore: true,
+      // q15 was Google row index 3 of this window; next page starts after it.
+      nextStartRow: 14,
+    });
+  });
+
   it("surfaces a not-connected message with a connect URL", async () => {
     mocks.GscService.getPerformance.mockRejectedValue(
       new GscNotConnectedError("project_1"),
@@ -148,6 +203,22 @@ describe("search console MCP tools", () => {
     );
   });
 
+  it("points to API setup instead of reconnect when the API is disabled", async () => {
+    mocks.GscService.getPerformance.mockRejectedValue(
+      new GscApiError(403, "denied", "SERVICE_DISABLED"),
+    );
+    const { getSearchConsolePerformanceTool } = searchConsoleTools;
+
+    const result = await getSearchConsolePerformanceTool.handler(
+      { projectId: "project_1" },
+      toolContext,
+    );
+
+    const first = result.content[0];
+    expect(first.type === "text" && first.text).toContain("isn't enabled");
+    expect(first.type === "text" && first.text).not.toContain("reconnect");
+  });
+
   it("rejects searchAppearance combined with another dimension", async () => {
     const { getSearchConsolePerformanceTool } = searchConsoleTools;
 
@@ -179,8 +250,7 @@ describe("search console MCP tools", () => {
   });
 
   it("returns a setup message in self-hosted mode without a Google client", async () => {
-    mocks.isHostedServerAuthMode.mockResolvedValue(false);
-    mocks.hasSelfHostedGoogleOAuthConfig.mockResolvedValue(false);
+    mocks.hasGoogleOAuthConfig.mockResolvedValue(false);
     const { getSearchConsolePerformanceTool } = searchConsoleTools;
 
     const result = await getSearchConsolePerformanceTool.handler(
@@ -195,33 +265,6 @@ describe("search console MCP tools", () => {
     expect(mocks.GscService.getPerformance).not.toHaveBeenCalled();
   });
 
-  it("allows performance queries in self-hosted mode with a Google client", async () => {
-    mocks.isHostedServerAuthMode.mockResolvedValue(false);
-    mocks.hasSelfHostedGoogleOAuthConfig.mockResolvedValue(true);
-    mocks.GscService.getPerformance.mockResolvedValue({
-      siteUrl: "https://example.com/",
-      connectedBy: "alice@example.com",
-      request: {
-        dimensions: ["query"],
-        startDate: "2026-04-27",
-        endDate: "2026-05-25",
-        rowLimit: 1000,
-      },
-      rows: [],
-    });
-    const { getSearchConsolePerformanceTool } = searchConsoleTools;
-
-    const result = await getSearchConsolePerformanceTool.handler(
-      { projectId: "project_1" },
-      toolContext,
-    );
-
-    expect(mocks.GscService.getPerformance).toHaveBeenCalledWith(
-      expect.objectContaining({ projectId: "project_1" }),
-    );
-    expect(result.structuredContent).toMatchObject({ ok: true });
-  });
-
   it("inspects multiple URLs and reports partial failures inline", async () => {
     mocks.GscService.inspectUrls.mockResolvedValue({
       siteUrl: "sc-domain:example.com",
@@ -230,7 +273,18 @@ describe("search console MCP tools", () => {
         {
           url: "https://example.com/a",
           result: {
-            indexStatusResult: { verdict: "PASS", coverageState: "Indexed" },
+            indexStatusResult: {
+              verdict: "PASS",
+              coverageState: "Indexed",
+              robotsTxtState: "ALLOWED",
+              lastCrawlTime: "2026-08-21T04:12:39Z",
+              googleCanonical: "https://example.com/a",
+              userCanonical: "https://example.com/a?utm_source=x",
+              crawledAs: "MOBILE",
+              referringUrls: ["https://example.com/"],
+            },
+            mobileUsabilityResult: { verdict: "PASS" },
+            richResultsResult: { verdict: "PASS" },
           },
         },
         {
@@ -260,9 +314,21 @@ describe("search console MCP tools", () => {
       ok: true,
       siteUrl: "sc-domain:example.com",
     });
-    const first = result.content[0];
-    expect(first.type === "text" && first.text).toContain("PASS");
-    expect(first.type === "text" && first.text).toContain("error:");
+    // Text-only clients see nothing but this block, so every inspection field
+    // Google returned has to land in it — including the canonical mismatch.
+    const text = textContent(result);
+    expect(text).toContain("PASS");
+    expect(text).toContain("robots.txt: ALLOWED");
+    expect(text).toContain("last crawl: 2026-08-21T04:12:39Z");
+    expect(text).toContain("crawled as: MOBILE");
+    expect(text).toContain(
+      "canonical: MISMATCH — Google selected https://example.com/a, page declares https://example.com/a?utm_source=x",
+    );
+    expect(text).toContain("mobile usability: PASS · rich results: PASS");
+    expect(text).toContain("referring URLs: https://example.com/");
+    // Fields Google didn't return are dropped, not printed as empty labels.
+    expect(text).not.toContain("sitemaps:");
+    expect(text).toContain("error:");
   });
 
   it("surfaces a not-connected message from inspect_urls", async () => {
@@ -284,8 +350,7 @@ describe("search console MCP tools", () => {
   });
 
   it("returns a setup message for inspect_urls in self-hosted mode without a Google client", async () => {
-    mocks.isHostedServerAuthMode.mockResolvedValue(false);
-    mocks.hasSelfHostedGoogleOAuthConfig.mockResolvedValue(false);
+    mocks.hasGoogleOAuthConfig.mockResolvedValue(false);
     const { inspectUrlsTool } = searchConsoleTools;
 
     const result = await inspectUrlsTool.handler(

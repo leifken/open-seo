@@ -7,9 +7,11 @@
 
 import { normalizeAndValidateStartUrl } from "@/server/lib/audit/url-policy";
 
-export const MAX_PAGES = 5;
+const MAX_PAGES = 5;
 const PER_PAGE_CHAR_LIMIT = 4000;
 const FETCH_TIMEOUT_MS = 10_000;
+// Covers chains like https://apex -> http://www -> https://www.
+const MAX_REDIRECTS = 3;
 const MAX_RESPONSE_BYTES = 2_000_000;
 const USER_AGENT = "OpenSEO-Onboarding/1.0 (+https://openseo.so)";
 
@@ -49,38 +51,26 @@ async function readBoundedText(response: Response): Promise<string | null> {
 
 async function fetchText(url: string): Promise<string | null> {
   try {
-    const response = await fetch(url, {
-      headers: { "user-agent": USER_AGENT, accept: "text/html,*/*" },
-      // Manual redirects so we can re-validate each hop against the SSRF guard;
-      // redirect:"follow" would let a 30x to an internal host bypass it.
-      redirect: "manual",
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
-
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get("location");
-      if (!location) return null;
-      let redirectUrl: string;
-      try {
-        // Re-validates host, blocks private IPs, and does DoH DNS resolution.
-        redirectUrl = await normalizeAndValidateStartUrl(
-          new URL(location, url).toString(),
-        );
-      } catch {
-        return null; // blocked or invalid redirect destination
-      }
-      // One hop only; fetch the validated destination without following further.
-      const redirected = await fetch(redirectUrl, {
+    let current = url;
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      const response = await fetch(current, {
         headers: { "user-agent": USER_AGENT, accept: "text/html,*/*" },
+        // Manual redirects so we can re-validate each hop against the SSRF guard;
+        // redirect:"follow" would let a 30x to an internal host bypass it.
         redirect: "manual",
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
-      if (!redirected.ok) return null;
-      return await readBoundedText(redirected);
+      if (response.status < 300 || response.status >= 400)
+        return response.ok ? await readBoundedText(response) : null;
+      const location = response.headers.get("location");
+      if (!location) return null;
+      // Re-validates host, blocks private IPs, and does DoH DNS resolution.
+      // Throws on a blocked or invalid destination.
+      current = await normalizeAndValidateStartUrl(
+        new URL(location, current).toString(),
+      );
     }
-
-    if (!response.ok) return null;
-    return await readBoundedText(response);
+    return null;
   } catch {
     return null;
   }
@@ -150,7 +140,9 @@ async function scrapePage(url: string): Promise<ScrapedPage | null> {
   if (text.length === 0) {
     return null;
   }
-  return { url, title: extractTitle(html), text };
+  // Extracted titles and shortened text can retain their entire source string
+  // in V8. Detach them before pages accumulate in results or chat transcripts.
+  return structuredClone({ url, title: extractTitle(html), text });
 }
 
 /**
@@ -217,5 +209,13 @@ export async function readSite(
   if (discovered.blocked) {
     return { pages: [], blocked: true };
   }
-  return readPages(discovered.urls, maxPages);
+  const site = await readPages(discovered.urls, maxPages);
+  const root = new URL(discovered.urls[0]);
+  if (!site.blocked || root.hostname.startsWith("www.")) return site;
+  // Some sites only serve their www host (e.g. the bare domain's TLS
+  // certificate is missing), so retry there before giving up.
+  root.hostname = `www.${root.hostname}`;
+  // The setter ignores invalid hosts, so IP literals keep their original host.
+  if (!root.hostname.startsWith("www.")) return site;
+  return readSite(root.toString(), maxPages);
 }

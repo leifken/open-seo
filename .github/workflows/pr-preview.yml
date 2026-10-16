@@ -1,11 +1,11 @@
 name: PR Preview
 
 # Alchemy preview stage per private-repo PR: deploy on open/update, destroy on
-# close (stage pr-<n>). Full model in docs/PREVIEW_DEPLOYMENTS.md.
+# close (stage pr-<n>). Full model in docs/maintainers/preview-deployments.md.
 #
 # Public-mirror (every-app/open-seo) PRs NEVER deploy from CI — fork code must
 # not run with deploy secrets. Preview those locally from a worktree instead
-# (docs/PREVIEW_DEPLOYMENTS.md, "Public-mirror PRs"). The repository gate
+# (docs/maintainers/preview-deployments.md, "Public-mirror PRs"). The repository gate
 # below keeps the synced copy of this file inert on the mirror.
 #
 # Required repo secrets: CLOUDFLARE_API_TOKEN (Workers Scripts/KV/D1/R2/
@@ -21,10 +21,9 @@ on:
     paths-ignore:
       - "**/*.md"
       - docs/**
-      - runbooks/**
       - .agents/**
       - web/**
-      - badseo/**
+      - tests/badseo/**
 
 # A newer push supersedes any in-flight deploy for the same PR (alchemy's
 # per-resource state reconciles cleanly on the next run); a close-triggered
@@ -96,11 +95,11 @@ jobs:
 
       # Fail the job (and skip the URL comment) if the deployed preview
       # answers without a Cloudflare Access login redirect. A definitive app
-      # response (2xx/3xx, no Access redirect) fails immediately — the
-      # preview is public; retries are only for propagation-era errors.
+      # response (2xx–4xx except 404, no Access redirect) fails immediately;
+      # retries are only for propagation-era errors, including workers.dev 404s.
       # (Cloudflare version preview URLs sit outside this wildcard, but alchemy
       # uploads versions with no preview provisioned, so none are served — see
-      # docs/PREVIEW_DEPLOYMENTS.md.)
+      # docs/maintainers/preview-deployments.md.)
       - name: Verify Access protection
         if: github.event.action != 'closed'
         run: |
@@ -112,14 +111,14 @@ jobs:
               https://*.cloudflareaccess.com/cdn-cgi/access/login*)
                 exit 0 ;;
             esac
-            if [ -n "$code" ] && [ "$code" -ge 200 ] && [ "$code" -lt 500 ]; then
+            if [ -n "$code" ] && [ "$code" -ge 200 ] && [ "$code" -lt 500 ] && [ "$code" != 404 ]; then
               echo "::error::$PREVIEW_URL responded (HTTP $code) WITHOUT a Cloudflare Access challenge — the preview is public; destroy the stage (pnpm destroy:preview --stage $STAGE --yes)"
               exit 1
             fi
             echo "attempt $attempt: not up yet (${response:-no response})"
             sleep 5
           done
-          echo "::error::$PREVIEW_URL is unreachable (likely workers.dev propagation) — it still sits behind the wildcard Access app; re-run this job or verify manually"
+          echo "::error::Could not verify Cloudflare Access protection for $PREVIEW_URL after 8 attempts (possibly workers.dev propagation); re-run this job or verify manually before sharing the preview"
           exit 1
 
       - name: Destroy preview stage

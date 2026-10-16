@@ -11,9 +11,10 @@ import {
   auditIssues,
   auditLighthouseResults,
   auditPages,
+  projects,
 } from "@/db/schema";
 import { executeInBatches } from "@/db/runBatch";
-import { AUDIT_ISSUE_TYPES } from "@/shared/audit-issues";
+import { insertIssues } from "./auditIssueWrites";
 import { deterministicAuditRowId } from "@/server/lib/audit/ids";
 import type { DetectedIssue } from "@/server/lib/audit/issues/page-reporters";
 import type {
@@ -21,6 +22,7 @@ import type {
   CrawledPageResult,
   LighthouseResult,
 } from "@/server/lib/audit/types";
+import type { PageFetchClass } from "@/shared/audit-fetch-class";
 
 async function createAudit(data: {
   id: string;
@@ -174,16 +176,13 @@ async function insertCrawledBatch(
       h4Count: page.h4Count,
       h5Count: page.h5Count,
       h6Count: page.h6Count,
-      headingOrderJson: JSON.stringify(page.headingOrder),
       wordCount: page.wordCount,
       contentHash: page.contentHash,
       imagesTotal: page.imagesTotal,
       imagesMissingAlt: page.imagesMissingAlt,
-      imagesJson: JSON.stringify(page.images),
       internalLinkCount: page.links.filter((l) => l.isInternal).length,
       externalLinkCount: page.links.filter((l) => !l.isInternal).length,
       hasStructuredData: page.hasStructuredData,
-      hreflangTagsJson: JSON.stringify(page.hreflangTags),
       isIndexable: page.isIndexable,
       fetchClass: page.fetchClass,
       crawlDepth: page.crawlDepth,
@@ -197,28 +196,6 @@ async function insertCrawledBatch(
   });
 
   await insertIssues(auditId, issues);
-}
-
-async function insertIssues(auditId: string, issues: DetectedIssue[]) {
-  const issueRows = await Promise.all(
-    issues.map(async (issue) => ({
-      id: await deterministicAuditRowId(
-        auditId,
-        issue.pageUrl,
-        issue.issueType,
-        issue.dedupeKey ?? "",
-      ),
-      auditId,
-      pageId: issue.pageId,
-      pageUrl: issue.pageUrl,
-      issueType: issue.issueType,
-      severity: AUDIT_ISSUE_TYPES[issue.issueType].severity,
-      detailsJson: issue.details ? JSON.stringify(issue.details) : null,
-    })),
-  );
-  await executeInBatches(issueRows, (tx, row) =>
-    tx.insert(auditIssues).values(row).onConflictDoNothing(),
-  );
 }
 
 async function insertLighthouseResults(
@@ -317,17 +294,20 @@ async function getLighthouseForAudit(auditId: string) {
   });
 }
 
-async function countBlockedPages(auditId: string): Promise<number> {
+async function countPagesByFetchClass(
+  auditId: string,
+  fetchClass: PageFetchClass,
+): Promise<number> {
   const rows = await db
-    .select({ blocked: count() })
+    .select({ pages: count() })
     .from(auditPages)
     .where(
       and(
         eq(auditPages.auditId, auditId),
-        eq(auditPages.fetchClass, "blocked"),
+        eq(auditPages.fetchClass, fetchClass),
       ),
     );
-  return rows[0]?.blocked ?? 0;
+  return rows[0]?.pages ?? 0;
 }
 
 async function hasPagesForAudit(auditId: string): Promise<boolean> {
@@ -349,15 +329,19 @@ async function getAuditsByProject(projectId: string) {
   return rows.map(({ audit }) => audit);
 }
 
-async function getAuditUsageForUser(userId: string) {
-  const rows = await db.query.audits.findMany({
-    where: eq(audits.startedByUserId, userId),
-    columns: {
-      status: true,
-      pagesTotal: true,
-      lighthouseTotal: true,
-    },
-  });
+// Org-scoped: the free-plan quota belongs to the org (the Autumn customer),
+// so usage must aggregate across every member — counting per starting user
+// would multiply the free ceiling by the member count.
+async function getAuditUsageForOrganization(organizationId: string) {
+  const rows = await db
+    .select({
+      status: audits.status,
+      pagesTotal: audits.pagesTotal,
+      lighthouseTotal: audits.lighthouseTotal,
+    })
+    .from(audits)
+    .innerJoin(projects, eq(audits.projectId, projects.id))
+    .where(eq(projects.organizationId, organizationId));
 
   return {
     capacityUnits: rows.reduce(
@@ -444,10 +428,10 @@ export const AuditRepository = {
   getIssuesForAudit,
   getPagesForAudit,
   getLighthouseForAudit,
-  countBlockedPages,
+  countPagesByFetchClass,
   hasPagesForAudit,
   getAuditsByProject,
-  getAuditUsageForUser,
+  getAuditUsageForOrganization,
   getAuditResultsForProject,
   getLighthouseResultById,
   deleteAuditForProject,

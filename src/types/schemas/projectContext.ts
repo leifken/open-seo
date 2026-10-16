@@ -46,6 +46,9 @@ const customSectionSlugSchema = z
   .regex(
     /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
     "Use a lowercase slug like 'launch-plan'",
+  )
+  .describe(
+    "Lowercase letters and digits separated by hyphens, e.g. 'launch-plan'. No underscores or spaces. Use the same slug to edit or delete the section.",
   );
 
 export const CUSTOM_SECTION_KEY_PREFIX = "custom:";

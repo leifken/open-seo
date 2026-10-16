@@ -47,6 +47,9 @@ jobs:
       - name: Install website dependencies
         run: pnpm --dir web install --frozen-lockfile
 
+      - name: Test free-tool abuse and spend protection
+        run: pnpm --dir web run test:protection
+
       - name: Run website type checks
         run: pnpm --dir web run types:check
 
@@ -69,7 +72,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.selfhost
+          file: deploy/docker/Dockerfile
           push: false
           load: false
           platforms: linux/amd64

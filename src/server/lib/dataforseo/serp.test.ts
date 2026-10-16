@@ -4,10 +4,12 @@ vi.mock("@/server/lib/runtime-env", () => ({
   getRequiredEnvValue: vi.fn(async () => "test-api-key"),
 }));
 
+import { DataforseoChargedTaskError } from "@/server/lib/dataforseo/envelope";
 import {
-  fetchAutocomplete,
   fetchLiveSerp,
+  fetchLocalSerpTaskResult,
   fetchRankCheckTaskResult,
+  postLocalSerpTasks,
   postRankCheckTasks,
 } from "@/server/lib/dataforseo/serp";
 
@@ -97,20 +99,52 @@ describe("fetchLiveSerp", () => {
       locationCode: 2276,
       languageCode: "de",
       depth: 5,
+      loadAsyncAiOverview: true,
     });
 
-    const body = parseDataforseoRequestBody(
-      fetchMock.mock.calls[0]?.[1],
-    ) as Array<Record<string, unknown>>;
-    expect(body[0]).toMatchObject({ depth: 10, load_async_ai_overview: true });
+    const body = parseDataforseoRequestBody(fetchMock.mock.calls[0]?.[1]);
+    expect(body).toMatchObject([{ depth: 10, load_async_ai_overview: true }]);
+  });
+});
+
+describe("live SERP", () => {
+  // 40102 is the documented "No Search Results." code (40501 is "Invalid
+  // Field."). isNoResultsTask matches on the status message, not the code, so
+  // this stays correct whichever code DataForSEO attaches to the message.
+  it("returns an empty result for DataForSEO's no-results task", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockResolvedValue(
+        Response.json({
+          status_code: 20000,
+          tasks: [
+            {
+              status_code: 40102,
+              status_message: "No Search Results.",
+              path: ["v3", "serp", "google", "organic", "live", "advanced"],
+              cost: 0.002,
+              result_count: 0,
+              result: [],
+            },
+          ],
+        }),
+      ),
+    );
+
+    await expect(
+      fetchLiveSerp({
+        keyword: "obscure query",
+        locationCode: 2840,
+        languageCode: "en",
+      }),
+    ).resolves.toMatchObject({
+      data: { items: [], partial: false },
+      billing: { costUsd: 0.002 },
+    });
   });
 });
 
 describe("rank check task queue", () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-  });
-
   it("posts queued tasks, maps ids by tag, and sums cost over all entries", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       Response.json({
@@ -265,56 +299,57 @@ describe("rank check task queue", () => {
   });
 });
 
-describe("fetchAutocomplete", () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("sends location_code/language_code and returns the suggestion items", async () => {
+describe("Maps task queue", () => {
+  it("posts one task per coordinate, maps ids back by tag, and bills every entry", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       Response.json({
         status_code: 20000,
         tasks: [
           {
-            status_code: 20000,
-            path: ["v3", "serp", "google", "autocomplete", "live", "advanced"],
-            cost: 0.0005,
-            result: [
-              {
-                items: [
-                  { rank_absolute: 1, suggestion: "webdesign nottuln preise" },
-                  { rank_absolute: 2, suggestion: "webdesign nottuln agentur" },
-                ],
-              },
-            ],
+            id: "task-c",
+            status_code: 20100,
+            cost: 0.0012,
+            data: { tag: "2" },
+          },
+          {
+            status_code: 40501,
+            status_message: "Invalid Field",
+            cost: 0.0006,
+            data: { tag: "1" },
+          },
+          {
+            id: "task-a",
+            status_code: 20100,
+            cost: 0.0012,
+            data: { tag: "0" },
           },
         ],
       }),
     );
     vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const result = await fetchAutocomplete({
-      keyword: "webdesign nottuln",
-      locationCode: 2276,
-      languageCode: "de",
+    const result = await postLocalSerpTasks({
+      keyword: "coffee",
+      locationCoordinates: ["1,1,13z", "2,2,13z", "3,3,13z"],
+      languageCode: "en",
+      device: "mobile",
+      depth: 20,
     });
 
-    const [, init] = fetchMock.mock.calls[0];
-    expect(parseDataforseoRequestBody(init)).toEqual([
-      {
-        keyword: "webdesign nottuln",
-        location_code: 2276,
-        language_code: "de",
-        cursor_pointer: undefined,
-      },
+    expect(
+      parseDataforseoRequestBody(fetchMock.mock.calls[0]?.[1]),
+    ).toMatchObject([
+      { location_coordinate: "1,1,13z", priority: 2, tag: "0" },
+      { location_coordinate: "2,2,13z", priority: 2, tag: "1" },
+      { location_coordinate: "3,3,13z", priority: 2, tag: "2" },
     ]);
-    expect(result.data).toEqual([
-      { rank_absolute: 1, suggestion: "webdesign nottuln preise" },
-      { rank_absolute: 2, suggestion: "webdesign nottuln agentur" },
-    ]);
+    expect(result.data).toEqual(["task-a", null, "task-c"]);
+    // The rejected entry's cost is still metered: a charge is a charge.
+    expect(result.billing.costUsd).toBeCloseTo(0.003, 10);
   });
 
-  it("treats 'No Search Results' as an empty, billed success", async () => {
+  it("keeps DataForSEO's charge when it rejects every entry", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn<typeof fetch>().mockResolvedValue(
@@ -323,30 +358,68 @@ describe("fetchAutocomplete", () => {
           tasks: [
             {
               status_code: 40501,
-              status_message: "No Search Results.",
-              path: [
-                "v3",
-                "serp",
-                "google",
-                "autocomplete",
-                "live",
-                "advanced",
-              ],
-              cost: 0.0005,
-              result: [],
+              status_message: "Invalid Field: 'location_coordinate'.",
+              cost: 0.0012,
+              data: { tag: "0" },
             },
           ],
         }),
       ),
     );
+    vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const result = await fetchAutocomplete({
-      keyword: "asdkjhaskjdhaksjhd",
-      locationCode: 2276,
-      languageCode: "de",
+    const posting = postLocalSerpTasks({
+      keyword: "coffee",
+      locationCoordinates: ["1,1,13z"],
+      languageCode: "en",
+      device: "mobile",
+      depth: 20,
     });
+    // The meter bills a failure only when it is a charged-task error.
+    await expect(posting).rejects.toBeInstanceOf(DataforseoChargedTaskError);
+    await expect(posting).rejects.toMatchObject({
+      billing: { costUsd: 0.0012 },
+    });
+  });
 
-    expect(result.data).toEqual([]);
-    expect(result.billing.costUsd).toBe(0.0005);
+  it("reads a queued Maps task as pending, its items once done, and No Search Results as an empty SERP", async () => {
+    const items = [{ type: "maps_search", rank_absolute: 1, cid: "123" }];
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          Response.json({
+            status_code: 20000,
+            tasks: [{ status_code: 40602 }],
+          }),
+        )
+        .mockResolvedValueOnce(
+          Response.json({
+            status_code: 20000,
+            tasks: [{ status_code: 20000, result: [{ items }] }],
+          }),
+        )
+        .mockResolvedValueOnce(
+          Response.json({
+            status_code: 20000,
+            tasks: [
+              { status_code: 40102, status_message: "No Search Results." },
+            ],
+          }),
+        ),
+    );
+
+    expect(await fetchLocalSerpTaskResult("task-a")).toEqual({
+      status: "pending",
+    });
+    expect(await fetchLocalSerpTaskResult("task-a")).toEqual({
+      status: "completed",
+      items,
+    });
+    expect(await fetchLocalSerpTaskResult("task-b")).toEqual({
+      status: "completed",
+      items: [],
+    });
   });
 });

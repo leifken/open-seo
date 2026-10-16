@@ -85,3 +85,119 @@ export const competitiveAnalysisStrategies: StrategyLibraryItem[] = [
     href: "/library/competitive-analysis/backlink-gap-analysis",
   },
 ];
+
+export const SITE_AUDIT_LIBRARY = {
+  name: "Site Audit",
+  path: "/library/site-audit",
+};
+
+export const siteAuditStrategies: StrategyLibraryItem[] = [
+  {
+    title: "The technical SEO audit checklist that ends in fixes",
+    description:
+      "One crawl returned 1,180 findings and 35 that mattered. Sort by severity, group by cause, and read the fix that ships with every issue.",
+    href: "/library/site-audit/technical-seo-audit-checklist",
+  },
+  {
+    title: "Write an audit report the client will actually act on",
+    description:
+      "A six-section structure that ties every finding to a page, a cost, and a business number, plus what to leave out.",
+    href: "/library/site-audit/seo-audit-report-template",
+  },
+  {
+    title: "Index bloat: when the fix is deleting pages",
+    description:
+      "Five million pages came out of one site and it recovered. On a small site the same instinct usually wastes a weekend. How to tell which you have.",
+    href: "/library/site-audit/index-bloat",
+  },
+];
+
+export const RANK_TRACKING_LIBRARY = {
+  name: "Rank Tracking",
+  path: "/library/rank-tracking",
+};
+
+export const rankTrackingStrategies: StrategyLibraryItem[] = [
+  {
+    title: "Which keywords to track, and how many",
+    description:
+      "Twenty to fifty terms from Search Console, tied to pages that earn money, priced before they go in. A 500-row tracker is a report nobody reads.",
+    href: "/library/rank-tracking/which-keywords-to-track",
+  },
+  {
+    title: "Is Search Console a rank tracker? Where the free data stops",
+    description:
+      "Search Console gives an average across searchers and devices, with preliminary recent data. Enough for many sites. How to tell whether yours needs more.",
+    href: "/library/rank-tracking/search-console-vs-rank-tracker",
+  },
+  {
+    title: "Local rank tracking: position depends on where the searcher stands",
+    description:
+      "Nine points three kilometres apart, four different businesses at number one. Why a local business needs a grid before a tracker.",
+    href: "/library/rank-tracking/local-rank-tracking",
+  },
+  {
+    title: "The keyword ranking report your CEO will read",
+    description:
+      "Lead with the business number, group movement into four counts, explain three rows, say what happens next. One page, every month.",
+    href: "/library/rank-tracking/keyword-ranking-report",
+  },
+];
+
+export const AI_AGENT_SEO_LIBRARY = {
+  name: "AI-Agent SEO",
+  path: "/library/ai-agent-seo",
+};
+
+export const aiAgentSeoStrategies: StrategyLibraryItem[] = [
+  {
+    title: "Run SEO from your AI assistant: the MCP workflow",
+    description:
+      "Connect one server and the assistant you already use can read Search Console, pull keyword data and check rankings in the same conversation. The first five prompts, and the row that shows why a human still reads the output.",
+    href: "/library/ai-agent-seo/run-seo-from-your-ai-assistant",
+  },
+  {
+    title: "What to automate and what to keep: the dispatcher rule",
+    description:
+      "A scheduled rank check runs without anyone watching. A decision about which keywords go in it does not. Three layers, not two.",
+    href: "/library/ai-agent-seo/what-to-automate",
+  },
+  {
+    title: "Human in the loop content: the brief is the job",
+    description:
+      "Most teams run the loop backwards. Humans write the brief, the model drafts, humans edit, and the two checks that catch the draft that reads like everyone else's.",
+    href: "/library/ai-agent-seo/human-in-the-loop-content",
+  },
+  {
+    title: "Skills, memory and the trace: make the good run repeatable",
+    description:
+      "Save the workflow as a skill, give the agent a memory it reads every run, make it write down every step. Plus the two checks that catch the confident wrong answer.",
+    href: "/library/ai-agent-seo/skills-memory-and-the-trace",
+  },
+];
+
+export const LINK_BUILDING_LIBRARY = {
+  name: "Link Building",
+  path: "/library/link-building",
+};
+
+export const linkBuildingStrategies: StrategyLibraryItem[] = [
+  {
+    title: "The backlink audit: sort by first seen, then by relevance",
+    description:
+      "The three newest links to a real site were a casino domain and two link sellers. Underneath them were the links that count. How to tell them apart in an hour.",
+    href: "/library/link-building/backlink-audit",
+  },
+  {
+    title: "Referring domains, not backlinks: the count that moves rankings",
+    description:
+      "2,393 backlinks, 308 referring domains, 872 from one site the owner also runs. Why the second number is the one to report.",
+    href: "/library/link-building/referring-domains",
+  },
+  {
+    title: "How to get backlinks: start from the pages that already earn them",
+    description:
+      "A free calculator with links from 17 domains, a park-cleanup page with 270 backlinks. Neither was pitched. Four plays that earned links on tape.",
+    href: "/library/link-building/how-to-get-backlinks",
+  },
+];

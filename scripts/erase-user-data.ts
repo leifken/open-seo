@@ -10,7 +10,7 @@
  *     --confirm-database-host <host printed by the dry run>
  *
  * The Worker endpoint must be deployed with the same GDPR_ERASURE_SECRET as
- * this process. See runbooks/gdpr-erasure.md for required operator variables.
+ * this process. See docs/maintainers/runbooks/gdpr-erasure.md for required operator variables.
  */
 import process from "node:process";
 import { Autumn } from "autumn-js";
@@ -26,7 +26,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import { alias, type PgColumn, type PgTable } from "drizzle-orm/pg-core";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { z } from "zod";
@@ -254,7 +254,22 @@ async function buildInventory(db: Db, user: UserRow) {
           )
           .orderBy(schema.rankCheckRuns.id);
 
-  const projectCount = async (table: typeof schema.savedKeywords) =>
+  const activeAiVisibilityWorkflows =
+    projectIds.length === 0
+      ? []
+      : await db
+          .select({ id: schema.aiRuns.id })
+          .from(schema.aiRuns)
+          .where(
+            and(
+              inArray(schema.aiRuns.projectId, projectIds),
+              inArray(schema.aiRuns.status, ["queued", "running"]),
+            ),
+          )
+          .orderBy(schema.aiRuns.id);
+
+  // Any table with a `project_id`: the counts differ only in which table.
+  const projectCount = async (table: PgTable & { projectId: PgColumn }) =>
     projectIds.length === 0
       ? 0
       : db.$count(table, inArray(table.projectId, projectIds));
@@ -273,13 +288,7 @@ async function buildInventory(db: Db, user: UserRow) {
     ),
     projects: projectIds.length,
     saved_keywords: await projectCount(schema.savedKeywords),
-    audits:
-      projectIds.length === 0
-        ? 0
-        : await db.$count(
-            schema.audits,
-            inArray(schema.audits.projectId, projectIds),
-          ),
+    audits: await projectCount(schema.audits),
     rank_snapshots:
       projectIds.length === 0
         ? 0
@@ -297,6 +306,23 @@ async function buildInventory(db: Db, user: UserRow) {
       schema.audits,
       eq(schema.audits.startedByUserId, user.id),
     ),
+    reports: await projectCount(schema.reports),
+    attributed_reports: await db.$count(
+      schema.reports,
+      eq(schema.reports.createdByUserId, user.id),
+    ),
+    report_templates: await projectCount(schema.reportTemplates),
+    attributed_report_templates: await db.$count(
+      schema.reportTemplates,
+      eq(schema.reportTemplates.createdByUserId, user.id),
+    ),
+    shared_reports: await db.$count(
+      schema.reports,
+      and(
+        eq(schema.reports.createdByUserId, user.id),
+        isNotNull(schema.reports.shareToken),
+      ),
+    ),
     gsc_connections: await db.$count(
       schema.gscConnections,
       eq(schema.gscConnections.connectedByUserId, user.id),
@@ -313,7 +339,10 @@ async function buildInventory(db: Db, user: UserRow) {
 
   return {
     organizations,
-    projectIds,
+    aiVisibilityProjectIds: projectIds,
+    activeAiVisibilityWorkflowIds: activeAiVisibilityWorkflows.map(
+      (row) => row.id,
+    ),
     samSessionIds: samSessions.map((row) => row.id),
     auditIds: audits.map((row) => row.id),
     r2Keys,
@@ -499,6 +528,23 @@ async function erasePostgres(db: Db, user: UserRow, organizationIds: string[]) {
       .update(schema.audits)
       .set({ startedByUserId: "gdpr-deleted-user" })
       .where(eq(schema.audits.startedByUserId, user.id));
+    // reports.created_by_user_id has no FK either (same reason as audits), so a
+    // surviving multi-member org keeps its reports with the attribution wiped.
+    // Any public link on a report they created is revoked in the same
+    // statement: the link is a capability published from their work, and it
+    // must not outlive them.
+    await tx
+      .update(schema.reports)
+      .set({
+        createdByUserId: "gdpr-deleted-user",
+        shareToken: null,
+        sharedAt: null,
+      })
+      .where(eq(schema.reports.createdByUserId, user.id));
+    await tx
+      .update(schema.reportTemplates)
+      .set({ createdByUserId: "gdpr-deleted-user" })
+      .where(eq(schema.reportTemplates.createdByUserId, user.id));
     if (organizationIds.length > 0) {
       // Re-assert the solo-membership guard at delete time: anyone who
       // accepted an invite after the inventory was taken must abort the
@@ -581,7 +627,6 @@ async function main() {
       organizations: inventory.organizations,
       databaseCounts: inventory.databaseCounts,
       cloudflare: {
-        onboardingChats: inventory.projectIds.length,
         samChats: inventory.samSessionIds.length,
         auditScratchpads: inventory.auditIds.length,
         r2Objects: inventory.r2Keys.length,
@@ -624,11 +669,12 @@ async function main() {
       userId: user.id,
       email: user.email,
       organizationIds,
-      projectIds: inventory.projectIds,
       samSessionIds: inventory.samSessionIds,
       auditIds: inventory.auditIds,
       activeAuditWorkflowIds: inventory.activeAuditWorkflowIds,
       activeRankWorkflowIds: inventory.activeRankWorkflowIds,
+      activeAiVisibilityWorkflowIds: inventory.activeAiVisibilityWorkflowIds,
+      aiVisibilityProjectIds: inventory.aiVisibilityProjectIds,
       r2Keys: inventory.r2Keys,
       googleAccounts: inventory.googleAccounts,
     });

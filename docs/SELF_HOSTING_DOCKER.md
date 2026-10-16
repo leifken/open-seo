@@ -33,7 +33,8 @@ Optional env values:
 - `ALLOWED_HOST` (single reverse-proxy hostname to allow in Vite preview)
 - `AUTH_MODE=local_noauth` (already set in compose)
 - `OPEN_SEO_IMAGE` (defaults to `ghcr.io/every-app/open-seo:latest`)
-- `OPENROUTER_API_KEY` (required for AI features such as SAM; see [OpenRouter](https://openrouter.ai/settings/keys))
+
+AI Visibility uses your `DATAFORSEO_API_KEY` and sends tracked questions to DataForSEO. Set `OPENROUTER_API_KEY` for setup research and generated prompt suggestions. You pay providers directly; the app shows the collection cost before a check or schedule starts. Keep the container running for background answers and daily, weekly, or monthly tracking. The built-in scheduler checks for due work every five minutes; no host cron setup is required. See the [AI Visibility guide](https://openseo.so/docs/ai-visibility).
 
 If you are putting Docker behind a reverse proxy or a temporary tunnel, remember that Docker self-hosting runs with app auth disabled. Only expose it behind your own auth-protected reverse proxy, tunnel, or private network, and add the public hostname before restarting:
 
@@ -46,6 +47,8 @@ You can also persist it in `.env`.
 ## Telemetry
 
 OpenSEO collects anonymized telemetry for core usage events: heartbeats with aggregate counts (installs, users, projects, feature usage) tied to a random install ID, sent every 5 minutes during the first two hours after install, then at most once daily. Telemetry also includes failed setup check names and statuses, never values or error messages. No URLs, keywords, prompts, emails, or IP-derived location are collected, and idle installs send nothing.
+
+Heartbeats are triggered by requests to the app or MCP server. Requests to `/api/health`, including Docker's automatic health checks, do not trigger telemetry.
 
 To disable it, set `OPENSEO_TELEMETRY_DISABLED=1` (or `DO_NOT_TRACK=1`) in `.env`, then run `docker compose up -d --force-recreate open-seo`.
 
@@ -63,7 +66,7 @@ docker compose up -d
 If you are testing local code changes, build and run a local tag:
 
 ```bash
-docker build -f Dockerfile.selfhost -t open-seo:local .
+docker build -f deploy/docker/Dockerfile -t open-seo:local .
 OPEN_SEO_IMAGE=open-seo:local docker compose up -d
 ```
 
@@ -89,7 +92,7 @@ docker compose down
 
 ## Health and troubleshooting
 
-Startup checks appear in `docker compose logs` before the build. Once running, `/api/health` reports configuration and database status, and `docker compose ps` reports container health.
+Startup checks appear in `docker compose logs` before the build. Once running, `/api/health` reports configuration and database status, and `docker compose ps` reports container health. Scheduler failures appear as `[scheduler]` messages in container logs. The pinned Cloudflare Vite runtime exposes `/cdn-cgi/handler/scheduled`; the container calls it only at `127.0.0.1` using the configured `PORT`. It passes the five-minute cron expression without overriding the clock. Newer Cloudflare versions may use a different local route; the [Cron Triggers documentation](https://developers.cloudflare.com/workers/configuration/cron-triggers/#test-cron-triggers-locally) describes the local handler mechanism.
 
 ## Troubleshooting environment variables
 

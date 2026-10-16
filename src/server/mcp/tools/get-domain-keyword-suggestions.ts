@@ -33,6 +33,10 @@ const SUGGESTION_COLUMNS: McpTableColumn<unknown>[] = [
   { header: "position", value: (row) => readPath(row, "position") },
   { header: "volume", value: (row) => readPath(row, "searchVolume") },
   { header: "KD", value: (row) => readPath(row, "keywordDifficulty") },
+  { header: "CPC", value: (row) => readPath(row, "cpc") },
+  // Rows come back ordered by estimated traffic, so it's the signal behind the
+  // order a text-only client is shown.
+  { header: "traffic", value: (row) => readPath(row, "traffic") },
 ];
 
 const inputSchema = {
@@ -60,15 +64,15 @@ export const getDomainKeywordSuggestionsTool = {
     description:
       "Returns the organic keywords a domain ranks for, including position and available metrics. Use after get_domain_overview when you want the detailed keyword opportunity list for a competitor or reference domain. Charges credits (~100-300 typical). Cached for 12 hours.",
     inputSchema,
-    outputSchema: {
+    outputSchema: z.looseObject({
       keywords: z.array(looseObjectOutputSchema),
       target: z.string().optional(),
       scope: researchScopeSchema.optional(),
       ...optionalMetaOutputSchema,
-    },
+    }),
     annotations: {
       readOnlyHint: false,
-      openWorldHint: false,
+      openWorldHint: true,
       destructiveHint: false,
     },
   },
@@ -98,7 +102,7 @@ export const getDomainKeywordSuggestionsTool = {
     const text =
       keywords.length === 0
         ? `No ranked keywords found for ${targetLabel}.`
-        : `Keywords for ${targetLabel} (${keywords.length}):\n${formatMcpTable(keywords, SUGGESTION_COLUMNS)}`;
+        : `Keywords for ${targetLabel} (${keywords.length}). Columns: KD = keyword difficulty (0-100), traffic = estimated monthly organic visits; "—" = unavailable.\n${formatMcpTable(keywords, SUGGESTION_COLUMNS)}`;
     return mcpResponse({
       text,
       meta: buildProjectMeta(

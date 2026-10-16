@@ -2,11 +2,13 @@ import { detectUrlTemplate, canonicalUrlKey } from "./url-utils";
 import type { BillingCustomerContext } from "@/server/billing/subscription";
 import { createDataforseoClient } from "@/server/lib/dataforseo";
 import type { LighthouseResult, LighthouseStrategy } from "./types";
+import type { PageFetchClass } from "@/shared/audit-fetch-class";
 import { putTextToR2 } from "@/server/lib/r2";
 
 interface LighthouseSamplePage {
   url: string;
   statusCode: number;
+  fetchClass: PageFetchClass;
 }
 
 function canonicalUrlKeyWithoutTrailingSlash(url: string): string {
@@ -21,6 +23,32 @@ type LighthouseFetchResult = {
   result: LighthouseResult;
   payloadJson: string | null;
 };
+
+/** A check that produced no payload — provider error, or a failed fetch step. */
+export function failedLighthouseFetch(
+  url: string,
+  pageId: string,
+  strategy: "mobile" | "desktop",
+  errorMessage: string,
+): LighthouseFetchResult {
+  return {
+    result: {
+      url,
+      pageId,
+      strategy,
+      performanceScore: null,
+      accessibilityScore: null,
+      bestPracticesScore: null,
+      seoScore: null,
+      lcpMs: null,
+      cls: null,
+      inpMs: null,
+      ttfbMs: null,
+      errorMessage,
+    },
+    payloadJson: null,
+  };
+}
 
 export async function fetchLighthouseResult(
   url: string,
@@ -50,24 +78,16 @@ export async function fetchLighthouseResult(
     };
   } catch (error) {
     const failed = error instanceof Error ? error : new Error(String(error));
-    console.error(`Lighthouse failed for ${url}:`, failed.message);
-    return {
-      result: {
-        url,
-        pageId,
-        strategy,
-        performanceScore: null,
-        accessibilityScore: null,
-        bestPracticesScore: null,
-        seoScore: null,
-        lcpMs: null,
-        cls: null,
-        inpMs: null,
-        ttfbMs: null,
-        errorMessage: failed.message,
-      },
-      payloadJson: null,
-    };
+    // Lighthouse runtime errors (ERRORED_DOCUMENT_REQUEST, NOT_HTML, NO_FCP) mean the
+    // tenant's page didn't load for the provider's Chrome. The failure is already
+    // surfaced on the audit row, so there is nothing for us to act on.
+    const log = failed.message.includes(
+      "Lighthouse encountered an error with the following code",
+    )
+      ? console.warn
+      : console.error;
+    log(`Lighthouse failed for ${url} (${strategy}): ${failed.message}`);
+    return failedLighthouseFetch(url, pageId, strategy, failed.message);
   }
 }
 
@@ -101,9 +121,10 @@ export function selectLighthouseSample(
 ): string[] {
   if (strategy === "none") return [];
 
-  // Only consider pages that loaded successfully
+  // Only consider pages that loaded successfully. A bot challenge can answer
+  // 200, and a paid Lighthouse check of it measures the challenge.
   const validPages = pages.filter(
-    (p) => p.statusCode >= 200 && p.statusCode < 300,
+    (p) => p.statusCode >= 200 && p.statusCode < 300 && p.fetchClass === "ok",
   );
 
   // strategy === "auto": homepage + 1 per URL pattern, capped at 10

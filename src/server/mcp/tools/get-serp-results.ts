@@ -1,33 +1,44 @@
+import {
+  extractAiOverview,
+  extractPeopleAlsoAsk,
+  extractLocalPack,
+} from "./serp-features";
+import {
+  placeSchema,
+  countryCodeSchema,
+  resolvePlaces,
+} from "@/server/mcp/tools/location-input";
+import type { ResolvedGeoLocation } from "@/server/lib/geo-location-resolver";
+
+import { waitUntil } from "cloudflare:workers";
 import { z } from "zod";
-import { createDataforseoClient } from "@/server/lib/dataforseo";
-import type { SerpLiveItem } from "@/server/lib/dataforseo/serp";
+import {
+  createDataforseoClient,
+  SERP_ANALYSIS_DEPTH,
+} from "@/server/lib/dataforseo";
+import { buildCacheKey, getCached, setCached } from "@/server/lib/r2-cache";
 import { mcpResponse } from "@/server/mcp/formatters";
 import { buildProjectMeta } from "@/server/mcp/context";
 import { optionalMetaOutputSchema } from "@/server/mcp/output-schemas";
 import { withMcpProjectAuth } from "@/server/mcp/project-auth";
 import { resolveMarket } from "@/shared/keyword-locations";
-import { formatMcpTable, type McpTableColumn } from "@/server/mcp/table";
+import { assertLocalResearchLocation } from "@/server/features/keywords/services/research/local-volume";
+import { toolErrorMessage } from "@/server/mcp/tool-error-message";
+import {
+  formatMcpTable,
+  sectionTableBudget,
+  truncatedCell,
+  type McpTableColumn,
+} from "@/server/mcp/table";
 import {
   languageCodeSchema,
   locationCodeSchema,
   projectIdSchema,
 } from "@/server/mcp/schemas";
-import type { ResolvedGeoLocation } from "@/server/lib/geo-location-resolver";
-import {
-  countryCodeSchema,
-  locationMeta,
-  placeSchema,
-  resolvePlaces,
-} from "@/server/mcp/tools/location-input";
 
-type SerpItem = {
-  type?: string | null;
-  rank: number | null;
-  title: string | null;
-  url: string | null;
-  domain: string | null;
-  description: string | null;
-};
+// A repeat within this window is answered from the saved rows, uncharged, so a
+// caller that lost a response can call again instead of paying twice.
+const SERP_RESULTS_CACHE_TTL_SECONDS = 12 * 60 * 60;
 
 // ---------------------------------------------------------------------------
 // Structured extraction of the three SERP features Oliver's Sofortpaket asks
@@ -40,186 +51,68 @@ type SerpItem = {
 // whole call.
 // ---------------------------------------------------------------------------
 
-const AI_OVERVIEW_TEXT_LIMIT = 600;
-
-const aiOverviewReferenceSchema = z
+const serpItemSchema = z
   .object({
-    source: z.string().nullable().optional(),
-    domain: z.string().nullable().optional(),
-    url: z.string().nullable().optional(),
-    title: z.string().nullable().optional(),
+    type: z.string().nullable().optional(),
+    rank: z.number().nullable(),
+    // Optional: rows cached before this field existed don't carry it.
+    organicRank: z.number().nullable().optional(),
+    title: z.string().nullable(),
+    url: z.string().nullable(),
+    domain: z.string().nullable(),
+    description: z.string().nullable(),
   })
   .passthrough();
 
-const aiOverviewItemSchema = z
-  .object({
-    markdown: z.string().nullable().optional(),
-    references: z.array(aiOverviewReferenceSchema).nullable().optional(),
-  })
-  .passthrough();
+type SerpItem = z.infer<typeof serpItemSchema>;
 
-type AiOverview =
-  | { present: false }
-  | {
-      present: true;
-      text: string;
-      sources: Array<{
-        domain: string | null;
-        url: string | null;
-        title: string | null;
-      }>;
-    };
-
-function extractAiOverview(items: SerpLiveItem[]): AiOverview {
-  const raw = items.find((item) => item.type === "ai_overview");
-  if (!raw) return { present: false };
-  const parsed = aiOverviewItemSchema.safeParse(raw);
-  if (!parsed.success) return { present: false };
-  const fullText = parsed.data.markdown ?? "";
-  const text =
-    fullText.length > AI_OVERVIEW_TEXT_LIMIT
-      ? `${fullText.slice(0, AI_OVERVIEW_TEXT_LIMIT)}…`
-      : fullText;
-  const sources = (parsed.data.references ?? [])
-    .map((ref) => ({
-      domain: ref.domain ?? null,
-      url: ref.url ?? null,
-      title: ref.title ?? null,
-    }))
-    .filter((source) => source.domain !== null || source.url !== null);
-  return { present: true, text, sources };
-}
-
-const peopleAlsoAskExpandedSchema = z
-  .object({
-    domain: z.string().nullable().optional(),
-    url: z.string().nullable().optional(),
-    title: z.string().nullable().optional(),
-  })
-  .passthrough();
-
-const peopleAlsoAskElementSchema = z
-  .object({
-    title: z.string().nullable().optional(),
-    expanded_element: z
-      .array(peopleAlsoAskExpandedSchema)
-      .nullable()
-      .optional(),
-  })
-  .passthrough();
-
-const peopleAlsoAskItemSchema = z
-  .object({
-    items: z.array(peopleAlsoAskElementSchema).nullable().optional(),
-  })
-  .passthrough();
-
-type PeopleAlsoAskQuestion = {
-  question: string;
-  source: {
-    domain: string | null;
-    url: string | null;
-    title: string | null;
-  } | null;
-};
-
-function extractPeopleAlsoAsk(items: SerpLiveItem[]): PeopleAlsoAskQuestion[] {
-  const raw = items.find((item) => item.type === "people_also_ask");
-  if (!raw) return [];
-  const parsed = peopleAlsoAskItemSchema.safeParse(raw);
-  if (!parsed.success) return [];
-  return (parsed.data.items ?? [])
-    .filter((q) => q.title)
-    .map((q) => {
-      const firstSource = q.expanded_element?.[0];
-      return {
-        question: q.title ?? "",
-        source: firstSource
-          ? {
-              domain: firstSource.domain ?? null,
-              url: firstSource.url ?? null,
-              title: firstSource.title ?? null,
-            }
-          : null,
-      };
-    });
-}
-
-const localPackItemSchema = z
-  .object({
-    rank_group: z.number().nullable().optional(),
-    title: z.string().nullable().optional(),
-    domain: z.string().nullable().optional(),
-    cid: z.string().nullable().optional(),
-    rating: z
-      .object({
-        value: z.number().nullable().optional(),
-        votes_count: z.number().nullable().optional(),
-      })
-      .passthrough()
-      .nullable()
-      .optional(),
-  })
-  .passthrough();
-
-type LocalPackEntry = {
-  name: string | null;
-  domain: string | null;
-  /** LEIFKEN (SEO-5): Google CID, to match the business across tools. */
-  cid: string | null;
-  rating: number | null;
-  ratingCount: number | null;
-  rank: number | null;
-};
-
-function extractLocalPack(items: SerpLiveItem[]): LocalPackEntry[] {
-  return items
-    .filter((item) => item.type === "local_pack")
-    .map((raw): LocalPackEntry | null => {
-      const parsed = localPackItemSchema.safeParse(raw);
-      if (!parsed.success) return null;
-      return {
-        name: parsed.data.title ?? null,
-        domain: parsed.data.domain ?? null,
-        cid: parsed.data.cid ?? null,
-        rating: parsed.data.rating?.value ?? null,
-        ratingCount: parsed.data.rating?.votes_count ?? null,
-        rank: parsed.data.rank_group ?? null,
-      };
-    })
-    .filter((entry): entry is LocalPackEntry => entry !== null);
-}
-
+// `type` is load-bearing: the advanced SERP is a mixed list, so without it a
+// featured_snippet or people_also_ask row (which has no domain/title/url) reads
+// as an unlabeled organic position. Snippets are trimmed so the prose column
+// can't dominate the table — the full text stays in structuredContent.
 const SERP_ITEM_COLUMNS: McpTableColumn<SerpItem>[] = [
   { header: "rank", value: (item) => item.rank },
+  { header: "type", value: (item) => item.type },
+  { header: "organic rank", value: (item) => item.organicRank },
   { header: "domain", value: (item) => item.domain },
   { header: "title", value: (item) => item.title },
   { header: "url", value: (item) => item.url },
+  {
+    header: "description",
+    value: (item) => item.description,
+    format: truncatedCell(120),
+  },
 ];
 
 const querySchema = z.object({
   keyword: z.string().min(1).describe("Search query to fetch the SERP for."),
   locationCode: locationCodeSchema.optional(),
-  location: placeSchema
-    .optional()
-    .describe(
-      'LEIFKEN: city, Kreis or Bundesland to search from ("Münster", "Kreis Coesfeld", or a location code) instead of the whole country. Takes precedence over locationCode; the language then defaults to the project\'s. The resolved code is in the result and in meta.locationCodes.',
-    ),
-  countryCode: countryCodeSchema
-    .optional()
-    .describe(
-      "Country the location name belongs to (ISO alpha-2). Defaults to the project's country.",
-    ),
   languageCode: languageCodeSchema.optional(),
-  depth: z
-    .number()
-    .int()
-    .min(10)
-    .max(100)
+  location: placeSchema.optional(),
+  countryCode: countryCodeSchema.optional(),
+  depth: z.number().int().min(10).max(100).optional(),
+  locationName: z
+    .string()
+    .min(1)
     .optional()
     .describe(
-      "Rows to crawl (clamped to 10-100, rounded up to the nearest 10 — DataForSEO bills per page of 10). Defaults to 20, matching the results actually returned; raise it only when you need to look deeper than position 20.",
+      "Optional city, county, or region inside the query's country, for a local SERP. Call search_serp_locations first and pass its locationName verbatim. Same price as a national SERP.",
     ),
+  device: z
+    .enum(["desktop", "mobile"])
+    .optional()
+    .describe(
+      "Device to fetch the SERP for, default desktop. Use mobile to compare against a mobile rank tracker. Same price.",
+    ),
+});
+
+const cachedSerpSchema = z.looseObject({
+  items: z.array(serpItemSchema),
+  aiOverview: z.looseObject({ present: z.boolean() }),
+  peopleAlsoAsk: z.array(z.unknown()),
+  localPack: z.array(z.unknown()),
+  teilweise: z.boolean().optional(),
+  grund: z.string().optional(),
 });
 
 const inputSchema = {
@@ -231,6 +124,16 @@ const inputSchema = {
     .describe(
       "1-10 queries. Bulk-friendly — prefer this over multiple single-query calls.",
     ),
+  depth: z
+    .number()
+    .int()
+    .min(10)
+    .max(100)
+    .multipleOf(10)
+    .optional()
+    .describe(
+      "How many SERP rows to crawl per keyword — a multiple of 10 from 10 to 100, default 20. Google has no offset, so a deeper crawl re-fetches the top too: each additional 10 adds ~2.5 credits per keyword. Only raise it when you need ranks past the top 20.",
+    ),
 } as const;
 
 type Args = z.infer<z.ZodObject<typeof inputSchema>>;
@@ -240,72 +143,20 @@ export const getSerpResultsTool = {
   config: {
     title: "Get Google SERP results",
     description:
-      "Fetch live Google organic search results for 1-10 keywords. Use this to inspect who ranks for a query, verify competitors, compare SERPs across keywords, or gather source URLs before content planning. Charges credits per keyword (~30-60 each). Does not save results to OpenSEO. Per-keyword errors don't fail the batch. Local search: pass location (a city, Kreis or Bundesland name, or a location code) to get the SERP as seen from there, local pack included (localPack, with cid).",
+      "Fetch live Google organic search results for 1-10 keywords. Use this to inspect who ranks for a query, verify competitors, compare SERPs across keywords, or gather source URLs before content planning. Returns the top `depth` result rows per keyword (default 20). `rank` counts every SERP element (ads, People Also Ask, ...); `organicRank` counts organic results only and matches rank tracker positions. Charges credits per keyword: ~5 each at the default depth 20, and each additional 10 of depth adds ~2.5. A keyword fetched in this project in the last 12 hours with the same market, device, and depth returns those rows again at no charge once the original call has finished, so if a response is lost, wait a minute and repeat the same call. Per-keyword errors don't fail the batch. location resolves a city, Kreis, Bundesland or location code; locationName accepts the canonical search_serp_locations name. aiOverview, peopleAlsoAsk, localPack (with cid), teilweise and grund remain available in structured results.",
     inputSchema,
-    outputSchema: {
+    outputSchema: z.looseObject({
       results: z.array(
         z.union([
           z
-            .object({
+            .looseObject({
               keyword: z.string(),
               ok: z.literal(true),
-              // Set only when DataForSEO could only retrieve some of the
-              // requested pages; the items above are still the real, billed
-              // rows it did return (see isPartialResultsTask).
-              teilweise: z.boolean().optional(),
-              grund: z.string().optional(),
-              items: z.array(
-                z
-                  .object({
-                    type: z.string().nullable().optional(),
-                    rank: z.number().nullable(),
-                    title: z.string().nullable(),
-                    url: z.string().nullable(),
-                    domain: z.string().nullable(),
-                    description: z.string().nullable(),
-                  })
-                  .passthrough(),
-              ),
-              aiOverview: z.union([
-                z.object({ present: z.literal(false) }),
-                z.object({
-                  present: z.literal(true),
-                  text: z.string(),
-                  sources: z.array(
-                    z.object({
-                      domain: z.string().nullable(),
-                      url: z.string().nullable(),
-                      title: z.string().nullable(),
-                    }),
-                  ),
-                }),
-              ]),
-              peopleAlsoAsk: z.array(
-                z.object({
-                  question: z.string(),
-                  source: z
-                    .object({
-                      domain: z.string().nullable(),
-                      url: z.string().nullable(),
-                      title: z.string().nullable(),
-                    })
-                    .nullable(),
-                }),
-              ),
-              localPack: z.array(
-                z.object({
-                  name: z.string().nullable(),
-                  domain: z.string().nullable(),
-                  cid: z.string().nullable().optional(),
-                  rating: z.number().nullable(),
-                  ratingCount: z.number().nullable(),
-                  rank: z.number().nullable(),
-                }),
-              ),
+              items: z.array(serpItemSchema),
             })
             .passthrough(),
           z
-            .object({
+            .looseObject({
               keyword: z.string(),
               ok: z.literal(false),
               error: z.string(),
@@ -314,10 +165,10 @@ export const getSerpResultsTool = {
         ]),
       ),
       ...optionalMetaOutputSchema,
-    },
+    }),
     annotations: {
       readOnlyHint: false,
-      openWorldHint: false,
+      openWorldHint: true,
       destructiveHint: false,
     },
   },
@@ -327,94 +178,125 @@ export const getSerpResultsTool = {
     const results = await Promise.all(
       args.queries.map(async (q) => {
         try {
-          const depth = q.depth ? Math.ceil(q.depth / 10) * 10 : undefined;
-          // LEIFKEN (SEO-5): a named place resolves to its own location code
-          // before any paid call; an unknown name fails only this query.
+          const depth =
+            Math.ceil((q.depth ?? args.depth ?? SERP_ANALYSIS_DEPTH) / 10) * 10;
           const [place] = q.location
             ? await resolvePlaces([q.location], q.countryCode, context.project)
             : [];
           if (place) usedLocations.push(place);
-          const serp = await client.serp.live({
-            keyword: q.keyword,
-            depth: depth ?? 20,
-            ...(place
-              ? {
+          const market = place
+            ? {
+                locationCode: place.locationCode,
+                languageCode: q.languageCode ?? context.project.languageCode,
+              }
+            : resolveMarket(q, context.project);
+          const resolvedLocation = place
+            ? {
+                location: {
                   locationCode: place.locationCode,
-                  languageCode: q.languageCode ?? context.project.languageCode,
-                }
-              : resolveMarket(q, context.project)),
+                  locationName: place.locationName,
+                  locationType: place.locationType,
+                },
+              }
+            : {};
+          const locationName = place ? undefined : q.locationName;
+          if (locationName) {
+            await assertLocalResearchLocation(
+              market.locationCode,
+              locationName,
+            );
+          }
+          const cacheKey = await buildCacheKey("mcp:serp-results:v2", {
+            organizationId: context.billing.organizationId,
+            projectId: args.projectId,
+            keyword: q.keyword,
+            ...market,
+            locationName,
+            depth,
+            // Omitted for desktop, explicit or default, so desktop keys match
+            // rows cached before the device option existed.
+            device: q.device === "mobile" ? "mobile" : undefined,
           });
-
-          // Partial with nothing retrieved at all is a real failure — same
-          // treatment as any other empty/erroring keyword (isError semantics
-          // for this per-keyword shape). Partial with SOME rows retrieved is
-          // a success: DataForSEO billed and returned real results, it just
-          // couldn't crawl every requested page.
-          if (serp.partial && serp.items.length === 0) {
+          const cached = cachedSerpSchema.safeParse(await getCached(cacheKey));
+          if (cached.success) {
             return {
               keyword: q.keyword,
-              ok: false as const,
-              error:
-                serp.partialReason ??
-                "DataForSEO returned partial results with no retrievable pages.",
+              ok: true as const,
+              ...cached.data,
+              ...resolvedLocation,
             };
           }
 
-          // Trim noise — return only essentials per item. aiOverview /
-          // peopleAlsoAsk / localPack are extracted from the full list below,
-          // not the trim, since they can rank past position 20.
-          const trimmed = serp.items.slice(0, 20).map((item) => ({
+          const serp = await client.serp.live({
+            loadAsyncAiOverview: true,
+            keyword: q.keyword,
+            ...market,
+            locationName,
+            depth,
+            device: q.device,
+          });
+          if (serp.partial && serp.items.length === 0)
+            throw new Error(
+              serp.partialReason ??
+                "DataForSEO returned partial results without retrievable pages.",
+            );
+          const items = serp.items;
+          // Trim noise — return only essentials per item.
+          const trimmed = items.slice(0, depth).map((item) => ({
             type: item.type,
             rank: item.rank_absolute ?? item.rank_group ?? null,
+            organicRank:
+              item.type === "organic" ? (item.rank_group ?? null) : null,
             title: item.title ?? null,
             url: item.url ?? null,
             domain: item.domain ?? null,
             description: item.description ?? null,
           }));
-          return {
+          const result = {
             keyword: q.keyword,
             ok: true as const,
-            ...(place
-              ? {
-                  location: {
-                    locationCode: place.locationCode,
-                    locationName: place.locationName,
-                    locationType: place.locationType,
-                  },
-                }
-              : {}),
+            items: trimmed,
+            ...resolvedLocation,
             ...(serp.partial
               ? { teilweise: true, grund: serp.partialReason }
               : {}),
-            items: trimmed,
-            aiOverview: extractAiOverview(serp.items),
-            peopleAlsoAsk: extractPeopleAlsoAsk(serp.items),
-            localPack: extractLocalPack(serp.items),
+            aiOverview: extractAiOverview(items),
+            peopleAlsoAsk: extractPeopleAlsoAsk(items),
+            localPack: extractLocalPack(items),
           };
+          if (trimmed.length > 0 && !serp.partial) {
+            waitUntil(
+              setCached(cacheKey, result, SERP_RESULTS_CACHE_TTL_SECONDS).catch(
+                (error) =>
+                  console.error("mcp.serp-results.cache-write failed:", error),
+              ),
+            );
+          }
+          return result;
         } catch (error) {
           return {
             keyword: q.keyword,
             ok: false as const,
-            error: error instanceof Error ? error.message : String(error),
+            error: toolErrorMessage(error),
           };
         }
       }),
     );
 
     const okCount = results.filter((r) => r.ok).length;
+    // One budget for the whole response: ten queries split it, so a 10 × depth
+    // 100 call can't render 300k characters of text.
+    const budget = sectionTableBudget(results.length);
     const text =
       results
         .map((r) => {
           if (!r.ok) {
             return `"${r.keyword}": FAILED — ${r.error}`;
           }
-          const partialNote =
-            (r.teilweise ? ` (partial: ${r.grund})` : "") +
-            (r.location ? ` in ${r.location.locationName}` : "");
           if (r.items.length === 0) {
-            return `"${r.keyword}" (0 results)${partialNote}`;
+            return `"${r.keyword}" (0 results)`;
           }
-          return `"${r.keyword}" (${r.items.length} results)${partialNote}:\n${formatMcpTable(r.items, SERP_ITEM_COLUMNS)}`;
+          return `"${r.keyword}" (${r.items.length} results)${"teilweise" in r && r.teilweise ? " — partial results" : ""}:\n${formatMcpTable(r.items, SERP_ITEM_COLUMNS, budget)}`;
         })
         .join("\n\n") +
       `\n\n${okCount} of ${results.length} queries succeeded.`;
@@ -427,13 +309,15 @@ export const getSerpResultsTool = {
           args.projectId,
           `/p/${args.projectId}/keywords`,
         ),
-        ...(usedLocations.length > 0 ? locationMeta(usedLocations) : {}),
+        ...(usedLocations.length
+          ? {
+              locationCodes: usedLocations.map((p) => p.locationCode),
+              locations: usedLocations,
+            }
+          : {}),
       },
-      structuredContent: { results },
-      // Same rule as research_keywords: every query failing is a call
-      // failure, not a 200 full of "FAILED" text; a partial failure with at
-      // least one usable SERP stays a success.
       isError: okCount === 0,
+      structuredContent: { results },
     });
   }),
 };

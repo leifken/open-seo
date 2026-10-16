@@ -1,35 +1,37 @@
 ---
 title: "SEO Audit Agent Skill"
-description: "Audit a website with your AI agent and get a one-page, plain-language SEO report built around a single next action."
+description: "Audit a website with your AI agent and understand its important SEO problems, worthwhile improvements, and likely effects on traffic and the business."
 ---
 
 <RunSkillCallout command="/seo-audit" />
 
-The SEO Audit Agent Skill audits a site and writes a one-page HTML report that anyone can act on, including someone who has never done SEO.
+The SEO Audit Agent Skill audits a site and writes a concise HTML report that anyone can understand and use, including someone who has never done SEO.
 
-Your agent runs an OpenSEO site audit, pulls backlink and traffic-estimate data, and re-checks every finding against the live pages before reporting it. The report is built around one action the site owner can take this week, with the exact message or steps included, followed by a short list of small fixes and a section on what already works.
+Your agent checks the site's technical health, important pages, links, and search visibility. It checks ranking assumptions against live search results and weighs the likely benefit of proposed work against the effort. The report explains the problems found, how proposed changes could affect traffic or potential customers, and whether the likely benefit warrants the effort. It separates confirmed findings from hypotheses and says when the audit has not established a substantial improvement worth making.
 
-The skill is plain `SKILL.md` instructions plus an HTML template, so it runs in Claude Code, Codex, or any agent that supports the skills format. If your agent can publish or preview HTML it will use that; otherwise it saves the report as a file for you to open in your browser.
+The skill is plain `SKILL.md` instructions, so it runs in Claude Code, Codex, or any agent that supports the skills format. It delivers through the [SEO Report skill](/docs/skills/seo-report): the finished page is saved to your OpenSEO project and appears on the project's Reports page, where anyone on your team can open it or print it to PDF.
 
 ## What this skill helps your agent do
 
-- Run a site audit and read the prioritized issues.
-- Check backlinks and traffic estimates to find the real bottleneck, not just tag-level nitpicks.
-- Verify each finding against the live page HTML before reporting it.
-- Pick one do-this-week action and include the copy-paste mechanics for it.
-- Propose a starting focus area: a handful of specific, winnable keywords and what to make for each.
+- Crawl the site, read the prioritized issues, and map the page families the crawl missed using the sitemap.
+- Check backlinks, traffic estimates, and which pages appear for relevant searches.
+- Read stronger and weaker pages in each important family side by side and judge whether each answers its own searcher's question with specific, accurate information.
+- Verify ranking assumptions with live search results before choosing a priority.
+- Build a shortlist of opportunities across different kinds of work, then choose the few whose likely benefit warrants the effort. An easy fix or a big raw search volume does not win on its own.
+- Explain each recommendation with short "Do this" and "Why" bullets, a compact evidence table, and, when useful, a labeled traffic scenario.
+- Show everything else it weighed in one "What else we checked" table with a one-line decision, so material findings are never dropped.
 - Explain every technical term in plain English the first time it appears.
-- Deliver the result as a single HTML page you can send to anyone.
+- Save the result to your project as a single HTML page anyone on your team can open or print.
 
 ## When to use it
 
 Use this skill when the report is for someone new to SEO: a client, a founder, a friend with a podcast or a photography site. It is also a good first skill if that beginner is you, because the report explains itself.
 
-It handles broken sites honestly. If the domain is down or half-crawled, the agent investigates why before writing, and the recommendation changes to match: an expired certificate, a dead domain with a live successor site, or a page-level block each lead to a different "one thing".
+It handles broken sites honestly. If the domain is down or half-crawled, the agent investigates why before writing, and the recommendation changes to match: an expired certificate or a dead domain with a live successor site each call for a different response.
 
 ## What you get back
 
-One HTML page: a three-sentence summary, the single action to take this week with concrete steps, five to ten small fixes with the exact evidence for each, a starting focus area with three to five keyword ideas (healthy sites only), a list of what already works, and a note on how the review was done.
+One report on your project's Reports page. It opens with your next SEO move, then one to three recommendations, each naming a page or small group with "Do this" and "Why" bullets and a small evidence table. A "What else we checked" table lists the other opportunities the audit weighed and why they lost. The full evidence sits in an expandable section at the end. There is no fixed length: the prose stays light, and the data stays visible. In chat you get the link, the verdict, and the leading recommendation.
 
 ## How to get the best result
 
@@ -37,10 +39,48 @@ One HTML page: a three-sentence summary, the single action to take this week wit
 - Say who the report is for.
 - Mention anything you already know, like a site move or an old domain.
 - Ask to see the verified facts if you want to check the agent's work.
+- Give the agent a research budget if you need a spending limit.
+
+## Auditing a Shopify store
+
+Shopify rate-limits crawlers it hasn't authorized, so an audit of a Shopify
+storefront can come back short: some pages return 429, and the crawl may stop
+before it reaches every URL. The report says so when this happens.
+
+If you own the store, you can authorize OpenSEO in about a minute:
+
+1. In Shopify admin, go to **Online Store → Preferences → Crawler access** and
+   click **Create signature**.
+2. Pick the domain you audit (for example `www.your-store.com`) and an expiry
+   of up to three months.
+3. Copy the `Signature-Input` and `Signature` values. Shopify also shows a
+   `Signature-Agent` value; you don't need it, because OpenSEO sends it for you.
+
+A signature works only for the exact domain you picked, so `www.your-store.com`
+and `your-store.com` each need their own.
+
+Paste both values into OpenSEO, either on the warning shown at the top of the
+audit report or under **Project settings → Integrations → Crawler access**.
+OpenSEO checks the signature against Shopify's published key when you save it.
+If it was made for a different domain, or a value was cut off when you copied
+it, OpenSEO tells you instead of saving it. Every audit request to that domain
+then carries the signature, and you can re-run the audit right away. The
+signature is saved on that website's project, and any other project in your
+organization that audits the same domain uses it too.
+
+Shopify signatures last at most three months and cannot be renewed. OpenSEO
+stops sending a signature once it expires, and the audit report tells you when
+that happened. Create a new signature and paste it in the same place to replace
+the old one.
+
+OpenSEO encrypts the signature before storing it, never shows it again after you
+save it, and sends it only to the domain it was created for. If you self-host,
+set `BETTER_AUTH_SECRET` (at least 32 characters) before saving a signature,
+because that secret is the encryption key.
 
 ## Use it with OpenSEO MCP
 
-Set up [OpenSEO MCP](/docs/mcp) so your agent can run the audit and read backlink data, traffic estimates, and keyword ideas. The site audit is included on every plan (up to 50 pages on the free plan); the backlink, domain, and keyword lookups spend credits, and the skill keeps that spend modest.
+Set up [OpenSEO MCP](/docs/mcp) so your agent can run the audit and read backlink data, traffic estimates, and keyword ideas. The site audit is included on every plan (up to 50 pages on the free plan); backlink, domain, ranking, live-search, and keyword lookups spend credits. The skill expands research when it can change the diagnosis or priority, reuses relevant evidence, and respects explicit budgets. Cost varies with the investigation rather than a fixed lookup allowance.
 
 ## Read the actual skill
 
@@ -50,7 +90,8 @@ The source `SKILL.md` lives on GitHub:
 
 ## Related skills
 
+- [SEO Report](/docs/skills/seo-report), the shared skill that writes and saves the report.
 - [SEO Coach](/docs/skills/seo-coach) if you are not sure this is the right workflow to run first.
-- [Keyword Research](/docs/skills/keyword-research) to go deeper than the report's starting keywords.
-- [Link Prospecting](/docs/skills/link-prospecting) when the report's one thing is links and you want to go beyond the first outreach batch.
+- [Keyword Research](/docs/skills/keyword-research) to build the keyword plan behind a recommendation.
+- [Link Prospecting](/docs/skills/link-prospecting) when the report recommends link outreach and you want to go beyond the first outreach batch.
 - [Competitor Analysis](/docs/skills/competitor-analysis) once the basics are handled and you want to study who outranks you.

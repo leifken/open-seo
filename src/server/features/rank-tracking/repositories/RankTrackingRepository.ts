@@ -2,7 +2,6 @@ import {
   and,
   asc,
   count,
-  desc,
   eq,
   inArray,
   isNull,
@@ -15,7 +14,6 @@ import { db } from "@/db";
 import {
   rankTrackingConfigs,
   rankCheckRuns,
-  rankSnapshots,
   rankTrackingKeywords,
   projects,
 } from "@/db/schema";
@@ -29,6 +27,16 @@ import {
   getConfigTrend,
   getPositionMatrix,
 } from "./snapshotQueries";
+import {
+  tryCreateRun,
+  updateRun,
+  setRunErrorIfEmpty,
+  getRunById,
+  getLatestRunForConfig,
+  getActiveRunForConfig,
+  insertSnapshots,
+  getSnapshotsForRun,
+} from "./runQueries";
 
 // ---------------------------------------------------------------------------
 // Config CRUD
@@ -199,110 +207,6 @@ async function claimDueConfig(input: {
 }
 
 // ---------------------------------------------------------------------------
-// Run CRUD
-// ---------------------------------------------------------------------------
-
-/**
- * Try to insert a new pending run. Returns true when inserted, or false if blocked
- * by the partial unique index on (config_id) WHERE status IN ('pending',
- * 'running') — i.e. another active run exists for this config.
- *
- * This is how duplicate-trigger protection is enforced: the DB rejects the
- * second insert rather than a separate lock table.
- */
-async function tryCreateRun(data: {
-  id: string;
-  configId: string;
-  projectId: string;
-  keywordsTotal: number;
-  isSubsetRun?: boolean;
-}) {
-  const inserted = await db
-    .insert(rankCheckRuns)
-    .values({ ...data, status: "pending" })
-    .onConflictDoNothing()
-    .returning({ id: rankCheckRuns.id });
-  return Boolean(inserted[0]);
-}
-
-async function updateRun(
-  runId: string,
-  data: Partial<InferInsertModel<typeof rankCheckRuns>>,
-) {
-  await db.update(rankCheckRuns).set(data).where(eq(rankCheckRuns.id, runId));
-}
-
-async function getRunById(runId: string) {
-  const rows = await db
-    .select()
-    .from(rankCheckRuns)
-    .where(eq(rankCheckRuns.id, runId))
-    .limit(1);
-  return rows[0] ?? null;
-}
-
-async function getLatestRunForConfig(configId: string) {
-  const rows = await db
-    .select()
-    .from(rankCheckRuns)
-    .where(eq(rankCheckRuns.configId, configId))
-    .orderBy(desc(rankCheckRuns.startedAt))
-    .limit(1);
-  return rows[0] ?? null;
-}
-
-/**
- * Returns the currently active (pending or running) run for a config, if any.
- * At most one such row exists, enforced by the partial unique index.
- */
-async function getActiveRunForConfig(configId: string) {
-  const rows = await db
-    .select()
-    .from(rankCheckRuns)
-    .where(
-      and(
-        eq(rankCheckRuns.configId, configId),
-        inArray(rankCheckRuns.status, ["pending", "running"]),
-      ),
-    )
-    .limit(1);
-  return rows[0] ?? null;
-}
-
-// ---------------------------------------------------------------------------
-// Snapshots
-// ---------------------------------------------------------------------------
-
-async function insertSnapshots(
-  snapshots: Array<
-    Omit<InferInsertModel<typeof rankSnapshots>, "id" | "checkedAt">
-  >,
-) {
-  // Target the (run, keyword, device) unique index explicitly. An UNtargeted
-  // ON CONFLICT DO NOTHING also swallows a primary-key collision, which would
-  // silently drop every row if the `id` serial sequence ever drifts behind
-  // max(id) (e.g. after a data import that copied explicit ids). Scoping the
-  // clause to the intended dedupe index keeps re-runs idempotent while letting
-  // a pk collision surface as a loud duplicate-key error instead of data loss.
-  await executeInBatches(snapshots, (tx, snapshot) =>
-    tx
-      .insert(rankSnapshots)
-      .values(snapshot)
-      .onConflictDoNothing({
-        target: [
-          rankSnapshots.runId,
-          rankSnapshots.trackingKeywordId,
-          rankSnapshots.device,
-        ],
-      }),
-  );
-}
-
-async function getSnapshotsForRun(runId: string) {
-  return db.select().from(rankSnapshots).where(eq(rankSnapshots.runId, runId));
-}
-
-// ---------------------------------------------------------------------------
 // Tracking keywords per config
 // ---------------------------------------------------------------------------
 
@@ -315,7 +219,7 @@ async function getKeywordsForConfig(configId: string) {
 }
 
 async function addKeywordsToConfig(
-  keywords: Array<{ id: string; configId: string; keyword: string }>,
+  keywords: (typeof rankTrackingKeywords.$inferInsert)[],
 ) {
   const insertedIds: string[] = [];
 
@@ -359,6 +263,33 @@ async function removeKeywordsFromConfig(
     removedIds.push(...removed.map((row) => row.id));
   }
   return removedIds;
+}
+
+async function setKeywordsPinned(
+  keywordIds: string[],
+  configId: string,
+  pinned: boolean,
+) {
+  const pinnedAt = pinned ? new Date().toISOString() : null;
+  const updatedIds: string[] = [];
+  // Same IN-list ceiling as removeKeywordsFromConfig, plus two binds for
+  // configId and pinnedAt.
+  const updateBatchSize = 90;
+  for (let i = 0; i < keywordIds.length; i += updateBatchSize) {
+    const chunk = keywordIds.slice(i, i + updateBatchSize);
+    const updated = await db
+      .update(rankTrackingKeywords)
+      .set({ pinnedAt })
+      .where(
+        and(
+          inArray(rankTrackingKeywords.id, chunk),
+          eq(rankTrackingKeywords.configId, configId),
+        ),
+      )
+      .returning({ id: rankTrackingKeywords.id });
+    updatedIds.push(...updated.map((row) => row.id));
+  }
+  return updatedIds;
 }
 
 async function getConfigSummaries(projectId: string) {
@@ -440,14 +371,6 @@ async function updateKeywordMetrics(
   );
 }
 
-async function getKeywordCountForConfig(configId: string) {
-  const rows = await db
-    .select({ value: count() })
-    .from(rankTrackingKeywords)
-    .where(eq(rankTrackingKeywords.configId, configId));
-  return rows[0]?.value ?? 0;
-}
-
 /** Keyword counts keyed by config id. Configs with no keywords are absent. */
 async function getKeywordCountsForConfigs(configIds: string[]) {
   // Chunked so the IN list stays under D1's ~100 bound-parameter cap.
@@ -474,6 +397,7 @@ export const RankTrackingRepository = {
   claimDueConfig,
   tryCreateRun,
   updateRun,
+  setRunErrorIfEmpty,
   getRunById,
   getLatestRunForConfig,
   getActiveRunForConfig,
@@ -482,8 +406,8 @@ export const RankTrackingRepository = {
   getKeywordsForConfig,
   addKeywordsToConfig,
   removeKeywordsFromConfig,
+  setKeywordsPinned,
   updateKeywordMetrics,
-  getKeywordCountForConfig,
   getKeywordCountsForConfigs,
   getConfigSummaries,
   getLatestSnapshotsForKeywords,

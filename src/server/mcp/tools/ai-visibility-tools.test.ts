@@ -1,270 +1,321 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import * as aiVisibilityTools from "./ai-visibility-tools";
+import { McpServer } from "@modelcontextprotocol/server";
+import { AiVisibilityError } from "@/server/features/ai-visibility/services/aiVisibilityErrors";
+import { buildSamMcpTools } from "@/server/features/sam/samChatTools";
+import { createOpenSeoMcpServer } from "@/server/mcp/server";
+import * as definitions from "./ai-visibility-tools";
 import { makeToolContext, textContent } from "./tool-test-support";
-import type { BrandLookupResult } from "@/types/schemas/ai-search";
-import type { PromptExplorerResult } from "@/types/schemas/ai-search";
 
 const mocks = vi.hoisted(() => ({
-  getBrandLookup: vi.fn(),
-  explorePrompt: vi.fn(),
-  getProjectForOrganization: vi.fn(),
+  authorize: vi.fn(),
+  service: {
+    getTracker: vi.fn(),
+    saveTracker: vi.fn(),
+    estimateCost: vi.fn(),
+    setSchedule: vi.fn(),
+    runCheck: vi.fn(),
+    getRun: vi.fn(),
+    getResults: vi.fn(),
+    getAnswer: vi.fn(),
+    getSources: vi.fn(),
+    exportData: vi.fn(),
+  },
 }));
-
-vi.mock("cloudflare:workers", () => ({ env: {} }));
-
+vi.mock("cloudflare:workers", () => ({
+  env: {},
+  waitUntil: vi.fn(),
+  DurableObject: class {
+    kind = "mock";
+  },
+}));
 vi.mock("@/server/features/projects/services/ProjectService", () => ({
-  ProjectService: {
-    getProjectForOrganization: mocks.getProjectForOrganization,
-  },
+  ProjectService: { getProjectForOrganization: mocks.authorize },
 }));
-
-vi.mock("@/server/features/ai-search/services/brandLookup", () => ({
-  getBrandLookup: mocks.getBrandLookup,
+vi.mock("@/server/features/ai-visibility/services/AiVisibilityService", () => ({
+  AiVisibilityService: mocks.service,
 }));
-
-vi.mock("@/server/features/ai-search/services/promptExplorer", () => ({
-  explorePrompt: mocks.explorePrompt,
-}));
-
-const toolContext = makeToolContext();
-
-const deProjectRow = {
-  id: "project_1",
-  locationCode: 2276,
-  languageCode: "de",
+const projectId = "00000000-0000-4000-8000-000000000001";
+const runId = "00000000-0000-4000-8000-000000000002";
+const context = makeToolContext();
+const state = {
+  configured: false,
+  tracker: null,
+  topics: [],
+  prompts: [],
+  brands: [],
+  engines: [],
+  capabilities: [],
+  recentRuns: [],
+  providerConfigured: true,
 };
-
-const brandLookupResult: BrandLookupResult = {
-  query: "acme",
-  detectedTargetType: "keyword",
-  resolvedTarget: "acme",
-  scope: null,
-  aggregatesAreDomainLevel: false,
-  fetchedAt: "2026-09-15T00:00:00.000Z",
-  hasData: true,
-  totalMentions: 42,
-  totalAiSearchVolume: 1200,
-  perPlatform: [
-    {
-      platform: "chat_gpt",
-      status: "success",
-      mentions: 30,
-      aiSearchVolume: 900,
-    },
-    {
-      platform: "google",
-      status: "success",
-      mentions: 12,
-      aiSearchVolume: 300,
-    },
-  ],
-  shareOfVoice: {
-    platforms: ["chat_gpt", "google"],
-    entries: [
-      { label: "acme", isTarget: true, mentions: 42, sharePct: 60 },
-      { label: "rival", isTarget: false, mentions: 28, sharePct: 40 },
-    ],
-  },
-  topPages: [
-    {
-      url: "https://acme.example/pricing",
-      domain: "acme.example",
-      platform: "chat_gpt",
-      mentions: 10,
-      capturedVolume: 500,
-      keywords: [],
-    },
-  ],
-  topQueries: [],
-  monthlyVolume: [],
+const run = {
+  id: runId,
+  status: "running",
+  trigger: "manual",
+  expected: 4,
+  completed: 1,
+  failed: 1,
+  pending: 2,
+  createdAt: "2026-09-05T00:00:00Z",
+  completedAt: null,
+  pollAfterSeconds: 30,
 };
-
-const promptExplorerResult: PromptExplorerResult = {
-  prompt: "best crm for small teams",
-  highlightBrand: "acme",
-  fetchedAt: "2026-09-15T00:00:00.000Z",
-  results: [
-    {
-      status: "success",
-      model: "claude",
-      modelName: "claude-sonnet-4-5",
-      text: "Acme CRM is a strong pick for small teams because of its pricing.",
-      citations: [],
-      fanOutQueries: [],
-      brandMentioned: true,
-      outputTokens: 120,
-      webSearch: true,
-    },
-    {
-      status: "error",
-      model: "gemini",
-      errorCode: "UPSTREAM_ERROR",
-      message: "This model is temporarily unavailable. Please try again.",
-    },
-  ],
-};
-
-describe("get_ai_visibility", () => {
-  beforeEach(() => {
-    mocks.getProjectForOrganization.mockResolvedValue(deProjectRow);
-    mocks.getBrandLookup.mockResolvedValue(brandLookupResult);
-  });
-
-  it("defaults location/language from the project when omitted", async () => {
-    await aiVisibilityTools.getAiVisibilityTool.handler(
-      { projectId: "project_1", query: "acme", competitors: [] },
-      toolContext,
-    );
-
-    expect(mocks.getBrandLookup).toHaveBeenCalledWith(
-      expect.objectContaining({
-        projectId: "project_1",
-        query: "acme",
-        locationCode: 2276,
-        languageCode: "de",
-      }),
-      expect.anything(),
-    );
-  });
-
-  it("passes an explicit locationCode/languageCode through instead of the project default", async () => {
-    await aiVisibilityTools.getAiVisibilityTool.handler(
-      {
-        projectId: "project_1",
-        query: "acme",
-        competitors: [],
-        locationCode: 2840,
-        languageCode: "en",
-      },
-      toolContext,
-    );
-
-    expect(mocks.getBrandLookup).toHaveBeenCalledWith(
-      expect.objectContaining({ locationCode: 2840, languageCode: "en" }),
-      expect.anything(),
-    );
-  });
-
-  it("builds the billing context from the caller's org and the requested project", async () => {
-    await aiVisibilityTools.getAiVisibilityTool.handler(
-      { projectId: "project_1", query: "acme", competitors: [] },
-      toolContext,
-    );
-
-    expect(mocks.getBrandLookup).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        organizationId: toolContext.auth.organizationId,
-        projectId: "project_1",
-      }),
-    );
-  });
-
-  it("summarizes mentions per platform, Share of Voice, and top sources in the text output; passes structuredContent through unchanged", async () => {
-    const result = await aiVisibilityTools.getAiVisibilityTool.handler(
-      { projectId: "project_1", query: "acme", competitors: ["rival"] },
-      toolContext,
-    );
-
-    const text = textContent(result);
-    expect(text).toContain("Total mentions: 42");
-    expect(text).toContain("chat_gpt");
-    expect(text).toContain("Share of Voice");
-    expect(text).toContain("rival");
-    expect(text).toContain("acme.example");
-    expect(result.structuredContent).toMatchObject({
-      result: brandLookupResult,
-    });
-  });
-
-  it("rejects more than 5 competitors", () => {
-    const parsed = z
-      .object(aiVisibilityTools.getAiVisibilityTool.config.inputSchema)
-      .safeParse({
-        projectId: "project_1",
-        query: "acme",
-        competitors: ["a", "b", "c", "d", "e", "f"],
-      });
-    expect(parsed.success).toBe(false);
-  });
+beforeEach(() => {
+  mocks.authorize.mockResolvedValue({ id: projectId, domain: "example.com" });
+  mocks.service.getTracker.mockResolvedValue(state);
+  mocks.service.getRun.mockResolvedValue(run);
+  mocks.service.runCheck.mockResolvedValue(run);
 });
 
-describe("explore_ai_prompt", () => {
-  beforeEach(() => {
-    mocks.getProjectForOrganization.mockResolvedValue(deProjectRow);
-    mocks.explorePrompt.mockResolvedValue(promptExplorerResult);
+describe("AI visibility assistant tools", () => {
+  it("registers the same tools in MCP and SAM and hides SAM's project argument", () => {
+    const register = vi.spyOn(McpServer.prototype, "registerTool");
+    createOpenSeoMcpServer({ openSeoAuth: context.auth });
+    const sam = buildSamMcpTools(context.auth, {
+      id: projectId,
+      domain: "example.com",
+    });
+    const { getAiVisibilityTool, exploreAiPromptTool, ...trackerTools } =
+      definitions;
+    const tools = Object.values(trackerTools);
+    for (const legacy of [getAiVisibilityTool, exploreAiPromptTool]) {
+      expect(register.mock.calls.some(([name]) => name === legacy.name)).toBe(
+        true,
+      );
+    }
+    for (const tool of tools) {
+      expect(register.mock.calls.some(([name]) => name === tool.name)).toBe(
+        true,
+      );
+      expect(sam[tool.name]).toBeDefined();
+      const schema = sam[tool.name]?.inputSchema;
+      expect(schema).toBeInstanceOf(z.ZodObject);
+      if (schema instanceof z.ZodObject)
+        expect(schema.shape).not.toHaveProperty("projectId");
+    }
+    register.mockRestore();
   });
-
-  it("builds the billing context from the caller's org and the requested project", async () => {
-    await aiVisibilityTools.exploreAiPromptTool.handler(
-      {
-        projectId: "project_1",
-        prompt: "best crm for small teams",
-        models: ["claude", "gemini"],
-        webSearch: true,
-      },
-      toolContext,
+  it.each(["get_ai_visibility_results", "get_ai_visibility_sources"])(
+    "lets SAM express one run-wide %s call with null filters",
+    async (name) => {
+      const sam = buildSamMcpTools(context.auth, {
+        id: projectId,
+        domain: "example.com",
+      });
+      const schema = sam[name]?.inputSchema;
+      if (!(schema instanceof z.ZodObject))
+        throw new Error("Missing SAM object schema");
+      const filters = {
+        runId: null,
+        topic: null,
+        engines: null,
+        promptId: null,
+        cursor: null,
+      };
+      expect(schema.parse(filters)).toMatchObject(filters);
+      expect(schema.shape).not.toHaveProperty("projectId");
+      const jsonSchema = z.toJSONSchema(schema, { io: "input" });
+      expect(JSON.stringify(jsonSchema.properties?.engines)).toContain(
+        '"type":"null"',
+      );
+      expect(JSON.stringify(jsonSchema.properties?.topic)).toContain(
+        "Omit or null for all topics",
+      );
+      expect(sam[name]?.description).toContain("one run-wide call");
+    },
+  );
+  it("returns a typed empty setup and useful link without collecting", async () => {
+    const result = await definitions.getAiVisibilityTrackerTool.handler(
+      { projectId },
+      context,
     );
-
-    expect(mocks.explorePrompt).toHaveBeenCalledWith(
-      expect.objectContaining({
-        projectId: "project_1",
-        prompt: "best crm for small teams",
-        models: ["claude", "gemini"],
-      }),
-      expect.objectContaining({
-        organizationId: toolContext.auth.organizationId,
-        projectId: "project_1",
-      }),
-    );
-  });
-
-  it("summarizes per-model brand mentions and a text preview; passes structuredContent through unchanged", async () => {
-    const result = await aiVisibilityTools.exploreAiPromptTool.handler(
-      {
-        projectId: "project_1",
-        prompt: "best crm for small teams",
-        models: ["claude", "gemini"],
-        highlightBrand: "acme",
-        webSearch: true,
-      },
-      toolContext,
-    );
-
-    const text = textContent(result);
-    expect(text).toContain("claude");
-    expect(text).toContain("brand mentioned: yes");
-    expect(text).toContain("Acme CRM is a strong pick");
-    expect(text).toContain("gemini: error (UPSTREAM_ERROR)");
     expect(result.structuredContent).toMatchObject({
-      result: promptExplorerResult,
+      status: "success",
+      data: state,
+      meta: {
+        projectId,
+        url: `https://open-seo.test/p/${projectId}/ai-visibility`,
+      },
+    });
+    expect(
+      definitions.getAiVisibilityTrackerTool.config.outputSchema.safeParse(
+        result.structuredContent,
+      ).success,
+    ).toBe(true);
+    expect(textContent(result)).toContain("not configured");
+    expect(mocks.service.runCheck).not.toHaveBeenCalled();
+  });
+  it("keeps the same public evidence in text-only clients", async () => {
+    const brands = [{ name: "Ahrefs", domain: "ahrefs.com", own: false }];
+    mocks.service.getTracker.mockResolvedValue({ ...state, brands });
+    const result = await definitions.getAiVisibilityTrackerTool.handler(
+      { projectId },
+      context,
+    );
+    const text = textContent(result);
+    const jsonLine = text
+      .split("\n")
+      .find((line) => line.startsWith('{"status":'));
+    expect(jsonLine).toBeDefined();
+    expect(JSON.parse(jsonLine!)).toEqual({
+      status: "success",
+      data: { ...state, brands },
+    });
+    expect(result.structuredContent).toMatchObject({
+      status: "success",
+      data: { ...state, brands },
     });
   });
-
-  it("rejects an empty models list", () => {
-    const parsed = z
-      .object(aiVisibilityTools.exploreAiPromptTool.config.inputSchema)
-      .safeParse({
-        projectId: "project_1",
-        prompt: "best crm for small teams",
-        models: [],
-      });
-    expect(parsed.success).toBe(false);
+  it("authorizes before any service read and never exposes a foreign project", async () => {
+    mocks.authorize.mockResolvedValue(null);
+    await expect(
+      definitions.getAiVisibilityTrackerTool.handler({ projectId }, context),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(mocks.service.getTracker).not.toHaveBeenCalled();
   });
-
-  it("defaults models to all four when omitted", () => {
-    const parsed = z
-      .object(aiVisibilityTools.exploreAiPromptTool.config.inputSchema)
-      .parse({
-        projectId: "project_1",
-        prompt: "best crm for small teams",
-      });
-    expect(parsed.models).toEqual([
-      "chat_gpt",
-      "claude",
-      "gemini",
-      "perplexity",
-    ]);
+  it("reads existing progress once without starting another check", async () => {
+    const result = await definitions.getAiVisibilityRunTool.handler(
+      { projectId, runId },
+      context,
+    );
+    expect(mocks.service.getRun).toHaveBeenCalledExactlyOnceWith({
+      projectId,
+      runId,
+    });
+    expect(mocks.service.runCheck).not.toHaveBeenCalled();
+    expect(result.structuredContent).toMatchObject({
+      data: { pending: 2 },
+    });
+    expect(textContent(result)).toContain("Next read after 30s");
+    expect(
+      definitions.getAiVisibilityRunTool.config.outputSchema.safeParse(
+        result.structuredContent,
+      ).success,
+    ).toBe(true);
+  });
+  it("forwards the paid check's scope, approved cost and authorized billing", async () => {
+    const args = { projectId, maxCostUsd: 0.01, promptIds: [runId] };
+    await definitions.runAiVisibilityCheckTool.handler(args, context);
+    expect(mocks.service.runCheck).toHaveBeenCalledWith(
+      args,
+      expect.objectContaining({ organizationId: "org_123", projectId }),
+    );
+  });
+  it("returns actionable typed conflicts with their run ID without retrying", async () => {
+    mocks.service.runCheck.mockRejectedValue(
+      new AiVisibilityError(
+        "RUN_IN_PROGRESS",
+        "A check is already collecting answers.",
+        runId,
+      ),
+    );
+    const result = await definitions.runAiVisibilityCheckTool.handler(
+      { projectId, maxCostUsd: 0.01 },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect(textContent(result)).toContain("Do not start another check");
+    expect(result.structuredContent).toMatchObject({
+      status: "error",
+      code: "RUN_IN_PROGRESS",
+      runId,
+    });
+    expect(
+      definitions.runAiVisibilityCheckTool.config.outputSchema.safeParse(
+        result.structuredContent,
+      ).success,
+    ).toBe(true);
+    expect(mocks.service.runCheck).toHaveBeenCalledTimes(1);
+  });
+  it("keeps gap-only source scope visible in structured and text-only MCP clients", async () => {
+    const sourceData = {
+      runId,
+      rows: [],
+      totalCount: 0,
+      nextCursor: null,
+      coverage: {
+        expected: 3,
+        completed: 3,
+        noAnswer: 0,
+        failed: 0,
+        pending: 0,
+      },
+      appliedFilters: {
+        competitorGap: true,
+        branded: "branded",
+        ownership: "all",
+      },
+      groupBy: "url",
+      truncated: false,
+    };
+    mocks.service.getSources.mockResolvedValue(sourceData);
+    const schema = z.object(
+      definitions.getAiVisibilitySourcesTool.config.inputSchema,
+    );
+    const result = await definitions.getAiVisibilitySourcesTool.handler(
+      schema.parse({
+        projectId,
+        runId,
+        competitorGap: true,
+        branded: "branded",
+      }),
+      context,
+    );
+    expect(result.structuredContent).toMatchObject({
+      data: { appliedFilters: sourceData.appliedFilters },
+    });
+    expect(textContent(result)).toContain("Gap-only sources");
+    expect(textContent(result)).toContain(
+      "does not mean answer details are missing",
+    );
+    expect(textContent(result)).toContain('"competitorGap":true');
+  });
+  it("explains zero gap-filtered results without calling completed evidence missing", async () => {
+    mocks.service.getResults.mockResolvedValue({
+      runId,
+      run,
+      rows: [],
+      totalCount: 0,
+      nextCursor: null,
+      summaries: [],
+      coverage: {
+        expected: 3,
+        completed: 3,
+        noAnswer: 0,
+        failed: 0,
+        pending: 0,
+      },
+      appliedFilters: { competitorGap: true, branded: "branded" },
+      truncated: false,
+    });
+    const schema = z.object(
+      definitions.getAiVisibilityResultsTool.config.inputSchema,
+    );
+    const result = await definitions.getAiVisibilityResultsTool.handler(
+      schema.parse({
+        projectId,
+        runId,
+        competitorGap: true,
+        branded: "branded",
+      }),
+      context,
+    );
+    expect(textContent(result)).toContain("Gap-only results");
+    expect(textContent(result)).toContain(
+      "No answers matched the selected filters",
+    );
+    expect(textContent(result)).toContain("Remove restrictive filters");
+  });
+  it("rejects malformed success and incomplete error payloads at the output boundary", () => {
+    const schema = definitions.getAiVisibilityRunTool.config.outputSchema;
+    expect(schema.safeParse({ status: "success" }).success).toBe(false);
+    expect(
+      schema.safeParse({ status: "success", data: { ...run, completed: "1" } })
+        .success,
+    ).toBe(false);
+    expect(schema.safeParse({ status: "error", message: "bad" }).success).toBe(
+      false,
+    );
   });
 });

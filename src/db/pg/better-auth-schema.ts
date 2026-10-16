@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -24,6 +24,10 @@ export const user = pgTable("user", {
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
   analyticsOptedOut: boolean("analytics_opted_out"),
+  // The org this user last worked in; seeds session.activeOrganizationId at
+  // sign-in (validated against a live membership first). Not a FK: an org
+  // delete must not fail because a user's last-active pointer references it.
+  lastActiveOrganizationId: text("last_active_organization_id"),
 });
 
 export const session = pgTable(
@@ -75,6 +79,11 @@ export const account = pgTable(
       table.accountId,
       table.providerId,
     ),
+    uniqueIndex("account_google_grant_owner_idx")
+      .on(table.userId, table.providerId, table.accountId)
+      .where(
+        sql`${table.providerId} in ('google-search-console', 'google-analytics')`,
+      ),
   ],
 );
 
@@ -128,6 +137,10 @@ export const member = pgTable(
   (table) => [
     index("member_organizationId_idx").on(table.organizationId),
     index("member_userId_idx").on(table.userId),
+    uniqueIndex("member_organizationId_userId_uidx").on(
+      table.organizationId,
+      table.userId,
+    ),
   ],
 );
 

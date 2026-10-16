@@ -84,20 +84,24 @@ class NodeDoStorage {
         const normalized = params.map((p) =>
           typeof p === "boolean" ? (p ? 1 : 0) : (p ?? null),
         );
-        const stmt = storage.db.prepare(query);
+        const stmt = storage.db.prepare<unknown[], T>(query);
         if (stmt.reader) {
-          return new SqlCursor<T>(stmt.all(...normalized) as T[]);
+          return new SqlCursor<T>(stmt.all(...normalized));
         }
         stmt.run(...normalized);
         return new SqlCursor<T>([]);
       },
       get databaseSize(): number {
-        const pageCount = storage.db.pragma("page_count", {
-          simple: true,
-        }) as number;
-        const pageSize = storage.db.pragma("page_size", {
-          simple: true,
-        }) as number;
+        const pageCount = Number(
+          storage.db.pragma("page_count", {
+            simple: true,
+          }),
+        );
+        const pageSize = Number(
+          storage.db.pragma("page_size", {
+            simple: true,
+          }),
+        );
         return pageCount * pageSize;
       },
     };
@@ -105,8 +109,11 @@ class NodeDoStorage {
 
   async getAlarm(): Promise<number | null> {
     const row = this.db
-      .prepare(`SELECT wake_at FROM ${ALARM_META_TABLE} WHERE id = 1`)
-      .get() as { wake_at: number } | undefined;
+      .prepare<
+        [],
+        { wake_at: number }
+      >(`SELECT wake_at FROM ${ALARM_META_TABLE} WHERE id = 1`)
+      .get();
     return row?.wake_at ?? null;
   }
 
@@ -130,7 +137,6 @@ class NodeDoStorage {
     }
     this.onDeleteAll();
   }
-
 }
 
 class NodeDoState {
@@ -175,6 +181,9 @@ export function makeScratchpadNamespace(
       if (!file.endsWith(".sqlite")) continue;
       const name = decodeURIComponent(file.slice(0, -".sqlite".length));
       try {
+        // The constructor is loaded from the upstream AuditScratchpad class;
+        // its Cloudflare ctx is implemented by NodeDoState above.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- runtime bridge between structurally equivalent DO contexts
         const instance = (await instantiate(name)) as {
           alarm?: () => Promise<void>;
           ctx: { storage: NodeDoStorage };
@@ -206,14 +215,15 @@ export function makeScratchpadNamespace(
           get(_target, prop) {
             if (typeof prop !== "string") return undefined;
             return async (...args: unknown[]) => {
-              const instance = (await instantiate(id.name)) as Record<
-                string,
-                (...a: unknown[]) => unknown
-              >;
-              if (typeof instance[prop] !== "function") {
+              const instance = await instantiate(id.name);
+              if (typeof instance !== "object" || instance === null)
+                throw new TypeError("Invalid AuditScratchpad instance");
+              const method: unknown = Reflect.get(instance, prop);
+              if (typeof method !== "function") {
                 throw new TypeError(`AuditScratchpad.${prop} is not a method`);
               }
-              return instance[prop](...args);
+              const result: unknown = method.apply(instance, args);
+              return result;
             };
           },
         },

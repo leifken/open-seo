@@ -3,17 +3,18 @@ import {
   defineCollections,
   frontmatterSchema,
   metaSchema,
-} from "fumadocs-mdx/config/zod-3";
+} from "fumadocs-mdx/config";
 import { z } from "zod";
 
-const pageSchema = frontmatterSchema as any;
+const pageSchema = frontmatterSchema;
 
 export const blog = defineCollections({
   type: "doc",
   dir: "content/blogs",
   schema: pageSchema.extend({
     author: z.string(),
-    date: z.string(),
+    // YYYY-MM-DD: the blog index sorts on this string.
+    date: z.iso.date(),
   }),
 });
 

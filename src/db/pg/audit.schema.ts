@@ -7,6 +7,7 @@ import {
   real,
   text,
 } from "drizzle-orm/pg-core";
+import { PAGE_FETCH_CLASSES } from "@/shared/audit-fetch-class";
 import { projects } from "./app.schema";
 
 // Timestamps are stored as *text* (same column shape as the SQLite schema); see
@@ -87,20 +88,16 @@ export const auditPages = pgTable(
     h4Count: integer("h4_count").notNull().default(0),
     h5Count: integer("h5_count").notNull().default(0),
     h6Count: integer("h6_count").notNull().default(0),
-    headingOrderJson: text("heading_order_json"),
     // Content
     wordCount: integer("word_count").notNull().default(0),
     // Images
     imagesTotal: integer("images_total").notNull().default(0),
     imagesMissingAlt: integer("images_missing_alt").notNull().default(0),
-    imagesJson: text("images_json"),
     // Links
     internalLinkCount: integer("internal_link_count").notNull().default(0),
     externalLinkCount: integer("external_link_count").notNull().default(0),
     // Structured data
     hasStructuredData: boolean("has_structured_data").notNull().default(false),
-    // Hreflang
-    hreflangTagsJson: text("hreflang_tags_json"),
     // Indexability
     isIndexable: boolean("is_indexable").notNull().default(true),
     // Indexability/canonical signals from response headers
@@ -112,8 +109,7 @@ export const auditPages = pgTable(
     inSitemap: boolean("in_sitemap").notNull().default(false),
     // SHA-256 of the visible body text, for duplicate-content grouping
     contentHash: text("content_hash"),
-    // How the fetch resolved: ok | blocked (WAF/bot challenge) | error
-    fetchClass: text("fetch_class", { enum: ["ok", "blocked", "error"] })
+    fetchClass: text("fetch_class", { enum: PAGE_FETCH_CLASSES })
       .notNull()
       .default("ok"),
     // Performance

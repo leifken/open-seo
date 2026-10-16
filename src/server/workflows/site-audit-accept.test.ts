@@ -1,3 +1,4 @@
+import { createCrawlThrottle } from "@/server/lib/audit/crawl-throttle";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { crawlPage, CRAWL_ACCEPT } from "./site-audit-workflow-helpers";
 
@@ -5,11 +6,15 @@ import { crawlPage, CRAWL_ACCEPT } from "./site-audit-workflow-helpers";
 // representation matches and there is no wildcard.
 function multiViews(init?: RequestInit) {
   const accept = new Headers(init?.headers).get("accept") ?? "";
-  if (!accept.includes("*/*")) return new Response("Not Acceptable", { status: 406 });
-  return new Response("<html><head><title>Ok</title></head><body>ok</body></html>", {
-    status: 200,
-    headers: { "content-type": "text/html; charset=utf-8" },
-  });
+  if (!accept.includes("*/*"))
+    return new Response("Not Acceptable", { status: 406 });
+  return new Response(
+    "<html><head><title>Ok</title></head><body>ok</body></html>",
+    {
+      status: 200,
+      headers: { "content-type": "text/html; charset=utf-8" },
+    },
+  );
 }
 
 describe("site audit crawler Accept header", () => {
@@ -17,10 +22,17 @@ describe("site audit crawler Accept header", () => {
 
   it("sends a wildcard so content negotiation never answers 406", async () => {
     expect(CRAWL_ACCEPT).toContain("*/*");
-    const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) => multiViews(init));
+    const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) =>
+      multiViews(init),
+    );
     vi.stubGlobal("fetch", fetchMock);
-    const result = await crawlPage("https://example.org/kontakt", 1, true);
+    const result = await crawlPage(
+      "https://example.org/kontakt",
+      1,
+      true,
+      createCrawlThrottle(Date.now() + 60_000),
+    );
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(result.statusCode).toBe(200);
+    expect(result?.statusCode).toBe(200);
   });
 });

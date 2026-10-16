@@ -1,365 +1,248 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowUpRight, ShieldAlert } from "lucide-react";
-import { getAuthMode, isHostedClientAuthMode } from "@/lib/auth-mode";
-import { captureClientEvent } from "@/client/lib/posthog";
-import { ClaudeIcon, CodexIcon } from "@/client/features/ai-mcp/AgentIcons";
-import { AvailableTools } from "@/client/features/ai-mcp/AvailableTools";
+import { createFileRoute } from "@tanstack/react-router";
+import { z } from "zod";
 import {
-  CodeBlock,
-  Collapsible,
-  CopyButton,
-} from "@/client/features/ai-mcp/SetupControls";
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/client/components/ui/tabs";
+import { Alert, AlertDescription } from "@/client/components/ui/alert";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/client/components/ui/card";
+import { PageHeader } from "@/client/components/PageHeader";
+import { ArrowUpRight, ShieldAlert } from "lucide-react";
+import { getAuthMode } from "@/lib/auth-mode";
+import { captureClientEvent } from "@/client/lib/posthog";
+import {
+  agentUpdatePrompt,
+  getAgentSetupPrompt,
+} from "@/client/features/ai-mcp/agentSetupPrompt";
+import { CopyButton } from "@/client/components/CopyButton";
+import { AgentList } from "@/client/features/ai-mcp/AgentList";
 
-const DISCORD_URL = "https://discord.gg/c9uGs3cFXr";
-const SUPPORT_EMAIL = "ben@openseo.so";
-const SAM_GITHUB_URL = "https://github.com/every-app/sam";
-const SKILL_NAMES = [
-  "seo-project-setup",
-  "seo-coach",
-  "keyword-research",
-  "keyword-clustering",
-  "competitive-landscape",
-  "competitor-analysis",
-  "link-prospecting",
-  "local-seo",
-  "seo-audit",
+const DOCS_URL = "https://openseo.so/docs/agent-setup";
+const COACH_DOCS_URL = "https://openseo.so/docs/skills/seo-coach";
+const LINK_CLASS =
+  "text-foreground underline decoration-foreground/25 underline-offset-4 hover:decoration-foreground";
+const MUTED_LINK_CLASS =
+  "inline-flex items-center gap-1 text-sm text-muted-foreground underline decoration-foreground/25 underline-offset-4 hover:text-foreground";
+const SKILLS = [
+  ["seo-coach", "Explains where you stand and picks your next step."],
+  [
+    "seo-project-setup",
+    "Saves your goals, competitors, and key pages as shared context.",
+  ],
+  [
+    "seo-audit",
+    "One-page site audit built around a single do-this-week action.",
+  ],
+  [
+    "ai-visibility-audit",
+    "Finds the few changes most likely to get you cited in AI answers.",
+  ],
+  [
+    "ai-prompt-research",
+    "Finds what people ask ChatGPT about your market and who gets cited.",
+  ],
+  ["keyword-research", "Finds keyword opportunities from a few seed topics."],
+  ["keyword-clustering", "Groups keywords by intent and maps them to pages."],
+  ["competitive-landscape", "Maps who wins in your market and why."],
+  [
+    "competitor-analysis",
+    "Studies one competitor's keywords, content, and backlinks.",
+  ],
+  ["link-prospecting", "Finds link prospects and drafts outreach."],
+  ["local-seo", "Audits a Google Business Profile and Maps visibility."],
+  ["seo-report", "Saves any of the above as a report on your Reports page."],
 ];
-const SKILLS_INSTALL = `npx skills add every-app/open-seo`;
-const ALL_SKILLS_INSTALL = `npx skills add every-app/open-seo --skill '*'`;
-const CLAUDE_CODE_SKILLS_INSTALL = `npx skills add every-app/open-seo --skill '*' --agent claude-code`;
-const CODEX_SKILLS_INSTALL = `npx skills add every-app/open-seo --skill '*' --agent codex`;
-const SKILLS_MANUAL_INSTALL = `git clone https://github.com/every-app/open-seo.git
 
-# Codex
-mkdir -p ~/.codex/skills
-cp -R open-seo/.agents/skills/* ~/.codex/skills/
-
-# Claude Code
-mkdir -p ~/.claude/skills
-cp -R open-seo/.agents/skills/* ~/.claude/skills/`;
+const aiSearchSchema = z.object({
+  // Active tab. Omitted for the default "setup" tab.
+  tab: z.enum(["skills"]).optional().catch(undefined),
+});
 
 export const Route = createFileRoute("/_app/ai")({
+  validateSearch: aiSearchSchema,
   component: AiPage,
 });
 
 function AiPage() {
-  const mcpUrl =
-    typeof window === "undefined"
-      ? "https://app.openseo.so/mcp"
-      : `${window.location.origin}/mcp`;
+  const { tab = "setup" } = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const origin = window.location.origin;
+  const mcpUrl = `${origin}/mcp`;
+  const prompt = getAgentSetupPrompt(origin);
 
   return (
-    <div className="h-full overflow-auto bg-base-100 px-4 py-12 md:px-6 md:py-16 pb-24 md:pb-12">
-      <div className="mx-auto max-w-3xl">
-        <h1 className="text-2xl font-semibold">AI & MCP</h1>
-        <p className="mt-2 text-sm text-base-content/70 leading-relaxed">
-          Connect your AI agent to OpenSEO. Run keyword research, SERP analysis,
-          domain lookups, and backlink reviews from your editor or chat.
-        </p>
+    <div className="h-full overflow-auto px-4 py-4 pb-24 md:px-6 md:py-6 md:pb-8">
+      <div className="mx-auto max-w-7xl">
+        <PageHeader
+          title="Agent setup"
+          description="The most powerful way to use OpenSEO is through the AI agent you already use. Set it up once, then ask it anything."
+        />
 
-        {getAuthMode(import.meta.env.AUTH_MODE) === "cloudflare_access" ? (
-          <div className="alert alert-warning mt-6 text-sm" role="alert">
-            <ShieldAlert className="size-4 shrink-0" />
-            <span>
-              This instance is behind Cloudflare Access. MCP clients cannot
-              connect until Managed OAuth is enabled on your Access application.{" "}
-              <a
-                href="https://openseo.so/docs/self-hosting/cloudflare#connect-the-mcp-server-through-cloudflare-access"
-                target="_blank"
-                rel="noreferrer"
-                className="link font-medium"
-              >
-                Setup guide
-              </a>
-            </span>
-          </div>
-        ) : null}
+        <Tabs
+          value={tab}
+          onValueChange={(value) =>
+            void navigate({
+              search: { tab: value === "skills" ? "skills" : undefined },
+              replace: true,
+            })
+          }
+          className="mt-8"
+        >
+          <TabsList variant="line">
+            <TabsTrigger value="setup">Set up your agent</TabsTrigger>
+            <TabsTrigger value="skills">Skills</TabsTrigger>
+          </TabsList>
+          <TabsContent value="setup">
+            <div className="mt-6 space-y-5">
+              <Card size="lg">
+                <CardHeader>
+                  <CardTitle>
+                    <h2>Set up your agent</h2>
+                  </CardTitle>
+                  <CardDescription>
+                    Paste the setup prompt into your agent to connect OpenSEO
+                    and install its SEO skills. It will guide you through any
+                    manual steps.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <AgentList />
+                  <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-3">
+                    <CopyButton
+                      variant="default"
+                      size="lg"
+                      value={prompt}
+                      label="Copy setup prompt"
+                      successMessage="Setup prompt copied"
+                      onCopy={() => captureClientEvent("mcp:setup_prompt_copy")}
+                    />
+                    <a
+                      href={`${DOCS_URL}#set-up-your-agent`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={MUTED_LINK_CLASS}
+                    >
+                      Setup instructions
+                      <ArrowUpRight className="size-3.5" />
+                    </a>
+                  </div>
+                </CardContent>
+                <CardFooter className="text-muted-foreground">
+                  <p>
+                    Once connected, ask your agent to use{" "}
+                    <a
+                      href={COACH_DOCS_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={LINK_CLASS}
+                    >
+                      SEO Coach
+                    </a>{" "}
+                    to help you choose what to do next.
+                  </p>
+                </CardFooter>
+              </Card>
 
-        <section className="mt-8">
-          <div className="rounded-lg border border-base-300 bg-base-200 px-4 py-3.5">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-base-content/50">
-                MCP server URL
-              </p>
+              <Card size="lg">
+                <CardHeader>
+                  <CardTitle>
+                    <h2>Update your skills</h2>
+                  </CardTitle>
+                  <CardDescription>
+                    Already connected? Paste the update prompt into your agent
+                    to get the latest OpenSEO skills while preserving your
+                    connection settings and personal edits.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-wrap items-center gap-x-5 gap-y-3">
+                  <CopyButton
+                    variant="default"
+                    size="lg"
+                    value={agentUpdatePrompt}
+                    label="Copy update prompt"
+                    successMessage="Update prompt copied"
+                    onCopy={() => captureClientEvent("mcp:update_prompt_copy")}
+                  />
+                  <a
+                    href={`${DOCS_URL}#update-your-skills`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={MUTED_LINK_CLASS}
+                  >
+                    Update instructions
+                    <ArrowUpRight className="size-3.5" />
+                  </a>
+                </CardContent>
+              </Card>
+            </div>
+
+            {getAuthMode(import.meta.env.AUTH_MODE) === "cloudflare_access" ? (
+              <Alert variant="warning" className="mt-8">
+                <ShieldAlert />
+                <AlertDescription>
+                  This instance is behind Cloudflare Access. MCP clients cannot
+                  connect until Managed OAuth is enabled on your Access
+                  application.{" "}
+                  <a
+                    href="https://openseo.so/docs/self-hosting/cloudflare#connect-the-mcp-server-through-cloudflare-access"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium"
+                  >
+                    Setup guide
+                  </a>
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
+            <div className="mt-10 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-border pt-5 text-xs text-muted-foreground">
+              <span>
+                MCP server URL for this instance:{" "}
+                <code className="font-mono text-foreground/80">{mcpUrl}</code>
+              </span>
               <CopyButton
                 value={mcpUrl}
                 successMessage="MCP URL copied"
                 onCopy={() => captureClientEvent("mcp:setup_url_copy")}
               />
             </div>
-            <code className="mt-2 block break-all font-mono text-sm text-base-content">
-              {mcpUrl}
-            </code>
-          </div>
-          <p className="mt-2.5 text-xs text-base-content/55 leading-relaxed">
-            Paste this into any MCP client. This URL points at the OpenSEO
-            instance you are using now, whether hosted, self-hosted, or local.
-            Sign in with OpenSEO when prompted.
-          </p>
-          {isHostedClientAuthMode() ? (
-            <p className="mt-2 text-xs text-base-content/55">
-              For headless or CI setups, use an API key from{" "}
-              <Link className="link link-primary" to="/settings">
-                Settings
-              </Link>{" "}
-              instead of the OAuth login.
-            </p>
-          ) : null}
-        </section>
-
-        <section className="mt-10">
-          <h2 className="text-base font-semibold">Setup guides</h2>
-          <p className="mt-1.5 text-sm text-base-content/70">
-            Pick your agent.
-          </p>
-          <div className="mt-4 divide-y divide-base-300 overflow-hidden rounded-lg border border-base-300 bg-base-200">
-            <Collapsible
-              id="claude-code"
-              title="Claude Code"
-              subtitle="Add with the CLI"
-              icon={<ClaudeIcon className="size-5" />}
-            >
-              <p className="text-sm text-base-content/70">
-                Run this in your terminal:
+          </TabsContent>
+          <TabsContent value="skills">
+            <section className="mt-6">
+              <p className="text-sm text-muted-foreground">
+                The setup prompt installs these. Run one by name when you want a
+                full report instead of a quick answer.
               </p>
-              <CodeBlock
-                code={`claude mcp add --transport http --scope user openseo ${mcpUrl}`}
-                onCopy={() =>
-                  captureClientEvent("mcp:setup_command_copy", {
-                    agent: "claude-code",
-                  })
-                }
-              />
-              <p className="text-sm text-base-content/70">
-                Approve the login when prompted.
-              </p>
-            </Collapsible>
-
-            <Collapsible
-              id="claude-desktop"
-              title="Claude Desktop"
-              subtitle="Add a custom connector"
-              icon={<ClaudeIcon className="size-5" />}
-            >
-              <ol className="ml-5 list-decimal space-y-1.5 text-sm text-base-content/70 leading-relaxed">
-                <li>
-                  Open <span className="text-base-content">Settings</span> →{" "}
-                  <span className="text-base-content">Connectors</span>.
-                </li>
-                <li>
-                  Click{" "}
-                  <span className="font-medium text-base-content">
-                    Add custom connector
-                  </span>
-                  .
-                </li>
-                <li>Paste the MCP URL above and click Add.</li>
-                <li>Approve the OpenSEO login when prompted.</li>
-                <li>
-                  Optional: after OpenSEO connects, click{" "}
-                  <span className="font-medium text-base-content">
-                    Configure
-                  </span>
-                  , then choose{" "}
-                  <span className="font-medium text-base-content">
-                    Always Approved
-                  </span>
-                  , except for any tools you want Claude to ask before using.
-                </li>
-              </ol>
-              <p className="text-xs text-base-content/55 leading-relaxed">
-                Requires a Claude Pro, Max, Team, or Enterprise plan.
-              </p>
-            </Collapsible>
-
-            <Collapsible
-              id="codex"
-              title="Codex"
-              subtitle="Add with the CLI"
-              icon={<CodexIcon className="size-5" />}
-            >
-              <p className="text-sm text-base-content/70">
-                Run this in your terminal:
-              </p>
-              <CodeBlock
-                code={`codex mcp add openseo --url ${mcpUrl}`}
-                onCopy={() =>
-                  captureClientEvent("mcp:setup_command_copy", {
-                    agent: "codex",
-                  })
-                }
-              />
-              <p className="text-sm text-base-content/70">
-                Approve the login when prompted.
-              </p>
-            </Collapsible>
-
-            <Collapsible
-              id="codex-desktop"
-              title="Codex Desktop"
-              subtitle="Settings → Integrations & MCP"
-              icon={<CodexIcon className="size-5" />}
-            >
-              <ol className="ml-5 list-decimal space-y-1.5 text-sm text-base-content/70 leading-relaxed">
-                <li>
-                  Open{" "}
-                  <span className="text-base-content">
-                    Settings → Integrations & MCP
-                  </span>
-                  .
-                </li>
-                <li>
-                  Click{" "}
-                  <span className="font-medium text-base-content">
-                    Add your own
-                  </span>
-                  .
-                </li>
-                <li>Paste the MCP URL above.</li>
-                <li>Approve the OpenSEO login when prompted.</li>
-              </ol>
-            </Collapsible>
-          </div>
-        </section>
-
-        <section className="mt-12">
-          <h2 className="text-base font-semibold">OpenSEO Skills</h2>
-          <p className="mt-1.5 text-sm text-base-content/70 leading-relaxed">
-            Skills give Codex and Claude Code reusable SEO workflows that can
-            call your OpenSEO MCP tools when live SERP, keyword, backlink, or
-            domain data is needed.
-          </p>
-          <div className="mt-4 divide-y divide-base-300 overflow-hidden rounded-lg border border-base-300 bg-base-200">
-            <Collapsible
-              id="skills-add"
-              title="Install with skills add"
-              subtitle="Recommended cross-agent installer"
-            >
-              <CodeBlock code={SKILLS_INSTALL} />
-              <p className="text-sm text-base-content/70">
-                You can also auto-accept each OpenSEO skill:
-              </p>
-              <CodeBlock code={ALL_SKILLS_INSTALL} />
-            </Collapsible>
-            <Collapsible
-              id="claude-code-skills"
-              title="Install for Claude Code"
-              subtitle="Target Claude Code only"
-              icon={<ClaudeIcon className="size-5" />}
-            >
-              <CodeBlock code={CLAUDE_CODE_SKILLS_INSTALL} />
-            </Collapsible>
-            <Collapsible
-              id="codex-skills"
-              title="Install for Codex"
-              subtitle="Target OpenAI Codex only"
-              icon={<CodexIcon className="size-5" />}
-            >
-              <CodeBlock code={CODEX_SKILLS_INSTALL} />
-            </Collapsible>
-            <Collapsible
-              id="manual-skills"
-              title="Manual GitHub install"
-              subtitle="Clone the repo and copy the skills"
-            >
-              <CodeBlock code={SKILLS_MANUAL_INSTALL} />
-            </Collapsible>
-          </div>
-          <div className="mt-5">
-            <p className="text-sm text-base-content/70 leading-relaxed">
-              Start with{" "}
-              <span className="font-mono text-base-content">
-                /seo-project-setup
-              </span>
-              . It will ask about your project and save your goals, positioning,
-              and competitors to your project context.
-            </p>
-            <p className="mt-4 text-xs font-medium uppercase tracking-wide text-base-content/50">
-              Available skills
-            </p>
-            <ul className="mt-2 grid gap-1.5 text-sm text-base-content/70 sm:grid-cols-2">
-              {SKILL_NAMES.map((skill) => (
-                <li key={skill} className="flex gap-2">
-                  <span className="text-base-content/35">-</span>
-                  <span>{skill}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
-
-        <section className="mt-12">
-          <h2 className="text-base font-semibold">Available tools</h2>
-          <div className="mt-5">
-            <AvailableTools />
-          </div>
-        </section>
-
-        <section className="mt-12">
-          <h2 className="text-base font-semibold">Sam: AI SEO teammate</h2>
-          <p className="mt-1.5 text-sm text-base-content/70 leading-relaxed">
-            Sam is an experimental content workflow for Claude Code and other
-            coding agents. It combines keyword research, source discovery,
-            drafting, and QA.
-          </p>
-          <a
-            href={SAM_GITHUB_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-base-content transition-colors hover:text-base-content/60"
-          >
-            View Sam on GitHub
-            <ArrowUpRight className="size-3.5" />
-          </a>
-        </section>
-
-        <section className="mt-12">
-          <h2 className="text-base font-semibold">Roadmap</h2>
-          <ul className="mt-4 space-y-3">
-            {[
-              {
-                title: "In-app SEO Research Agent",
-                description:
-                  "Ask questions and run research without leaving OpenSEO",
-              },
-              {
-                title: "Content Assistant",
-                description:
-                  "Generate drafts using saved keywords and business context",
-              },
-            ].map((item) => (
-              <li key={item.title} className="flex gap-2.5 text-sm">
-                <span className="mt-[2px] shrink-0 text-base-content/40">
-                  &mdash;
-                </span>
-                <span className="text-base-content/70">
-                  <span className="font-medium text-base-content">
-                    {item.title}
-                  </span>
-                  <br />
-                  {item.description}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <p className="mt-12 text-xs text-base-content/55 leading-relaxed">
-          Have feedback? Reach out on{" "}
-          <a
-            className="link link-primary"
-            href={DISCORD_URL}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Discord
-          </a>{" "}
-          or email{" "}
-          <a className="link link-primary" href={`mailto:${SUPPORT_EMAIL}`}>
-            {SUPPORT_EMAIL}
-          </a>
-          .
-        </p>
+              <ul className="mt-5 space-y-3 text-sm sm:space-y-2">
+                {SKILLS.map(([name, blurb]) => (
+                  <li
+                    key={name}
+                    className="flex flex-col gap-0.5 sm:flex-row sm:gap-3"
+                  >
+                    <a
+                      href={`https://openseo.so/docs/skills/${name}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={`shrink-0 font-mono text-[13px] sm:w-48 ${LINK_CLASS}`}
+                    >
+                      /{name}
+                    </a>
+                    <span className="text-muted-foreground">{blurb}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

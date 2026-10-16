@@ -3,6 +3,7 @@ import { DocsBody } from "fumadocs-ui/page";
 import defaultMdxComponents from "fumadocs-ui/mdx";
 import { Suspense } from "react";
 import { RunSkillCallout } from "@/components/run-skill-callout";
+import { AgentPrompt } from "@/components/agent-prompt";
 
 type ContentPostProps = {
   backLabel: string;
@@ -15,6 +16,7 @@ type ContentPostProps = {
 export const mdxComponents = {
   ...defaultMdxComponents,
   RunSkillCallout,
+  AgentPrompt,
 };
 
 export function ContentPost({
@@ -25,7 +27,7 @@ export function ContentPost({
   Content,
 }: ContentPostProps) {
   return (
-    <article className="mx-auto w-full min-w-0 max-w-3xl px-6 py-12 text-fd-foreground md:py-24">
+    <article className="mx-auto w-full min-w-0 max-w-3xl px-6 py-12 text-fd-foreground [grid-area:main] md:py-24">
       <header className="mb-8">
         <div className="mb-4">
           <Link

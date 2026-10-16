@@ -7,6 +7,7 @@ import { resolveUserContextFromHeaders } from "@/middleware/ensure-user/resolve"
 import { ProjectRepository } from "@/server/features/projects/repositories/ProjectRepository";
 import { SamSessionRepository } from "@/server/features/sam/SamSessionRepository";
 import { runScheduledRankChecks } from "@/server/features/rank-tracking/services/scheduledRankChecks";
+import { SCHEDULED_RANK_CHECKS_PAUSED } from "@/shared/rank-tracking-pause";
 import { reconcileStaleAudits } from "@/server/features/audit/services/auditReconciler";
 import { getOrCreateOrganizationCustomer } from "@/server/billing/subscription";
 import { isHostedServerAuthMode } from "@/server/lib/runtime-env";
@@ -17,55 +18,57 @@ import {
 } from "@/server/mcp/oauth-provider";
 import { requestWithPublicOrigin } from "@/server/mcp/public-origin";
 import { MCP_ROUTE } from "@/server/mcp/context";
-import { handleSelfHostedOpenSeoMcpRequest } from "@/server/mcp/transport";
 import { withPgClient } from "@/db";
 import {
   AUTUMN_WEBHOOK_PATH,
   handleAutumnWebhookRequest,
 } from "@/server/billing/autumn-webhook";
+import { sweepDubReferredOrganizations } from "@/server/referrals/dub";
 import { maybeSendSelfHostHeartbeat } from "@/server/lib/self-host-telemetry";
 import { handleGdprStorageErasure } from "@/server/gdpr/storage-erasure";
 import { GDPR_STORAGE_ERASURE_PATH } from "@/shared/gdpr-erasure";
 
-const appFetch = createStartHandler(defaultStreamHandler);
-const openSeoOAuthProvider = createOpenSeoOAuthProvider(appFetch);
+const startHandler = createStartHandler(defaultStreamHandler);
 
-// Authorize an onboarding-chat connection in the Worker, before it reaches the
-// Durable Object. The DO instance name is the projectId (set client-side); we
-// resolve the session here and confirm the caller's org owns that project, so
-// the DO can trust its `name`. Returning a Response rejects; void lets it through.
-async function authorizeOnboardingChat(
-  request: Request,
-  projectId: string,
-): Promise<Response | undefined> {
-  let context;
-  try {
-    context = await resolveUserContextFromHeaders(request.headers);
-  } catch {
-    return new Response("Unauthorized", { status: 401 });
+// The app ships no security response headers of its own, so any third-party
+// page can frame an app route and UI-redress a one-click action (delete a
+// project, change project settings, buy credits). `frame-ancestors 'self'` on
+// the app's own documents is the whole fix, and deliberately all of it: a
+// script-src policy would need a nonce for the inline bootstrap script in
+// __root.tsx plus allowances for Turnstile and PostHog, which is separate,
+// larger work.
+//
+// Only HTML documents, and only ones that carry no policy of their own, so a
+// route that sets its own stricter CSP keeps it (two CSP headers intersect, so
+// adding a second could only confuse things). Wrapping the handler rather than
+// one call site covers the OAuth-provider path too, which serves app documents
+// through this same function.
+async function appFetch(request: Request): Promise<Response> {
+  const response = await startHandler(request);
+  const contentType = response.headers.get("content-type") ?? "";
+  if (
+    !contentType.startsWith("text/html") ||
+    response.headers.has("content-security-policy")
+  ) {
+    return response;
   }
-  const project = await ProjectRepository.getProjectForOrganization(
-    projectId,
-    context.organizationId,
-  );
-  if (!project) {
-    return new Response("Forbidden", { status: 403 });
-  }
-  // Ensure the org's Autumn customer exists (and gets its default onboarding-plan
-  // credits) before the DO checks the balance — otherwise a brand-new org's first
-  // message can hit a false "out of credits" gate. Hosted-only; self-hosted has
-  // no Autumn.
-  if (await isHostedServerAuthMode()) {
-    await getOrCreateOrganizationCustomer(context);
-  }
-  return undefined;
+  const headers = new Headers(response.headers);
+  headers.set("Content-Security-Policy", "frame-ancestors 'self'");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
+
+const openSeoOAuthProvider = createOpenSeoOAuthProvider(appFetch);
 
 // Authorize a SAM agent connection in the Worker, before it reaches the Durable
 // Object. The DO instance name is the sessionId (set client-side); we resolve
 // the session here and authorize the caller against the session's project via
 // the same canonical project-access check the rest of the app uses, so the DO
 // can trust its `name` and derive org/project/user from the session row.
+// Returning a Response rejects; void lets it through.
 async function authorizeSamChat(
   request: Request,
   sessionId: string,
@@ -89,35 +92,31 @@ async function authorizeSamChat(
   if (!session || !project) {
     return new Response("Forbidden", { status: 403 });
   }
-  // Same as onboarding above: make sure the Autumn customer (and its default
-  // free-plan credits) exists before the DO's balance gate runs, or a brand-new
-  // org's first message hits a false "out of credits".
+  // Make sure the Autumn customer (and its default free-plan credits) exists
+  // before the DO's balance gate runs, or a brand-new org's first message hits
+  // a false "out of credits". Hosted-only; self-hosted has no Autumn.
   if (await isHostedServerAuthMode()) {
     await getOrCreateOrganizationCustomer(context);
   }
   return undefined;
 }
 
-// Both chat DOs live behind /agents/*. Dispatch on the DO binding partyserver
+// The chat DO lives behind /agents/*. Dispatch on the DO binding partyserver
 // resolved for the request (rather than re-parsing the path), and fail closed
 // on anything unrecognized.
 function authorizeChatAgent(
   request: Request,
   lobby: { className: string; name: string },
 ): Promise<Response | undefined> | Response {
-  switch (lobby.className) {
-    case "SAM_CHAT":
-      return authorizeSamChat(request, lobby.name);
-    case "ONBOARDING_CHAT":
-      return authorizeOnboardingChat(request, lobby.name);
-    default:
-      return new Response("Forbidden", { status: 403 });
+  if (lobby.className === "SAM_CHAT") {
+    return authorizeSamChat(request, lobby.name);
   }
+  return new Response("Forbidden", { status: 403 });
 }
 
-// Route /agents/* to the onboarding and SAM chat DOs. Auth happens here (both
-// the WS upgrade and any HTTP message-history fetch), keeping it off the OAuth
-// wrapper and TanStack route guard below.
+// Route /agents/* to the SAM chat DO. Auth happens here (both the WS upgrade
+// and any HTTP message-history fetch), keeping it off the OAuth wrapper and
+// TanStack route guard below.
 async function routeChatAgents(request: Request, env: Env): Promise<Response> {
   const response = await routeAgentRequest(request, env, {
     onBeforeConnect: (req, lobby) => authorizeChatAgent(req, lobby),
@@ -141,11 +140,17 @@ function handleFetch(
   env: Env,
   ctx: ExecutionContext,
 ): Response | Promise<Response> {
-  ctx.waitUntil(maybeSendSelfHostHeartbeat());
-
   const authMode = getAuthMode(env.AUTH_MODE);
   const publicRequest = requestWithPublicOrigin(request);
   const pathname = new URL(publicRequest.url).pathname;
+  ctx.waitUntil(maybeSendSelfHostHeartbeat(pathname));
+
+  if (pathname === "/api/ai-visibility/download") {
+    return import("@/server/features/ai-visibility/services/aiVisibilityExport").then(
+      ({ handleAiVisibilityDownload }) =>
+        handleAiVisibilityDownload(publicRequest),
+    );
+  }
 
   if (pathname === GDPR_STORAGE_ERASURE_PATH) {
     return handleGdprStorageErasure(publicRequest, env);
@@ -171,21 +176,22 @@ function handleFetch(
     (authMode === "cloudflare_access" || authMode === "local_noauth") &&
     pathname === MCP_ROUTE
   ) {
-    return handleSelfHostedOpenSeoMcpRequest(publicRequest, authMode, env, ctx);
+    return import("@/server/mcp/transport").then(
+      ({ handleSelfHostedOpenSeoMcpRequest }) =>
+        handleSelfHostedOpenSeoMcpRequest(publicRequest, authMode, env, ctx),
+    );
   }
 
   return appFetch(request);
 }
 
-// Export Workflow classes as named exports
-export { SiteAuditWorkflow } from "./server/workflows/SiteAuditWorkflow";
+// Export Workflow classes as named exports. SiteAuditWorkflow and the
+// AuditScratchpad DO live in the open-seo-audit aux worker
+// (src/audit-worker.ts); this worker reaches them via cross-script bindings.
 export { RankCheckWorkflow } from "./server/workflows/RankCheckWorkflow";
-// Durable Object class for the onboarding strategy chat (Agents SDK).
-export { OnboardingChatAgent } from "./server/features/onboarding/OnboardingChatAgent";
+export { AiVisibilityWorkflow } from "./server/workflows/AiVisibilityWorkflow";
 // Durable Object class for the SAM in-app agent (Agents SDK).
 export { SamChatAgent } from "./server/features/sam/SamChatAgent";
-// Durable Object class for the per-audit crawl scratchpad.
-export { AuditScratchpad } from "./server/features/audit/AuditScratchpad";
 
 // Daily OAuth KV garbage collection; must match a trigger in wrangler.jsonc.
 const MCP_OAUTH_PURGE_CRON = "17 3 * * *";
@@ -209,6 +215,14 @@ export default {
           // persistent incomplete scan means the keyspace outgrew the batch.
           console.warn("[mcp-oauth] purge did not cover the full keyspace");
         }
+
+        // Daily referral-sale sweep: catches paid Autumn invoices the
+        // billing.updated webhook path misses (renewals, one-time top-ups).
+        try {
+          await sweepDubReferredOrganizations();
+        } catch (err) {
+          console.error("[cron] Dub referral sale sweep failed:", err);
+        }
       }
       return;
     }
@@ -226,7 +240,20 @@ export default {
       console.error("[cron] Stale-audit reconcile failed:", err);
     }
     // Scope a per-request Postgres client for the cron run (no-op in D1 mode).
-    await withPgClient(() => runScheduledRankChecks(env));
+    const checks = await Promise.allSettled([
+      SCHEDULED_RANK_CHECKS_PAUSED &&
+      isHostedAuthMode(env.AUTH_MODE) &&
+      Reflect.get(env, "BILLING_DISABLED") !== "true"
+        ? Promise.resolve()
+        : withPgClient(() => runScheduledRankChecks(env)),
+      withPgClient(async () => {
+        const { runScheduledAiVisibility } =
+          await import("@/server/features/ai-visibility/services/scheduledAiVisibility");
+        await runScheduledAiVisibility();
+      }),
+    ]);
+    for (const result of checks)
+      if (result.status === "rejected") throw result.reason;
     if (watchdogError) throw watchdogError;
   },
 };
