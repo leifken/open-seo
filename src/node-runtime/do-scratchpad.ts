@@ -13,6 +13,7 @@
 //     they survive restarts), `deleteAll` (drops the database file).
 import fs from "node:fs";
 import path from "node:path";
+import { deserialize, serialize } from "node:v8";
 import Database from "better-sqlite3";
 import { dataDir } from "./r2-fs";
 
@@ -23,6 +24,7 @@ type ScratchpadCtor = new (ctx: any, env: any) => unknown;
 /* oxlint-enable typescript/no-explicit-any */
 
 const ALARM_META_TABLE = "_node_runtime_alarm";
+const KV_TABLE = "_node_runtime_kv";
 const ALARM_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
 function scratchpadDir(): string {
@@ -69,6 +71,9 @@ class NodeDoStorage {
     this.db.exec(
       `CREATE TABLE IF NOT EXISTS ${ALARM_META_TABLE} (id INTEGER PRIMARY KEY CHECK (id = 1), wake_at INTEGER)`,
     );
+    this.db.exec(
+      `CREATE TABLE IF NOT EXISTS ${KV_TABLE} (key TEXT PRIMARY KEY, value BLOB NOT NULL)`,
+    );
     // oxlint-disable-next-line typescript/no-this-alias -- the sql getters close over the instance
     const storage = this;
     this.sql = {
@@ -105,6 +110,29 @@ class NodeDoStorage {
         return pageCount * pageSize;
       },
     };
+  }
+
+  async get<T>(key: string): Promise<T | undefined> {
+    const row = this.db
+      .prepare<
+        [string],
+        { value: Buffer }
+      >(`SELECT value FROM ${KV_TABLE} WHERE key = ?`)
+      .get(key);
+    // Values originate from put<T>; v8 serialization preserves the structured
+    // values the Workers KV contract accepts and returns a fresh copy on read.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- storage values are typed by their caller, like DurableObjectStorage.get<T>
+    return row === undefined ? undefined : (deserialize(row.value) as T);
+  }
+
+  async put<T>(key: string, value: T): Promise<void> {
+    const bytes = serialize(value);
+    this.db
+      .prepare(
+        `INSERT INTO ${KV_TABLE} (key, value) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      )
+      .run(key, bytes);
   }
 
   async getAlarm(): Promise<number | null> {
