@@ -1,4 +1,7 @@
 # LEIFKEN · Prüfstrecke für den Live-Zweig node-port (Auftrag SEO-7, 26.09.2026).
+# Arbeitszweige starten einen eigenen Lauf, den die Nachtsteuerung über
+# pruefen.yml findet. Ein nur per workflow_call gestarteter Unterworkflow
+# ist über diesen Namen kein eigenständiger Actions-Lauf.
 # image.yml ruft diesen Workflow auf und baut das Image nur, wenn er grün ist:
 # rote Prüfung heißt kein Image, kein Deploy (Vorbild: ol-fundstelle, pruefen.yml).
 #
@@ -15,6 +18,9 @@
 name: Prüfen
 
 on:
+  push:
+    branches: ["rankmeister/**"]
+  workflow_dispatch:
   pull_request:
     branches: [node-port]
   workflow_call:
