@@ -3,9 +3,14 @@ import type { CallToolResult } from "@modelcontextprotocol/server";
 import { ProtocolError, ProtocolErrorCode } from "@modelcontextprotocol/server";
 import { recordDataforseoCost } from "@/server/lib/dataforseo/cost-ledger";
 import { AppError } from "@/server/lib/errors";
-import { buildCostMeta, withDataforseoCostMeta } from "@/server/mcp/tool-cost-meta";
+import {
+  buildCostMeta,
+  withDataforseoCostMeta,
+} from "@/server/mcp/tool-cost-meta";
 
-const okResult = (structuredContent: Record<string, unknown>): CallToolResult => ({
+const okResult = (
+  structuredContent: Record<string, unknown>,
+): CallToolResult => ({
   content: [{ type: "text", text: "ok" }],
   structuredContent,
 });
@@ -86,7 +91,8 @@ describe("withDataforseoCostMeta", () => {
     });
     // No calls -> no breakdown key at all (not an empty array).
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- test already asserted the shape above via toMatchObject
-    const meta = (result.structuredContent as { meta: Record<string, unknown> }).meta;
+    const meta = (result.structuredContent as { meta: Record<string, unknown> })
+      .meta;
     expect(meta.costBreakdown).toBeUndefined();
   });
 
@@ -96,7 +102,10 @@ describe("withDataforseoCostMeta", () => {
         path: ["v3", "business_data", "google", "my_business_info", "live"],
         costUsd: 0.002,
       });
-      throw new AppError("UPSTREAM_UNAVAILABLE", "DataForSEO did not respond in time.");
+      throw new AppError(
+        "UPSTREAM_UNAVAILABLE",
+        "DataForSEO did not respond in time.",
+      );
     });
 
     const result = await wrapped({}, {});
@@ -105,7 +114,10 @@ describe("withDataforseoCostMeta", () => {
       { type: "text", text: "DataForSEO did not respond in time." },
     ]);
     expect(result.structuredContent).toMatchObject({
-      error: { code: "UPSTREAM_UNAVAILABLE", message: "DataForSEO did not respond in time." },
+      error: {
+        code: "UPSTREAM_UNAVAILABLE",
+        message: "DataForSEO did not respond in time.",
+      },
       meta: { costUsd: 0.002, dataforseoCalls: 1 },
     });
     expect(result._meta).toMatchObject({ costUsd: 0.002 });

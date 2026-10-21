@@ -88,7 +88,7 @@ const serpSnapshotItemSchema = z
 
 export type SerpLiveItem = z.infer<typeof serpSnapshotItemSchema>;
 
-export type SerpLiveResult = {
+type SerpLiveResult = {
   items: SerpLiveItem[];
   partial: boolean;
   partialReason?: string;
@@ -504,7 +504,7 @@ export async function postLocalSerpTasks(input: {
   return { data: taskIds, billing };
 }
 
-export type LocalSerpTaskOutcome =
+type LocalSerpTaskOutcome =
   | { status: "pending" }
   | { status: "failed"; message: string }
   | { status: "completed"; items: Record<string, unknown>[] };

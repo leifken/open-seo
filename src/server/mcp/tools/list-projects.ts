@@ -45,7 +45,8 @@ export const listProjectsTool = {
     inputSchema: {} as Record<string, never>,
     outputSchema: z.looseObject({
       projects: z.array(
-        z.looseObject({
+        z
+          .looseObject({
             id: z.string(),
             name: z.string(),
             domain: z.string().nullable().optional(),

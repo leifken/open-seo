@@ -1,6 +1,6 @@
 # FJ-1 Abschluss, Heilung 1 vom 21.10.2026
 
-KV-Kernreparatur umgesetzt und geprüft; vollständiges Paketgrün und Betriebsfreigabe bleiben offen.
+Historischer Stand vor der CI-Reparatur; aktueller Prüfnachweis in FJ-1-H1-R1-abschluss.md. Betriebsfreigabe bleibt offen.
 Ursache: neun bereitgestellte Fehler auf acht Domains; NodeDoStorage fehlen get/put, echter Auditworkflow reproduziert den TypeError.
 Basis: origin/main c469a48a konfliktfrei abgeglichen; notwendiger veröffentlichter Node-Port 8f9b480a mit 343 vorhandenen Commits übernommen, nur auf rankmeister/fj-1.
 Fix: additive persistente SQLite-KV-Tabelle, atomarer Upsert, strukturierte Kopien; SQL- und Alarmdaten erhalten.

@@ -35,9 +35,7 @@ describe("runWithDataforseoCostLedger", () => {
     expect(outcome.cost).toEqual({
       costUsd: 0.005,
       dataforseoCalls: 2,
-      costBreakdown: [
-        { path: "v3/serp/live", calls: 2, costUsd: 0.005 },
-      ],
+      costBreakdown: [{ path: "v3/serp/live", calls: 2, costUsd: 0.005 }],
     });
   });
 

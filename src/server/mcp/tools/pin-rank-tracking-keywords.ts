@@ -33,7 +33,8 @@ export const pinRankTrackingKeywordsTool = {
     description:
       "Pin or unpin tracked keywords by their trackingKeywordId. Pinned keywords stay at the top of the tracker's keyword table for everyone in the project, and get_rank_tracker lists them first. Uses no credits. Missing, stale, foreign, and repeated IDs are ignored; `updated` is the number of keywords actually changed in this tracker.",
     inputSchema,
-    outputSchema: z.looseObject({
+    outputSchema: z
+      .looseObject({
         trackerId: z.string(),
         pinned: z.boolean(),
         requested: z.number(),

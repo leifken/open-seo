@@ -32,7 +32,8 @@ export const runRankTrackerTool = {
     description:
       "Start an explicit live rank check for every keyword and configured device. This spends credits: call estimate_rank_tracker_cost, show the estimate to the user, and pass the approved credit amount as maxCostCredits. A fresh estimate above that ceiling is rejected. Hosted accounts require a paid plan, while self-hosted deployments are not plan-gated. If a run is already in progress, its blocking run ID is reported without starting or charging another check. The schedule is unchanged.",
     inputSchema,
-    outputSchema: z.looseObject({
+    outputSchema: z
+      .looseObject({
         trackerId: z.string(),
         started: z.boolean(),
         runId: z.string().optional(),

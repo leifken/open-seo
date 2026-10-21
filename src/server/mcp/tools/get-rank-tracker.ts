@@ -133,16 +133,19 @@ export const getRankTrackerTool = {
     description:
       "Read-only access to rank tracker configs and their latest results. With `trackerId`, returns config + a page of latest snapshots (pinned keywords first), including `trackingKeywordId` for removals and pins, `pinned`, and `googleSerpUrl`, a live Google search for the tracked keyword, language, country, and city. Use offset/limit to read additional keywords. Without it, lists all trackers in the project. Uses no credits. Use create_rank_tracker when no tracker exists; then use add_rank_tracking_keywords, remove_rank_tracking_keywords, pin_rank_tracking_keywords, estimate_rank_tracker_cost, or run_rank_tracker to manage it. `lastCheckedAt` shows position freshness. A null position means the domain was not found in the results the check returned, which can be fewer than `serpDepth`, so it does not prove the domain ranks below `serpDepth`.",
     inputSchema,
-    outputSchema: z.looseObject({
+    outputSchema: z
+      .looseObject({
         configs: z.array(looseObjectOutputSchema).optional(),
         config: looseObjectOutputSchema.optional(),
-        results: z.looseObject({
+        results: z
+          .looseObject({
             rows: z.array(looseObjectOutputSchema),
             totalCount: z.number().int().nonnegative(),
             offset: z.number().int().nonnegative(),
             limit: z.number().int().positive(),
             nextOffset: z.number().int().nonnegative().nullable(),
-            run: z.looseObject({
+            run: z
+              .looseObject({
                 id: z.string(),
                 lastCheckedAt: z.string().nullable(),
                 completedAt: z.string().nullable(),

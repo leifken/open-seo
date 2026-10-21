@@ -39,7 +39,8 @@ export const estimateRankTrackerCostTool = {
     description:
       "Estimate rank tracker cost without spending credits or starting a check. The live estimate covers one explicit run_rank_tracker check. For a scheduled tracker, the response also includes nominal queued per-check and approximate monthly recurring cost. Pass additionalKeywords before adding keywords to project the post-add cost. Scheduled estimates are not runtime caps; rejected, failed, or timed-out queued tasks may use additional separately billed live fallback.",
     inputSchema,
-    outputSchema: z.looseObject({
+    outputSchema: z
+      .looseObject({
         trackerId: z.string(),
         costUsd: z.number(),
         costCredits: z.number(),

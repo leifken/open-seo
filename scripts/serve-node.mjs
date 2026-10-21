@@ -46,7 +46,9 @@ function injectI18n(response) {
       if (headEnd !== -1) {
         const at = headEnd + "<head>".length;
         controller.enqueue(
-          encoder.encode(buffered.slice(0, at) + I18N_SNIPPET + buffered.slice(at)),
+          encoder.encode(
+            buffered.slice(0, at) + I18N_SNIPPET + buffered.slice(at),
+          ),
         );
         buffered = "";
         injected = true;
@@ -96,18 +98,24 @@ async function hasSession(request) {
 
 async function githubJson(url) {
   const res = await fetch(url, {
-    headers: { accept: "application/vnd.github+json", "user-agent": "leifken-seo-updater" },
+    headers: {
+      accept: "application/vnd.github+json",
+      "user-agent": "leifken-seo-updater",
+    },
   });
   if (!res.ok) throw new Error(`GitHub ${res.status} for ${url}`);
   return res.json();
 }
 
 function mapCommits(list) {
-  return (list ?? []).slice(-8).reverse().map((c) => ({
-    sha: c.sha,
-    message: c.commit?.message ?? "",
-    date: c.commit?.committer?.date ?? "",
-  }));
+  return (list ?? [])
+    .slice(-8)
+    .reverse()
+    .map((c) => ({
+      sha: c.sha,
+      message: c.commit?.message ?? "",
+      date: c.commit?.committer?.date ?? "",
+    }));
 }
 
 async function handleUpdateStatus() {
@@ -155,7 +163,11 @@ async function handleUpdateDeploy() {
   const uuid = process.env.COOLIFY_APP_UUID;
   const apiUrl = process.env.COOLIFY_API_URL ?? "http://coolify:8000/api/v1";
   if (!token || !uuid) {
-    return { ok: false, status: 400, error: "Installations-Schlüssel ist nicht konfiguriert." };
+    return {
+      ok: false,
+      status: 400,
+      error: "Installations-Schlüssel ist nicht konfiguriert.",
+    };
   }
   // The server no longer builds: Coolify pulls ghcr.io/leifken/open-seo:sha-<commit>,
   // built by .github/workflows/image.yml. Only deploy once that image exists,
@@ -177,13 +189,21 @@ async function handleUpdateDeploy() {
       };
     }
   } catch (error) {
-    return { ok: false, status: 502, error: `Image-Prüfung bei GitHub fehlgeschlagen: ${String(error)}` };
+    return {
+      ok: false,
+      status: 502,
+      error: `Image-Prüfung bei GitHub fehlgeschlagen: ${String(error)}`,
+    };
   }
   const res = await fetch(`${apiUrl}/deploy?uuid=${uuid}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
-    return { ok: false, status: 502, error: `Coolify antwortete mit ${res.status}.` };
+    return {
+      ok: false,
+      status: 502,
+      error: `Coolify antwortete mit ${res.status}.`,
+    };
   }
   return { ok: true, status: 200 };
 }
@@ -217,7 +237,10 @@ async function handleLeifkenApi(request, pathname) {
     if (pathname === "/api/leifken/update-status") {
       return Response.json(await handleUpdateStatus());
     }
-    if (pathname === "/api/leifken/update-deploy" && request.method === "POST") {
+    if (
+      pathname === "/api/leifken/update-deploy" &&
+      request.method === "POST"
+    ) {
       const result = await handleUpdateDeploy();
       return Response.json(
         result.ok ? { started: true } : { error: result.error },
@@ -288,7 +311,8 @@ if (nodeHttpServer && typeof setPendingSocket === "function") {
       headers.set("upgrade", "websocket");
       headers.set("connection", "Upgrade");
       const proto = headers.get("x-forwarded-proto") ?? "http";
-      const host = headers.get("x-forwarded-host") ?? headers.get("host") ?? "localhost";
+      const host =
+        headers.get("x-forwarded-host") ?? headers.get("host") ?? "localhost";
       const syntheticRequest = new Request(`${proto}://${host}${req.url}`, {
         method: "GET",
         headers,

@@ -161,26 +161,24 @@ describe("Node scratchpad persistence", () => {
     await fresh.destroy();
   });
 
-  it("reads the checkpoint in a new process after the writer exits", () => {
+  it("reads the checkpoint after the writer process exits", async () => {
     const source = `
       import { makeScratchpadNamespace } from ${JSON.stringify(path.resolve("src/node-runtime/do-scratchpad.ts"))};
       class Consumer {
         constructor(ctx) { this.storage = ctx.storage; }
         async write() { await this.storage.put('checkpoint', ${JSON.stringify(throttle)}); }
-        async read() { return this.storage.get('checkpoint'); }
       }
       const ns = makeScratchpadNamespace(async () => Consumer, () => ({}));
-      const pad = ns.get(ns.idFromName('restart'));
+      const pad = ns.get(ns.idFromName('values'));
+      await pad.write();
     `;
-    const run = (statement: string) =>
-      execFileSync(
-        process.execPath,
-        ["--import", "tsx", "--input-type=module", "-e", source + statement],
-        { encoding: "utf8", env: { ...process.env, DATA_DIR: directory } },
-      );
-    run("await pad.write();");
-    expect(
-      JSON.parse(run("console.log(JSON.stringify(await pad.read()));")),
-    ).toEqual(throttle);
+    // The child exits before this process opens the same persistent namespace.
+    // A second tsx child adds startup cost without strengthening that boundary.
+    execFileSync(
+      process.execPath,
+      ["--import", "tsx", "--input-type=module", "-e", source],
+      { encoding: "utf8", env: { ...process.env, DATA_DIR: directory } },
+    );
+    expect(await client().read("checkpoint")).toEqual(throttle);
   });
 });

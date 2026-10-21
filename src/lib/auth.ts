@@ -356,11 +356,15 @@ function getGoogleSocialProviderConfig() {
   }
 
   if (!googleClientId) {
-    throw new Error("GOOGLE_CLIENT_ID is required when GOOGLE_CLIENT_SECRET is set");
+    throw new Error(
+      "GOOGLE_CLIENT_ID is required when GOOGLE_CLIENT_SECRET is set",
+    );
   }
 
   if (!googleClientSecret) {
-    throw new Error("GOOGLE_CLIENT_SECRET is required when GOOGLE_CLIENT_ID is set");
+    throw new Error(
+      "GOOGLE_CLIENT_SECRET is required when GOOGLE_CLIENT_ID is set",
+    );
   }
 
   return {

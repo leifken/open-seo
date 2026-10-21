@@ -43,11 +43,7 @@
     "!.agents/**",
     "!.claude/**",
   ],
-  "ignore": [
-    "drizzle/remote-d1.config.ts",
-    "src/public/leifken-i18n.js",
-    "public/leifken-i18n.js",
-  ],
+  "ignore": ["drizzle/remote-d1.config.ts", "src/public/leifken-i18n.js"],
   // Disable Drizzle plugin - the config imports cloudflare:workers
   "drizzle": false,
   "ignoreDependencies": [

@@ -7,7 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { dataDir } from "./r2-fs";
 
-export const AVATAR_ROUTE_PREFIX = "/api/leifken/avatar/";
+const AVATAR_ROUTE_PREFIX = "/api/leifken/avatar/";
 
 function avatarDir(): string {
   return path.join(dataDir(), "avatars");

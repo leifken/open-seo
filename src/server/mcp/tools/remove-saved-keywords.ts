@@ -23,7 +23,8 @@ export const removeSavedKeywordsTool = {
     description:
       "Permanently deletes keywords from a project's saved-keywords list by their row ID. Uses no credits — does not call DataForSEO. Missing, foreign-project, and repeated IDs are ignored; deletedCount reports rows actually removed. This does not affect Rank Tracking; use remove_rank_tracking_keywords for that list separately.",
     inputSchema,
-    outputSchema: z.looseObject({
+    outputSchema: z
+      .looseObject({
         projectId: z.string(),
         requested: z.number(),
         deletedCount: z.number(),

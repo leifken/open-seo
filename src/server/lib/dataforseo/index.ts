@@ -26,10 +26,7 @@ export { normalizeBacklinksTarget } from "@/server/lib/dataforseoBacklinksTarget
 // at DataForSEO (the task was charged at task_post), so routing these through
 // the metering seam would charge the customer twice; business categories are
 // free ($0), so a zero-credit org can still list them.
-export {
-  fetchLocalSerpTaskResult,
-  fetchRankCheckTaskResult,
-} from "@/server/lib/dataforseo/serp";
+export { fetchRankCheckTaskResult } from "@/server/lib/dataforseo/serp";
 export {
   fetchAiTrackingTaskResult,
   type AiTrackingAnswer,
@@ -51,7 +48,6 @@ export type {
 export type { AdsKeywordIdeaItem } from "@/server/lib/dataforseo/google-ads";
 
 export type {
-  LocalSerpTaskOutcome,
   SerpLiveItem,
   RankCheckResult,
   RankCheckTaskInput,

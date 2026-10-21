@@ -110,7 +110,8 @@ export function withDataforseoCostMeta<TArgs, TContext>(
     // member's numeric value rather than the enum type itself.
     if (
       outcome.error instanceof ProtocolError &&
-      outcome.error.code === (ProtocolErrorCode.UrlElicitationRequired as number)
+      outcome.error.code ===
+        (ProtocolErrorCode.UrlElicitationRequired as number)
     ) {
       throw outcome.error;
     }

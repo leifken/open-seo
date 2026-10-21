@@ -121,7 +121,8 @@ export const researchKeywordsTool = {
     outputSchema: z.looseObject({
       results: z.array(
         z.union([
-          z.looseObject({
+          z
+            .looseObject({
               seed: z.string(),
               ok: z.literal(true),
               rowCount: z.number(),
@@ -130,7 +131,8 @@ export const researchKeywordsTool = {
               rows: z.array(looseObjectOutputSchema),
             })
             .passthrough(),
-          z.looseObject({
+          z
+            .looseObject({
               seed: z.string(),
               ok: z.literal(false),
               error: z.string(),

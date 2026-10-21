@@ -73,7 +73,7 @@ function summarize(ledger: Ledger): DataforseoCostSummary {
   };
 }
 
-export type LedgerOutcome<T> =
+type LedgerOutcome<T> =
   | { ok: true; value: T; cost: DataforseoCostSummary }
   | { ok: false; error: unknown; cost: DataforseoCostSummary };
 
