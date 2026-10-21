@@ -10,6 +10,8 @@ data, or sensitive paths.
 
 ## Open
 
+- [ ] `2026-10-21T13:32:26Z` · `codex` · `pnpm build:node` überschreibt versionierte Dateien unter dem zugleich ignorierten `dist-node/`; nach erfolgreicher Abnahme bleiben dadurch Änderungen und Löschungen im Arbeitsbaum. Bauartefakte aus der Versionierung nehmen oder den Prüfbau in ein separates Ausgabeverzeichnis schreiben; eigene erzeugte Änderungen vor einem Quellcommit gezielt zurücksetzen.
+
 - [ ] `2026-10-21T13:03:23Z` · `codex` · Auf dem unveränderten Node-Port 8f9b480a stoppt `pnpm ci:check` bei 20 Formatbefunden; separat meldet Knip zwei ungenutzte Dateien, vier Exporte und fünf exportierte Typen. Die Fork-Prüfstrecke lässt diese Stufen aus. Vor einer gemeinsamen Pflichtstrecke die vorhandene Schuld gezielt bereinigen und beide Wege angleichen.
 
 - [ ] `2026-09-15T16:05:00Z` — `claude` — `pnpm dev:node` (vite dev with `vite.config.node.ts`) dies during dependency optimization with `No loader is configured for ".md" files: src/server/features/onboarding/openseo-fact-sheet.md?raw` (esbuild pre-bundling hits the `?raw` import in `OnboardingChatAgent.ts`), so the Node runtime cannot be exercised in dev mode; `pnpm build:node && pnpm serve:node` works. Worth excluding that import from `optimizeDeps` in the Node config or adding an esbuild `.md` loader there.

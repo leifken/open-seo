@@ -1,3 +1,13 @@
+# FJ-1, CI-Nachprüfung Runde 2 vom 21.10.2026
+
+Die Meldung „Linux-CI rot“ ist nicht belegt: Der genannte Auszug fehlt. Der tatsächliche Linux-Prüfjob 119249823068 für 0173b9b4 ist vollständig grün; auch der anschließende Image-Job und der gesamte Lauf 39608194150 sind erfolgreich abgeschlossen. Vorgängerlauf 39605872627 ebenfalls grün.
+
+Neue eigene Abnahme: vollständiges ci:check und 1.753 Tests grün, origin/main mit denselben Prüfungen und 1.113 Tests grün. Zusätzlich acht Speicher-/Workflowfälle, 31 Website-Schutztests mit persistenter Budgetprobe, beide App-Builds, Website-Typen/Build und Shellprüfungen grün. Keine neue Codekorrektur erforderlich, keine Prüfung geändert. Bericht: docs/auftraege/FJ-1-H1-R2-abschluss.md.
+
+Die historischen Betriebstore für Nachholung und fachlichen Wächter bleiben offen. Keine Betriebsfreigabe, kein Push oder Deploy.
+
+## Vorheriger Stand
+
 # FJ-1, CI-Reparatur Runde 1 vom 21.10.2026
 
 20 Formatbefunde und elf Knip-Befunde sind behoben. Die Prozessprobe liest nach Ende eines echten Schreiberprozesses im getrennten Elternprozess; das Zeitlimit und alle sieben Speicherfälle bleiben erhalten.
