@@ -3,6 +3,7 @@ import { z } from "zod";
 import { RankTrackingService } from "@/server/features/rank-tracking/services/RankTrackingService";
 import { AppError } from "@/server/lib/errors";
 import { captureServerEvent } from "@/server/lib/posthog";
+import { markOnboardingMilestone } from "@/server/email/onboarding-drip";
 import { buildProjectMeta } from "@/server/mcp/context";
 import { mcpResponse } from "@/server/mcp/formatters";
 import {
@@ -103,6 +104,7 @@ export const createRankTrackerTool = {
       scheduleInterval: args.scheduleInterval ?? "manual",
       scheduleTime: args.scheduleTime,
     });
+    await markOnboardingMilestone(context.auth, "rankTrackingSetUp");
     waitUntil(
       captureServerEvent({
         distinctId: context.auth.userId,
@@ -110,7 +112,6 @@ export const createRankTrackerTool = {
         organizationId: context.auth.organizationId,
         properties: {
           project_id: args.projectId,
-          domain: config.domain,
           devices: config.devices,
           schedule: config.scheduleInterval,
           source: "mcp",

@@ -11,6 +11,7 @@ import { Button } from "@/client/components/ui/button";
 import {
   AuthPageCard,
   AuthMethodChooser,
+  TermsAgreementNotice,
   authInputClassName,
   authSubmitClassName,
   authRedirectSearchSchema,
@@ -163,28 +164,6 @@ function SignUpPage() {
             </button>
           ) : (
             <div className="space-y-4">
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                By signing up, you agree to our{" "}
-                <a
-                  href="https://openseo.so/terms-and-conditions"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-foreground underline underline-offset-2 hover:text-foreground/80 transition-colors"
-                >
-                  Terms
-                </a>{" "}
-                and{" "}
-                <a
-                  href="https://openseo.so/privacy"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-foreground underline underline-offset-2 hover:text-foreground/80 transition-colors"
-                >
-                  Privacy Policy
-                </a>
-                .
-              </p>
-
               <p className="text-sm text-foreground/50">
                 Already have an account?{" "}
                 <Link
@@ -214,6 +193,9 @@ function SignUpPage() {
               google.clearError();
             }}
           />
+          {isHostedMode ? (
+            <TermsAgreementNotice action="By continuing" />
+          ) : null}
           {google.error ? (
             <p className="text-sm text-destructive">{google.error}</p>
           ) : null}
@@ -290,6 +272,7 @@ function SignUpPage() {
                     >
                       {isSubmitting ? "Creating account..." : "Create account"}
                     </Button>
+                    <TermsAgreementNotice action="By creating an account" />
                   </>
                 );
               }}

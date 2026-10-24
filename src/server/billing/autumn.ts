@@ -116,6 +116,10 @@ export const autumn = {
         ? disabledCustomer(args[0].customerId)
         : loadAutumn().then((client) => client.customers.update(...args)),
   },
+  events: {
+    aggregate: (...args: Parameters<Autumn["events"]["aggregate"]>) =>
+      loadAutumn().then((client) => client.events.aggregate(...args)),
+  },
   invoices: {
     list: async (...args: Parameters<Autumn["invoices"]["list"]>) =>
       (await isBillingDisabled())

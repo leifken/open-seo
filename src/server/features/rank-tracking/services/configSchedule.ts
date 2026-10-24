@@ -1,10 +1,5 @@
 import { AppError } from "@/server/lib/errors";
 import {
-  getOptionalEnvValue,
-  isHostedServerAuthMode,
-} from "@/server/lib/runtime-env";
-import { SCHEDULED_RANK_CHECKS_PAUSED } from "@/shared/rank-tracking-pause";
-import {
   computeNextCheckAt,
   isScheduledRankTrackingInterval,
 } from "@/shared/rank-tracking";
@@ -13,23 +8,11 @@ import type {
   RankTrackingConfig,
 } from "@/types/schemas/rank-tracking";
 
-export async function resolveNextCheckAt(
+export function resolveNextCheckAt(
   scheduleInterval: RankTrackingConfig["scheduleInterval"],
   scheduleTime: RankCheckScheduleTime | undefined,
-): Promise<string | null> {
+): string | null {
   if (isScheduledRankTrackingInterval(scheduleInterval)) {
-    // Reached only when a schedule is created or changed, so configs keep the
-    // schedule they already have (and resume when the pause lifts).
-    if (
-      SCHEDULED_RANK_CHECKS_PAUSED &&
-      (await isHostedServerAuthMode()) &&
-      (await getOptionalEnvValue("BILLING_DISABLED")) !== "true"
-    ) {
-      throw new AppError(
-        "VALIDATION_ERROR",
-        "Scheduled rank checks are temporarily paused. Use a manual schedule and run checks on demand.",
-      );
-    }
     // Without one the check would quietly repeat on whatever day today is.
     if (
       scheduleInterval === "weekly" &&

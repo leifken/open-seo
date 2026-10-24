@@ -1,8 +1,10 @@
 import { isBillingClientEnabled } from "@/lib/auth-mode";
+import { useEffect } from "react";
 import { Link } from "@tanstack/react-router";
 import { AppBanner } from "@/client/layout/AppBanner";
 import { BASE_PLAN_OFFER } from "@/client/features/billing/plan-offers";
 import { useCreditBalance } from "@/client/features/billing/useCreditBalance";
+import { captureClientEvent } from "@/client/lib/posthog";
 import { useCanManageBilling } from "@/client/features/team/organizationQueries";
 import { BILLING_ROUTE, SUBSCRIBE_ROUTE } from "@/shared/billing";
 
@@ -10,6 +12,13 @@ export function FreePlanBanner() {
   const { accountQuery, isFreePlan, isOutOfCredits, isLowCredits, refillDate } =
     useCreditBalance();
   const canManageBilling = useCanManageBilling();
+  const showsOutOfCredits = Boolean(accountQuery.data) && isOutOfCredits;
+
+  useEffect(() => {
+    if (showsOutOfCredits)
+      captureClientEvent("billing:out_of_credits_shown", { surface: "banner" });
+  }, [showsOutOfCredits]);
+  // Abrechnung ist bei uns aus (selbst betrieben): nach den Hooks nichts zeigen.
   if (!isBillingClientEnabled()) return null;
 
   if (!accountQuery.data) {
